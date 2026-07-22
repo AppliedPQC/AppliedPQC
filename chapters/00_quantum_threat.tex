@@ -1,0 +1,121 @@
+\chapter{The Quantum Threat}
+\label{ch:quantum}
+
+\section{Why this chapter matters}
+
+Every other chapter in this book builds toward schemes labelled \emph{post-quantum}. This chapter explains what that word is reacting to. Post-quantum cryptography exists because a sufficiently large quantum computer would break almost all of the public-key cryptography deployed today -- the very algorithms protecting web traffic, software updates, and stored data right now. Understanding \emph{which} problems fall, \emph{which} survive, and \emph{why} is the motivation for everything that follows.
+
+\section{Learning goals}
+
+After reading this chapter, you should be able to:
+
+\begin{itemize}
+  \item name the hard problems that today's public-key cryptography relies on;
+  \item explain, at a high level, what Shor's and Grover's algorithms do;
+  \item distinguish what a quantum computer \emph{breaks} from what it merely \emph{weakens};
+  \item explain ``harvest now, decrypt later'' and why migration is urgent;
+  \item place the four NIST standards (FIPS 203--206) and the three main problem families in context.
+\end{itemize}
+
+\section{What today's cryptography rests on}
+
+Classical public-key cryptography stands on two number-theoretic problems that are believed hard for ordinary computers:
+
+\begin{itemize}
+  \item \textbf{Integer factorization} -- given a large $N = p\cdot q$, recover the primes $p$ and $q$. This is the foundation of \textbf{RSA}.
+  \item \textbf{Discrete logarithm} -- given $g$ and $g^x$ in a suitable group, recover $x$. This underlies \textbf{Diffie--Hellman} key exchange and elliptic-curve schemes such as \textbf{ECDSA} and \textbf{ECDH}.
+\end{itemize}
+
+For a classical computer, the best known algorithms for both problems run in super-polynomial (sub-exponential or worse) time, so the parameters can be chosen to make an attack take longer than the age of the universe. That safety margin is exactly what a quantum computer removes.
+
+\section{Shor's algorithm: the break}
+
+In 1994 Peter Shor showed that a quantum computer can factor integers and compute discrete logarithms in \emph{polynomial} time. The engine is \emph{period finding}: both problems can be recast as finding the period of a cleverly chosen function, and a quantum computer extracts that period efficiently using the quantum Fourier transform -- evaluating the function on a superposition of all inputs at once, then interfering the results so that the period stands out.
+
+The consequence is stark: RSA, Diffie--Hellman, ECDSA, and ECDH are \emph{all} broken by a large enough quantum computer, no matter how big the keys are. Doubling an RSA key only adds polynomial work for Shor's algorithm -- it does not restore security. There is no parameter choice that saves them.
+
+\section{Grover's algorithm: the weakening}
+
+Symmetric cryptography (block ciphers like AES) and hash functions (like SHA-3) face a milder threat. Grover's algorithm speeds up \emph{generic search}: finding a marked item among $N$ possibilities takes about $\sqrt{N}$ steps instead of $N$. Against a symmetric key of $b$ bits, this cuts the effective security to roughly $b/2$ bits.
+
+Crucially, this is a \emph{quadratic} speedup, not an exponential one, and it is defeated simply by doubling: AES-256 retains about $128$ bits of security against Grover, and a hash with a $2n$-bit output retains about $n$ bits of collision resistance. Symmetric primitives \emph{survive} -- they just need larger parameters. This distinction is the single most important idea in the chapter.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=4mm and 14mm, every node/.style={font=\scriptsize}]
+  % broken column
+  \node[keynode] (rsa)  {RSA};
+  \node[keynode, below=of rsa] (dh)  {Diffie--Hellman};
+  \node[keynode, below=of dh]  (ec)  {ECDSA / ECDH};
+  \node[draw=pqcorange, thick, rounded corners=2pt, fill=pqclight,
+        right=22mm of dh, align=center, font=\small] (shor) {Shor\\[-1pt]\scriptsize (polynomial time)};
+  \node[right=20mm of shor, pqcorange, font=\bfseries] (broken) {BROKEN};
+  \draw[flowarrow, pqcorange] (rsa.east) -- (shor);
+  \draw[flowarrow, pqcorange] (dh.east) -- (shor);
+  \draw[flowarrow, pqcorange] (ec.east) -- (shor);
+  \draw[flowarrow, pqcorange] (shor) -- (broken);
+  % survive column
+  \node[flownode, below=16mm of ec] (aes)  {AES, SHA-3};
+  \node[flownode, below=of aes] (pqc) {lattice / hash / code problems};
+  \node[draw=pqcteal, thick, rounded corners=2pt, fill=pqclight,
+        right=22mm of aes, yshift=-6mm, align=center, font=\small] (grov) {Grover\\[-1pt]\scriptsize (only $\sqrt{N}$)};
+  \node[right=20mm of grov, pqcteal, font=\bfseries] (survive) {SURVIVE};
+  \draw[flowarrow, pqcteal] (aes.east) -- (grov);
+  \draw[flowarrow, pqcteal] (pqc.east) -- (grov);
+  \draw[flowarrow, pqcteal] (grov) -- (survive);
+\end{tikzpicture}
+\caption{The quantum threat, sorted. Shor's algorithm breaks the number-theoretic public-key schemes outright (orange), and no parameter choice saves them. Grover's algorithm only weakens symmetric ciphers, hashes, and the hard problems behind post-quantum schemes (teal), and doubling the parameters restores full security.}
+\label{fig:quantum-threat}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+Primitive & Quantum algorithm & Impact \\
+\midrule
+RSA & Shor & broken (any key size) \\
+Diffie--Hellman, ECDH & Shor & broken \\
+ECDSA & Shor & broken \\
+AES-128 & Grover & $\approx 64$-bit; use AES-256 \\
+SHA-256 & Grover & weakened; use longer output \\
+Lattice / code / hash problems & (none known) & survive \\
+\bottomrule
+\end{tabular}
+\caption{How a large quantum computer affects common primitives. Only the number-theoretic public-key schemes are broken outright.}
+\end{table}
+
+\section{Harvest now, decrypt later}
+
+A natural objection is that large quantum computers do not yet exist, so why migrate today? The answer is \emph{harvest now, decrypt later}. An adversary can record encrypted traffic today and simply store it, then decrypt it years later once a quantum computer is available. Any data that must stay confidential beyond the arrival of quantum computing -- medical records, state secrets, long-lived credentials -- is \emph{already} at risk, even though the attack itself is in the future. The same logic applies to signatures on long-lived artifacts such as firmware and certificates. Migration must happen before the threat materializes, not after.
+
+\section{The response: post-quantum standards}
+
+Because Shor's algorithm targets the specific structure of factoring and discrete logarithms, the defense is to build public-key cryptography on entirely different hard problems -- ones with no known efficient quantum algorithm. After a multi-year public competition, NIST standardized the first post-quantum schemes:
+
+\begin{itemize}
+  \item \textbf{FIPS 203 -- ML-KEM} (Kyber): key encapsulation, based on module lattices;
+  \item \textbf{FIPS 204 -- ML-DSA} (Dilithium): signatures, based on module lattices;
+  \item \textbf{FIPS 205 -- SLH-DSA} (SPHINCS\textsuperscript{+}): signatures, based only on hash functions;
+  \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices.
+\end{itemize}
+
+These rest on three broad problem families, each a different bet against the quantum future:
+
+\begin{itemize}
+  \item \textbf{Lattice-based} -- short vectors and noisy linear systems in high-dimensional lattices. The workhorse of the standards, balancing speed and size. Parts~II--IV of this book.
+  \item \textbf{Hash-based} -- security reduced to nothing but a hash function; the most conservative choice.
+  \item \textbf{Code-based} -- decoding random-looking linear codes; the oldest family, with a decades-long track record.
+\end{itemize}
+
+\section{Summary}
+
+\begin{itemize}
+  \item Today's public-key cryptography (RSA, Diffie--Hellman, ECC) rests on factoring and discrete logarithms.
+  \item \textbf{Shor's algorithm} solves both in polynomial time on a quantum computer, breaking these schemes at \emph{any} key size.
+  \item \textbf{Grover's algorithm} only gives a quadratic speedup, so symmetric ciphers and hashes survive with larger parameters.
+  \item ``Harvest now, decrypt later'' makes migration urgent even before quantum computers arrive.
+  \item The answer is to rebuild public-key cryptography on lattice, hash, and code problems -- the subject of the rest of this book, culminating in FIPS 203--206.
+\end{itemize}
+
+The remaining chapters start from the ground up: the mathematical objects -- finite fields, vectors, polynomials, and lattices -- on which these new hard problems are built.

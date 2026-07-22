@@ -38,7 +38,8 @@ pdflatex -interaction=nonstopmode -halt-on-error main.tex
 
 The book source is split into chapter files under the `chapters/` directory, grouped into parts:
 
-**Part I -- Mathematical Foundations**
+**Part I -- Foundations**
+- `chapters/00_quantum_threat.tex` (why post-quantum: Shor and Grover)
 - `chapters/01_sagemath_basics.tex`
 - `chapters/02_linear_algebra.tex`
 - `chapters/03_polynomial_ring.tex`

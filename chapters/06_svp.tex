@@ -1,4 +1,5 @@
 \chapter{Shortest Vector Problem (SVP)}
+\label{ch:svp}
 
 \section{What is the shortest vector?}
 
@@ -35,7 +36,7 @@ In other words, if we imagine all integer combinations of the basis vectors, the
   \draw[shortvec] (0,0) -- (1,-2);
   \node[pqcorange, font=\scriptsize] at (1.55,-1.9) {$\lambda_1$};
 \end{tikzpicture}
-\caption{The same lattice $L(b_1,b_2)$ from Chapter~4, with $b_1=(2,1)$ and $b_2=(1,3)$. Among all the points shown, $(1,-2)=b_1-b_2$ is a shortest nonzero vector, with $\lambda_1(L)=\sqrt{5}$. Notice that it is a \emph{combination} of the basis vectors, not one of the basis vectors itself.}
+\caption{The same lattice $L(b_1,b_2)$ from Chapter~\ref{ch:lattice}, with $b_1=(2,1)$ and $b_2=(1,3)$. Among all the points shown, $(1,-2)=b_1-b_2$ is a shortest nonzero vector, with $\lambda_1(L)=\sqrt{5}$. Notice that it is a \emph{combination} of the basis vectors, not one of the basis vectors itself.}
 \label{fig:svp}
 \end{figure}
 
@@ -57,7 +58,7 @@ which is roughly
 \]
 That is far beyond the number of atoms in the observable universe. Exhaustive search is therefore infeasible.
 
-Stated precisely, brute force is just Algorithm~\ref{alg:lattice-enum} from Chapter~4 with an extra step that tracks the minimum norm seen so far:
+Stated precisely, brute force is just Algorithm~\ref{alg:lattice-enum} from Chapter~\ref{ch:lattice} with an extra step that tracks the minimum norm seen so far:
 
 \begin{algorithm}[H]
 \caption{Brute-Force Shortest Vector Search}

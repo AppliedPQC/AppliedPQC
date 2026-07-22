@@ -28,7 +28,7 @@
   belowskip=0.6em
 }
 
-\title{Post-Quantum Cryptography Learning Notes}
+\title{Post-Quantum Cryptography 101}
 \author{Stephen Duan \and Lin Zhong \and Wei Li}
 \date{\today}
 
@@ -37,12 +37,14 @@
 \maketitle
 \tableofcontents
 
-\part{Mathematical Foundations}
+\part{Foundations}
+\input{chapters/00_quantum_threat}
 \input{chapters/01_sagemath_basics}
 \input{chapters/02_linear_algebra}
 \input{chapters/03_polynomial_ring}
 
 \part{Lattices and Hard Problems}
+\label{part:lattices}
 \input{chapters/04_lattice}
 \input{chapters/05_lll}
 \input{chapters/06_svp}

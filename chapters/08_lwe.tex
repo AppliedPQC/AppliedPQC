@@ -1,4 +1,5 @@
 \chapter{Learning With Errors (LWE)}
+\label{ch:lwe}
 
 \section{From a simple linear equation to a hard problem}
 
@@ -151,6 +152,21 @@ There are two common forms of the problem.
 \end{itemize}
 
 In many theoretical papers, these two versions are shown to be essentially equivalent.
+
+\section{The dual problem: Short Integer Solution (SIS)}
+\label{sec:sis}
+
+LWE has a close relative that will become important once we reach signatures. Where LWE \emph{hides} a secret inside noise and asks you to recover it, the \textbf{Short Integer Solution} (SIS) problem asks you to \emph{find} a short combination of public vectors. Given a random matrix
+\[
+A \in \mathbb{Z}_q^{n \times m}, \qquad m > n,
+\]
+the task is to find a short nonzero integer vector $\mathbf{z}$ with
+\[
+A\mathbf{z} = \mathbf{0} \pmod q.
+\]
+Because there are more columns than rows, such vectors certainly exist; the difficulty is finding one that is \emph{short}. A random solution would have large entries, and shrinking it is exactly the kind of short-vector search that is hard in a high-dimensional lattice.
+
+The two problems are mirror images. LWE is a \emph{search among noisy points} (recover $s$ from $As+e$); SIS is a \emph{search for a short null vector} (find $\mathbf{z}$ with $A\mathbf{z}=0$). Both are hard for the same underlying reason -- short vectors in the associated lattice are hard to find -- and both reduce to worst-case lattice problems. We will meet SIS again directly: in the Dilithium signature (Chapter~\ref{ch:mldsa}), forging a signature means producing a short vector satisfying a public equation, which is precisely an SIS instance.
 
 \section{Why worst-case reduction matters}
 

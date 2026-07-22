@@ -28,6 +28,18 @@ The whole chapter is a ladder. Each rung fixes a limitation of the one below:
   \item \textbf{Hypertree} -- a tree of Merkle trees, which makes the whole thing stateless.
 \end{enumerate}
 
+\section{Interlude: what a secure hash function guarantees}
+
+Earlier chapters used hash functions such as SHAKE only as \emph{expanders} -- deterministic ways to stretch a short seed into a matrix or noise (Chapters~\ref{ch:cbd}--\ref{ch:fips203}). This chapter uses them as the \emph{sole source of security}, so it is worth stating precisely what a cryptographic hash $H:\{0,1\}^* \to \{0,1\}^n$ is assumed to provide:
+
+\begin{itemize}
+  \item \textbf{Preimage resistance} (one-wayness): given an output $y$, it is hard to find any $x$ with $H(x)=y$.
+  \item \textbf{Second-preimage resistance}: given $x$, it is hard to find a different $x'$ with $H(x')=H(x)$.
+  \item \textbf{Collision resistance}: it is hard to find \emph{any} pair $x \neq x'$ with $H(x)=H(x')$.
+\end{itemize}
+
+That is the entire assumption. There is no group, no lattice, no number-theoretic structure for an attacker to exploit -- which is exactly why hash-based signatures are considered the most conservative option. It also explains the parameter sizes: by Grover's algorithm (Chapter~\ref{ch:quantum}), a quantum search cuts preimage resistance from $n$ bits to about $n/2$, so SLH-DSA simply uses a large enough output $n$ (16, 24, or 32 bytes) to keep a comfortable margin. The threat that shatters RSA leaves hashing merely needing bigger parameters.
+
 \section{Phase 1: the one-time core (WOTS\textsuperscript{+})}
 
 The atomic building block is a \emph{one-time} signature: a key pair that may safely sign exactly one message. WOTS\textsuperscript{+} (Winternitz) works by repeated hashing along chains.

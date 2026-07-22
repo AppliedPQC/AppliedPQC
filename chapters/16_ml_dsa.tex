@@ -1,5 +1,6 @@
 \chapter{Complete Implementation of ML-DSA (FIPS 204)}
 \chaptermark{ML-DSA (FIPS 204)}
+\label{ch:mldsa}
 
 \section{Learning objectives}
 
@@ -29,11 +30,11 @@ The security goal is \emph{unforgeability}: even after seeing many valid signatu
 
 \section{The two hard problems}
 
-ML-DSA leans on two lattice problems in the module setting of Chapter~10.
+ML-DSA leans on two lattice problems in the module setting of Chapter~\ref{ch:mlwe}.
 
 \begin{itemize}
   \item \textbf{Module-LWE}, already familiar: from $(A,\ \mathbf{t}=A\mathbf{s}_1+\mathbf{s}_2)$ with short $\mathbf{s}_1,\mathbf{s}_2$, recovering the secret is hard. This hides the signing key inside the public key.
-  \item \textbf{Module-SIS} (Short Integer Solution): given a random $A$, finding a short nonzero $\mathbf{z}$ with $A\mathbf{z}=\mathbf{0}\pmod q$ is hard. This blocks forgery: a forger would have to produce a short vector satisfying a public equation.
+  \item \textbf{Module-SIS} (Short Integer Solution): the module-lattice form of the SIS problem introduced in Section~\ref{sec:sis}. Given a random $A$, finding a short nonzero $\mathbf{z}$ with $A\mathbf{z}=\mathbf{0}\pmod q$ is hard. This blocks forgery: a forger would have to produce a short vector satisfying a public equation.
 \end{itemize}
 
 SIS is the mirror image of LWE. LWE hides a secret inside noise; SIS asks you to \emph{find} a short solution to a random system. Both are hard for the same geometric reason -- short vectors in a high-dimensional lattice are hard to find.

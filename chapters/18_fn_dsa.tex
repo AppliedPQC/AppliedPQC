@@ -11,7 +11,7 @@ After finishing this chapter, you should be able to:
   \item contrast hash-and-sign with the Fiat--Shamir approach of ML-DSA;
   \item describe the NTRU lattice and why a short secret basis is a trapdoor;
   \item explain how signing is a nearest-lattice-point problem solved with a Gaussian sampler;
-  \item connect the sampler back to discrete Gaussians, good vs.\ bad bases, and CVP from Part~II;
+  \item connect the sampler back to discrete Gaussians, good vs.\ bad bases, and CVP from Part~\ref{part:lattices};
   \item understand why Falcon's floating-point arithmetic makes constant-time implementation hard.
 \end{enumerate}
 
@@ -37,13 +37,13 @@ The public key is just the single polynomial $h$. It defines the \textbf{NTRU la
 \[
 \Lambda = \{ (u, v) \in R_q^2 : u + v\,h = 0 \pmod q \},
 \]
-a $2n$-dimensional lattice exactly of the kind studied in Part~II. From $h$ alone you can write down a basis for $\Lambda$, but it is a \emph{bad} basis -- long and skewed -- so finding short vectors in it is hard.
+a $2n$-dimensional lattice exactly of the kind studied in Part~\ref{part:lattices}. From $h$ alone you can write down a basis for $\Lambda$, but it is a \emph{bad} basis -- long and skewed -- so finding short vectors in it is hard.
 
 The secret is a \emph{good} basis for the very same lattice. Key generation completes $(f,g)$ into a full short basis by solving the \textbf{NTRU equation}
 \[
 f\,G - g\,F = q
 \]
-for two more short polynomials $F, G$. The pair of rows $(g, -f)$ and $(G, -F)$ is a short, nearly orthogonal basis of $\Lambda$ -- precisely the ``good basis'' that Chapters~4--6 told us is the key to solving lattice problems.
+for two more short polynomials $F, G$. The pair of rows $(g, -f)$ and $(G, -F)$ is a short, nearly orthogonal basis of $\Lambda$ -- precisely the ``good basis'' that Chapters~\ref{ch:lattice}--\ref{ch:svp} told us is the key to solving lattice problems.
 
 \begin{figure}[H]
 \centering
@@ -109,7 +109,7 @@ which is the same as finding a lattice point of $\Lambda$ close to $(c, 0)$. Usi
   \item its distribution is a \emph{discrete Gaussian} centered at the target, which -- crucially -- is independent of \emph{which} good basis produced it. This is what stops each signature from leaking the secret.
 \end{itemize}
 
-This is where the whole book converges: the discrete Gaussian of Chapter~7, the good-versus-bad-basis geometry of Chapters~4--5, and the closest-vector view of the LWE chapter all appear at once, in service of one signature.
+This is where the whole book converges: the discrete Gaussian of Chapter~\ref{ch:prob}, the good-versus-bad-basis geometry of Chapters~\ref{ch:lattice}--\ref{ch:lll}, and the closest-vector view of the LWE chapter all appear at once, in service of one signature.
 
 \begin{figure}[H]
 \centering
@@ -150,7 +150,7 @@ Only $s_2$ needs to be sent: the verifier can recover $s_1 = c - s_2 h \bmod q$.
 \end{algorithmic}
 \end{algorithm}
 
-Verification is cheap: one multiplication to recover $s_1$, then a norm check. A forger without the good basis would have to solve the closest-vector problem in the NTRU lattice using only $h$ -- exactly the hardness Part~II established.
+Verification is cheap: one multiplication to recover $s_1$, then a norm check. A forger without the good basis would have to solve the closest-vector problem in the NTRU lattice using only $h$ -- exactly the hardness Part~\ref{part:lattices} established.
 
 \section{Why Falcon is the hardest to implement}
 
