@@ -10,8 +10,10 @@ That kind of security is necessary. It is also not sufficient. A scheme does not
 on paper; it runs on a physical device that takes time, draws current, radiates,
 and can be poked with a laser. If any of those measurable, physical quantities
 depends on the secret key, an attacker can read the key off the machine without ever
-touching the mathematics. This closing chapter is the book's final warning:
-\emph{the math can be perfect and the deployment still broken.}
+touching the mathematics. This chapter's warning is blunt:
+\emph{the math can be perfect and the deployment still broken.} It is the natural
+bridge to the final part, where correct, side-channel-safe implementation becomes one
+requirement among several for getting these schemes into real systems.
 
 After finishing this chapter, you should be able to:
 
@@ -403,7 +405,7 @@ silicon.
 
 \section{Summary}
 
-This is the closing argument of the book, so it is worth stating plainly. The
+It is worth stating the lesson of this chapter plainly. The
 post-quantum mathematics we spent the previous chapters building is genuine: it
 defeats Shor's algorithm, and no efficient quantum attack on the underlying lattice
 and code problems is known. But that mathematics protects only the abstract scheme. A

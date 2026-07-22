@@ -1,0 +1,122 @@
+\chapter{Hash-Based Signatures: One-Time and Few-Time}
+\label{ch:hashots}
+
+\section{Why this chapter matters}
+The previous part built signatures on lattice problems. This part builds them on a completely different foundation -- nothing but a cryptographic hash function. There is no number theory, no lattice, no algebraic structure for an attacker to exploit: if the hash is secure, so is the signature. That makes hash-based signatures the most conservative post-quantum option, and it is why NIST standardized one (SLH-DSA, FIPS 205) as a hedge against a future structural break in lattices.
+
+Because the foundation is so different, we introduce it the same way we introduced lattices: from the ground up. This chapter builds the atomic pieces -- one-time and few-time signatures -- and the next assembles them into a many-time, stateless scheme with Merkle trees. Only then, in Chapter~\ref{ch:slhdsa}, do we turn to the FIPS 205 standard itself.
+
+\section{Learning goals}
+After reading this chapter, you should be able to:
+
+\begin{itemize}
+  \item state the three security properties a hash function must provide, and why Grover only mildly weakens them;
+  \item construct and verify a Lamport one-time signature, and explain why it is strictly one-time;
+  \item explain how Winternitz (WOTS\textsuperscript{+}) trades hashing time for much shorter signatures;
+  \item describe the few-time signature FORS and the sense in which it tolerates limited reuse.
+\end{itemize}
+
+\section{What a secure hash function guarantees}
+Earlier chapters used hash functions such as SHAKE only as \emph{expanders} -- deterministic ways to stretch a short seed into a matrix or noise (Chapters~\ref{ch:cbd}--\ref{ch:fips203}). Here a hash is the \emph{sole source of security}, so we state precisely what is assumed of $H:\{0,1\}^*\to\{0,1\}^n$.
+
+\begin{definition}[Hash-function security]
+A cryptographic hash $H$ is assumed to be
+\begin{itemize}
+  \item \emph{preimage resistant} (one-way): given $y$, it is hard to find any $x$ with $H(x)=y$;
+  \item \emph{second-preimage resistant}: given $x$, it is hard to find $x'\neq x$ with $H(x')=H(x)$;
+  \item \emph{collision resistant}: it is hard to find any pair $x\neq x'$ with $H(x)=H(x')$.
+\end{itemize}
+\end{definition}
+
+That is the whole assumption. Because there is no hidden algebraic structure, there is no Shor-style break; the only quantum help is Grover's search (Chapter~\ref{ch:quantum}), which cuts preimage resistance from $n$ bits to about $n/2$. Hash-based schemes simply use a larger output $n$ (16, 24, or 32 bytes) to keep a comfortable margin. The threat that shatters RSA leaves hashing merely needing bigger parameters.
+
+\section{The Lamport one-time signature}
+The simplest possible hash-based signature, due to Lamport~\cite{lamport1979}, already contains the key idea: \emph{reveal a hash preimage as proof}.
+
+To sign an $m$-bit message, the signer prepares, for each bit position, \emph{two} secret random values -- one to reveal if that bit is $0$, one if it is $1$ -- and publishes their hashes. Signing a message reveals exactly one secret per position: the one matching the bit. A verifier hashes each revealed secret and checks it against the correct public value.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node (lbl0) at (0,1.4) {position $i$:};
+  \node[flownode] (s0) at (2.7,1.4) {$sk_{i,0}$};
+  \node[flownode] (s1) at (6.8,1.4) {$sk_{i,1}$};
+  \node[keynode] (p0) at (2.7,0) {$pk_{i,0}=H(sk_{i,0})$};
+  \node[keynode] (p1) at (6.8,0) {$pk_{i,1}=H(sk_{i,1})$};
+  \draw[flowarrow] (s0) -- (p0);
+  \draw[flowarrow] (s1) -- (p1);
+  \node[pqcorange, align=center] at (4.75,-1.0)
+    {if the message bit is $0$, reveal $sk_{i,0}$;\quad if it is $1$, reveal $sk_{i,1}$};
+\end{tikzpicture}
+\caption{One position of a Lamport key. Each of the $m$ message-bit positions has two secret values whose hashes are public. A signature reveals exactly one secret per position -- the one matching the message bit -- and the verifier confirms it hashes to the published value. The unrevealed secrets stay hidden by preimage resistance.}
+\label{fig:lamport}
+\end{figure}
+
+\begin{algorithm}[H]
+\caption{Lamport one-time signature}
+\label{alg:lamport}
+\begin{algorithmic}[1]
+\Statex \textbf{KeyGen:}
+\State for $i=0,\dots,m-1$ and $b\in\{0,1\}$, sample $sk_{i,b}\gets\{0,1\}^n$ and set $pk_{i,b}\gets H(sk_{i,b})$
+\State \Return secret key $(sk_{i,b})$, public key $(pk_{i,b})$
+\Statex \textbf{Sign} message $M=(M_0,\dots,M_{m-1})\in\{0,1\}^m$:
+\State \Return $\sigma=(sk_{0,M_0},\ sk_{1,M_1},\ \dots,\ sk_{m-1,M_{m-1}})$
+\Statex \textbf{Verify} $(M,\sigma=(\sigma_0,\dots,\sigma_{m-1}))$:
+\State \Return \emph{accept} iff $H(\sigma_i)=pk_{i,M_i}$ for every $i$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{remark}[Why it is strictly one-time]
+A single signature reveals one secret per position -- the ones matching $M$. To forge a \emph{different} message $M'$, an attacker would need $sk_{i,M'_i}$ at each position where $M'_i\neq M_i$, and those secrets are still protected by preimage resistance. But two signatures on different messages jointly expose \emph{both} secrets at every differing position, after which any message can be forged. Hence a Lamport key is safe for exactly one signature.
+\end{remark}
+
+Lamport keys and signatures are large (each is $2m$ or $m$ hash values). The next construction keeps the one-time security but shrinks the signature dramatically.
+
+\section{Winternitz: trading time for size (WOTS\textsuperscript{+})}
+Instead of two independent secrets per bit, Winternitz uses one \emph{hash chain} per base-$w$ digit of the message. Starting from a secret $sk$, repeated hashing produces a chain, and the public value is its end:
+\[
+sk \;\xrightarrow{H}\; H(sk) \;\xrightarrow{H}\; \cdots \;\xrightarrow{H}\; H^{w-1}(sk)=pk.
+\]
+To sign the digit $m$, the signer reveals the intermediate point $H^{m}(sk)$; the verifier hashes it the remaining $w-1-m$ times and checks it reaches $pk$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (sk) {$sk$};
+  \node[flownode, right=of sk] (h1) {$H(sk)$};
+  \node[flownode, right=of h1] (h2) {$H^2(sk)$};
+  \node[right=6mm of h2] (dots) {$\cdots$};
+  \node[keynode, right=6mm of dots] (pk) {$pk=H^{w-1}(sk)$};
+  \draw[flowarrow] (sk) -- (h1);
+  \draw[flowarrow] (h1) -- (h2);
+  \draw[flowarrow] (h2) -- (dots);
+  \draw[flowarrow] (dots) -- (pk);
+  \draw[decorate,decoration={brace,amplitude=4pt},pqcorange]
+        (h2.north west) -- node[above=3pt]{signature $=H^{m}(sk)$} (h2.north east);
+\end{tikzpicture}
+\caption{One WOTS\textsuperscript{+} hash chain of length $w$. The secret is the start, the public value is the end, and a signature reveals an intermediate point. A verifier hashes forward to check it reaches the public end. A full message digest is split into base-$w$ digits, each signed by its own chain.}
+\label{fig:wots-chain}
+\end{figure}
+
+There is a catch a checksum must fix. Revealing $H^m(sk)$ lets anyone hash \emph{forward} to $H^{m'}(sk)$ for any $m'>m$, so an attacker could ``advance'' a digit to a larger value for free. WOTS\textsuperscript{+} appends a short \emph{checksum} of the digits, itself signed by extra chains, arranged so that increasing any message digit forces \emph{decreasing} some checksum digit -- which would require moving a chain \emph{backward}, i.e.\ inverting $H$. The parameter $w$ tunes a trade-off: larger $w$ means fewer, longer chains (shorter signatures, more hashing), smaller $w$ the reverse. Like Lamport, a WOTS\textsuperscript{+} key is safe for exactly one signature.
+
+\section{FORS: a few-time signature}
+One-time keys are unforgiving: a single reuse is catastrophic. The stateless scheme of the next chapters needs something gentler for signing the actual message digest, because it will pick keys pseudorandomly and cannot guarantee no key is ever hit twice. That gentler object is \textbf{FORS} (Forest Of Random Subsets), a \emph{few-time} signature.
+
+\begin{definition}[FORS]
+FORS consists of $k$ independent Merkle trees, each of height $a$ (so each has $2^a$ leaves, and each leaf hides a secret value). A message digest is split into $k$ indices, one per tree; the signature reveals, for each tree, the secret at the selected leaf together with its authentication path to that tree's root. The $k$ roots are hashed together into a single FORS public key.
+\end{definition}
+
+Because each tree reveals only the \emph{one} leaf its index selects, signing a second message re-uses a secret only when it happens to select the same leaf in the same tree -- an event that is rare and, spread over $k$ trees, tolerable rather than fatal. FORS therefore degrades gracefully under a bounded number of signatures, which is exactly the property statelessness will rely on. (The Merkle trees it is built from are the subject of the next chapter.)
+
+\section{Summary}
+This chapter built the atoms of hash-based signing:
+
+\begin{itemize}
+  \item security rests only on hash preimage/collision resistance, which Grover weakens merely to $n/2$ bits;
+  \item \textbf{Lamport} signs once by revealing one preimage per message bit -- simple but large;
+  \item \textbf{WOTS\textsuperscript{+}} replaces bit-pairs with hash chains plus a checksum, keeping one-time security at a fraction of the size;
+  \item \textbf{FORS} is a \emph{few-time} signature that degrades gracefully under limited reuse.
+\end{itemize}
+
+Every one of these keys is still usable only once (or a few times). The next chapter removes that limitation: a Merkle tree binds many one-time keys under a single public root, and a hypertree of such trees, addressed by hashing the message, yields a stateless many-time signature.

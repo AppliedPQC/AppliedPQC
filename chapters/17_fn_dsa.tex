@@ -4,7 +4,7 @@
 
 \section{Learning objectives}
 
-The third signature standard, FIPS 206, is \textbf{FN-DSA} -- the standardized form of Falcon~\cite{fips206,falcon2020}. (At the time of writing it is the newest of the three, finalized after ML-DSA and SLH-DSA.) Where ML-DSA uses Fiat--Shamir with aborts and SLH-DSA uses only hashing, Falcon takes yet a third route: \emph{hash-and-sign} over NTRU lattices, using a Gaussian trapdoor sampler. The payoff is remarkably compact signatures and keys; the price is the most delicate implementation of the three.
+The second lattice-based signature standard, FIPS 206, is \textbf{FN-DSA} -- the standardized form of Falcon~\cite{fips206,falcon2020}. (At the time of writing it is the newest of the four NIST standards, finalized after ML-KEM, ML-DSA, and SLH-DSA.) Where ML-DSA uses Fiat--Shamir with aborts, Falcon takes a different route on the same lattice foundation: \emph{hash-and-sign} over NTRU lattices, using a Gaussian trapdoor sampler. The payoff is remarkably compact signatures and keys; the price is the most delicate implementation of the three.
 
 After finishing this chapter, you should be able to:
 
@@ -194,4 +194,4 @@ FN-DSA (Falcon) is lattice hash-and-sign done right:
   \item the reward is very compact signatures; the cost is delicate floating-point, constant-time engineering.
 \end{itemize}
 
-This completes the trio of signature standards. Together with FIPS 203 (ML-KEM), the three FIPS signature standards -- 204, 205, and 206 -- span the three main design philosophies of post-quantum cryptography: structured lattices, pure hashing, and NTRU trapdoors. The remaining chapters step outside the NIST signature suite to look at code-based encryption and, finally, at the implementation attacks that Falcon's difficulties foreshadow.
+This completes the \emph{lattice-based} signatures. ML-DSA and FN-DSA both live on lattices but reach a signature by opposite routes -- Fiat--Shamir with aborts versus Gaussian hash-and-sign -- and trade off size against implementation delicacy accordingly. The next part leaves lattices entirely for signatures built on a different hard problem: hash functions alone, culminating in the third signature standard, SLH-DSA (FIPS 205).

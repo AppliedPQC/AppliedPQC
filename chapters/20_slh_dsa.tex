@@ -1,0 +1,127 @@
+\chapter{Complete Implementation of SLH-DSA (FIPS 205)}
+\chaptermark{SLH-DSA (FIPS 205)}
+\label{ch:slhdsa}
+
+\section{Learning objectives}
+The two previous chapters built the pieces of hash-based signing from the ground up: one-time and few-time signatures (Chapter~\ref{ch:hashots}) and the Merkle-tree and hypertree machinery that makes them stateless and many-time (Chapter~\ref{ch:hashmerkle}). This chapter assembles those pieces exactly as the standard specifies them. FIPS 205, \textbf{SLH-DSA} (from the submission SPHINCS\textsuperscript{+})~\cite{fips205,sphincsplus2019}, is the stateless hash-based signature standard, chosen as the conservative hedge against any future structural weakness in lattices.
+
+After finishing this chapter, you should be able to:
+
+\begin{itemize}
+  \item recall how WOTS\textsuperscript{+}, FORS, Merkle trees, and the hypertree fit together;
+  \item explain how every secret is derived deterministically from a few seeds and an address;
+  \item follow the SLH-DSA key generation, signing, and verification algorithms;
+  \item read off the parameter families and their size--speed trade-off.
+\end{itemize}
+
+\section{Review: the pieces, assembled}
+It is worth restating the ladder in one place, since SLH-DSA is precisely its assembly:
+
+\begin{itemize}
+  \item \textbf{WOTS\textsuperscript{+}} (Chapter~\ref{ch:hashots}) signs one value with hash chains and a checksum;
+  \item a \textbf{Merkle tree} (Chapter~\ref{ch:hashmerkle}) binds $2^h$ WOTS\textsuperscript{+} keys under one root, authenticated by a path -- one such tree is an XMSS instance;
+  \item a \textbf{hypertree} stacks $d$ layers of these trees so that each root is signed by the layer above, exposing only the top root as the public key;
+  \item \textbf{FORS} signs the actual message digest as a \emph{few-time} signature, and its public key is what the bottom hypertree layer signs.
+\end{itemize}
+
+The full chain from a message up to the published root was drawn in Figure~\ref{fig:hypertree}. What remains is to specify \emph{where every secret comes from} and to write down the three algorithms.
+
+\section{The real input: seeds and addresses}
+Like ML-KEM and ML-DSA, SLH-DSA is deterministic once its seeds are fixed. Everything is derived from three $n$-byte values:
+
+\begin{itemize}
+  \item \texttt{SK.seed} -- secret; every WOTS\textsuperscript{+} and FORS secret value is generated from it by a PRF;
+  \item \texttt{SK.prf} -- secret; a PRF key used to derive the per-signature randomizer $R$;
+  \item \texttt{PK.seed} -- public; tweaks every hash so that structurally identical nodes differ.
+\end{itemize}
+
+The device that keeps the many hashes distinct is the \emph{address} (\texttt{ADRS}): a structured label identifying exactly which tree, which layer, which leaf, and which position within a chain a given hash belongs to. Every hash call takes the public seed and an address, so no two structurally identical computations in different places produce the same value. This is what defeats multi-target attacks, and it is why \texttt{PK.seed}, though public, is essential.
+
+\section{Key generation}
+Key generation samples the three seeds and computes the one value that summarizes the entire hypertree: the root of its top-layer Merkle tree.
+
+\begin{algorithm}[H]
+\caption{SLH-DSA.KeyGen (teaching form)}
+\label{alg:slhdsa-keygen}
+\begin{algorithmic}[1]
+\Require Randomness for three $n$-byte seeds
+\Ensure Public key $(\texttt{PK.seed},\texttt{PK.root})$; secret key also stores $(\texttt{SK.seed},\texttt{SK.prf})$
+\State sample \texttt{SK.seed}, \texttt{SK.prf}, \texttt{PK.seed} uniformly
+\State $\texttt{PK.root} \gets$ root of the top-layer Merkle tree, derived from \texttt{SK.seed} and \texttt{PK.seed} via addressed hashing
+\State \Return public $(\texttt{PK.seed},\texttt{PK.root})$, secret $(\texttt{SK.seed},\texttt{SK.prf},\texttt{PK.seed},\texttt{PK.root})$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Signing and verification}
+Signing hashes the message (with a randomizer) to a digest, splits it into a FORS message and a pair of indices selecting a bottom-layer tree and leaf, signs the digest with FORS, and then signs the FORS public key up the hypertree.
+
+\begin{algorithm}[H]
+\caption{SLH-DSA.Sign (teaching form)}
+\label{alg:slhdsa-sign}
+\begin{algorithmic}[1]
+\Require Secret key, message $M$
+\Ensure Signature $\sigma = (R,\ \sigma_{\mathrm{FORS}},\ \sigma_{\mathrm{HT}})$
+\State $R \gets \textsc{PRF}(\texttt{SK.prf}, M)$ \Comment{per-signature randomizer}
+\State $digest \gets H(R \,\|\, \texttt{PK.seed} \,\|\, \texttt{PK.root} \,\|\, M)$
+\State split $digest$ into the FORS message $md$ and indices $(idx_{\mathrm{tree}}, idx_{\mathrm{leaf}})$
+\State $\sigma_{\mathrm{FORS}} \gets \textsc{ForsSign}(md, \dots)$;\quad $pk_{\mathrm{FORS}} \gets$ its public key
+\State $\sigma_{\mathrm{HT}} \gets \textsc{HyperTreeSign}(pk_{\mathrm{FORS}}, idx_{\mathrm{tree}}, idx_{\mathrm{leaf}}, \dots)$
+\State \Return $(R,\ \sigma_{\mathrm{FORS}},\ \sigma_{\mathrm{HT}})$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{SLH-DSA.Verify (teaching form)}
+\label{alg:slhdsa-verify}
+\begin{algorithmic}[1]
+\Require Public key $(\texttt{PK.seed},\texttt{PK.root})$, message $M$, signature $(R,\sigma_{\mathrm{FORS}},\sigma_{\mathrm{HT}})$
+\Ensure \emph{accept} or \emph{reject}
+\State $digest \gets H(R \,\|\, \texttt{PK.seed} \,\|\, \texttt{PK.root} \,\|\, M)$; split into $md,(idx_{\mathrm{tree}},idx_{\mathrm{leaf}})$
+\State $pk_{\mathrm{FORS}} \gets \textsc{ForsPkFromSig}(md, \sigma_{\mathrm{FORS}}, \dots)$
+\State $root' \gets \textsc{HyperTreeRootFromSig}(pk_{\mathrm{FORS}}, \sigma_{\mathrm{HT}}, idx_{\mathrm{tree}}, idx_{\mathrm{leaf}}, \dots)$
+\State \Return \emph{accept} if $root' = \texttt{PK.root}$, else \emph{reject}
+\end{algorithmic}
+\end{algorithm}
+
+Verification is nothing but a chain of hash recomputations: rebuild the FORS public key from the message, fold it up the hypertree using the supplied authentication paths, and accept only if the final value equals the published root. There is no arithmetic to protect and no secret-dependent branch, which makes SLH-DSA unusually easy to implement in constant time (Chapter~\ref{ch:sidechannel}).
+
+\section{Parameter sets}
+SLH-DSA comes in two flavours at each security level: \textbf{s} (\emph{small} signatures, slower signing) and \textbf{f} (\emph{fast} signing, larger signatures), instantiated with either SHA2 or SHAKE.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Family & $n$ (bytes) & NIST level & Trade-off \\
+\midrule
+SLH-DSA-128\{s,f\} & 16 & 1 & smallest keys \\
+SLH-DSA-192\{s,f\} & 24 & 3 & balanced \\
+SLH-DSA-256\{s,f\} & 32 & 5 & highest security \\
+\bottomrule
+\end{tabular}
+\caption{SLH-DSA parameter families. Within each level, the \textbf{s} variant minimizes signature size and the \textbf{f} variant minimizes signing time.}
+\end{table}
+
+Signatures are large -- roughly $8$ to $50$ kilobytes -- which is the price of relying on hashing alone. In return, the security argument is the simplest and most conservative of any post-quantum scheme.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: reusing a one-time (WOTS\textsuperscript{+}) leaf.}
+Signing two different messages with the same WOTS\textsuperscript{+} chain reveals enough chain points to forge (Chapter~\ref{ch:hashots}). The entire tree machinery exists to guarantee each leaf is used at most once; FORS is deliberately \emph{few-time}, not many-time, so that the rare pseudorandom collision is survivable.
+
+\paragraph{Pitfall 2: thinking SLH-DSA needs state.}
+Earlier hash-based schemes (XMSS, LMS) are \emph{stateful}: the signer must remember which leaves are spent, and a single reuse is catastrophic. SLH-DSA is \emph{stateless} -- the message hash selects the path -- which is why it was chosen for standardization despite larger signatures.
+
+\paragraph{Pitfall 3: forgetting the public seed's role.}
+\texttt{PK.seed} tweaks every hash call through the address mechanism. Without it, structurally identical nodes in different trees would hash identically, enabling multi-target attacks. It is public but essential.
+
+\section{Summary}
+SLH-DSA is the assembly of the hash-based ladder into a single stateless standard:
+
+\begin{itemize}
+  \item every secret is derived deterministically from \texttt{SK.seed} and an address; \texttt{PK.seed} keeps all hashes distinct;
+  \item a signature is a FORS signature on the message digest, carried up a hypertree of Merkle-tree (XMSS) instances to the one published root;
+  \item verification is pure hashing, so the scheme is conservative in assumption and easy to make constant-time.
+\end{itemize}
+
+Its security depends on nothing but the hash function, making it the backstop among post-quantum signatures. This completes the two signature families -- lattice-based (ML-DSA, FN-DSA) and hash-based (SLH-DSA). The next part turns to a third and independent foundation: code-based cryptography.

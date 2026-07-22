@@ -1,0 +1,124 @@
+\chapter{Merkle Trees and Stateless Signatures}
+\label{ch:hashmerkle}
+
+\section{Why this chapter matters}
+The previous chapter left us with a problem: every key we built -- Lamport, WOTS\textsuperscript{+}, even FORS -- is usable only once or a few times. A real signer must produce many signatures under \emph{one} public key. This chapter supplies the two ideas that make that possible. A \emph{Merkle tree} binds a large batch of one-time keys under a single public root, and a \emph{hypertree} addressed by hashing the message turns the whole construction \emph{stateless}, so the signer need not remember which keys it has already used. These are the last pieces before the FIPS 205 standard of Chapter~\ref{ch:slhdsa}.
+
+\section{Learning goals}
+After reading this chapter, you should be able to:
+
+\begin{itemize}
+  \item build a Merkle tree over many one-time public keys and verify an authentication path;
+  \item explain what makes a many-time hash-based scheme (XMSS) \emph{stateful} and why that is dangerous;
+  \item describe the hypertree and how it enlarges the number of usable keys;
+  \item explain how hashing the message to select a leaf removes the state entirely.
+\end{itemize}
+
+\section{The Merkle tree}
+A single one-time key is nearly useless on its own. The Merkle tree~\cite{merkle1987} fixes this: generate many one-time (WOTS\textsuperscript{+}) key pairs, hash each public key into a \emph{leaf}, and build a binary tree in which every internal node is the hash of its two children. The single value at the top -- the \emph{root} -- is the public key for \emph{all} the leaves at once.
+
+To use leaf $i$, the signer publishes the leaf's one-time signature \emph{plus} the \emph{authentication path}: the sibling hash at each level from the leaf up to the root. The verifier recomputes the leaf, folds it up the path, and accepts only if the final value equals the known root.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[level distance=9mm, every node/.style={font=\scriptsize},
+  level 1/.style={sibling distance=34mm},
+  level 2/.style={sibling distance=17mm},
+  level 3/.style={sibling distance=9mm}]
+  \node[keynode] (root) {root $=pk$}
+    child {node[flownode] {$n_0$}
+      child {node[flownode,fill=pqclight] (a) {}
+        child {node[latticeptbold,label=below:{\scriptsize leaf}] (L) {}}
+        child {node[flownode,draw=pqcorange] (s0) {}}
+      }
+      child {node[flownode,draw=pqcorange] (s1) {}
+        child {node[flownode] {}}
+        child {node[flownode] {}}
+      }
+    }
+    child {node[flownode,draw=pqcorange] (n1) {$n_1$}
+      child {node[flownode] {}
+        child {node[flownode] {}}
+        child {node[flownode] {}}
+      }
+      child {node[flownode] {}
+        child {node[flownode] {}}
+        child {node[flownode] {}}
+      }
+    };
+\end{tikzpicture}
+\caption{A Merkle tree of height $3$. Each leaf is the hash of one WOTS\textsuperscript{+} public key; internal nodes hash their two children; the single root is the public key. To authenticate the marked leaf, the signature carries the three orange sibling nodes (the authentication path). The verifier recomputes the leaf and hashes up the path, accepting only if it lands on the known root.}
+\label{fig:merkle}
+\end{figure}
+
+\begin{algorithm}[H]
+\caption{Verify a Merkle authentication path}
+\label{alg:merkle-path}
+\begin{algorithmic}[1]
+\Require Leaf value $\ell$, leaf index $i$, authentication path $(a_0,\dots,a_{h-1})$, root $r$
+\Ensure \emph{accept} or \emph{reject}
+\State $node \gets \ell$
+\For{$j = 0,\dots,h-1$}
+  \If{bit $j$ of $i$ is $0$}
+    \State $node \gets H(node \,\|\, a_j)$ \Comment{current node is the left child}
+  \Else
+    \State $node \gets H(a_j \,\|\, node)$ \Comment{current node is the right child}
+  \EndIf
+\EndFor
+\State \Return \emph{accept} if $node = r$, else \emph{reject}
+\end{algorithmic}
+\end{algorithm}
+
+A tree of height $h$ turns $2^h$ one-time keys into a single public key of one hash value, at the cost of an $h$-node authentication path in every signature.
+
+\section{XMSS and the burden of state}
+A Merkle tree of WOTS\textsuperscript{+} keys is essentially the scheme \textbf{XMSS}. It signs $2^h$ messages under one root -- but only if each leaf is used \emph{at most once}. That is a \emph{stateful} requirement: the signer must remember which leaves are spent and never repeat one.
+
+\begin{remark}[Why state is dangerous]
+State makes a many-time hash signature fragile in practice. If a key is backed up and restored, or run on two machines, or a virtual machine is rolled back, the same leaf index can be used twice -- and reusing a one-time key breaks it completely. Stateful hash-based schemes (XMSS, LMS) are standardized and useful, but their safety depends on flawless state management, which is exactly what fails in real deployments.
+\end{remark}
+
+\section{The hypertree}
+Two problems remain: a single tree tall enough to never repeat a leaf would be astronomically expensive to build, and we still want to remove the state. The hypertree addresses the first. It stacks $d$ layers of Merkle trees so that each tree's root is signed by a one-time key in the tree one layer up; only the very top root is published.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node[keynode] (top) at (0,3) {top tree \; root $=PK.\mathrm{root}$};
+  \node[flownode] (mid) at (0,1.7) {middle tree (signs the root below with WOTS\textsuperscript{+})};
+  \node[flownode] (bot) at (0,0.4) {bottom tree (signs the FORS public key)};
+  \node[flownode, draw=pqcorange] (fors) at (0,-0.9) {FORS \;(signs the message digest)};
+  \draw[flowarrow] (fors) -- (bot);
+  \draw[flowarrow] (bot) -- (mid);
+  \draw[flowarrow] (mid) -- (top);
+  \node[right=2mm of top, pqcgray] {published};
+  \node[right=2mm of fors, pqcgray] {message};
+\end{tikzpicture}
+\caption{A hypertree with $d=3$ layers. FORS signs the message digest; the bottom Merkle tree signs the FORS public key; each higher layer signs the root of the tree below it; only the top root is the public key. A single ``signature'' is this whole chain of one-time signatures and authentication paths from the message up to the published root. Chaining $d$ trees of height $h$ yields $2^{dh}$ effective leaves while only ever building trees of height $h$.}
+\label{fig:hypertree}
+\end{figure}
+
+Chaining $d$ trees of height $h$ multiplies the exponents: the hypertree behaves like one tree of height $dh$, giving $2^{dh}$ usable bottom-layer keys, while never building a tree taller than $h$. With $dh$ around sixty, the number of keys is so vast that collisions become negligible -- which is what finally lets us drop the state.
+
+\section{From stateful to stateless}
+The last idea is how the leaf is chosen. Instead of a counter that must be remembered, the signer \emph{hashes the message} (together with a fresh random value $R$) to pseudorandomly select which bottom-layer tree and leaf to use, and which FORS leaves to reveal:
+\[
+(R,\ \text{tree index},\ \text{leaf index},\ \text{FORS indices}) \;\longleftarrow\; H(R \,\|\, PK \,\|\, M).
+\]
+Two different messages almost never land on the same leaves, because the hypertree is enormous; and on the rare occasion that a bottom key is reused, FORS -- being \emph{few-time} rather than one-time -- absorbs the overlap. No index is ever recorded, so there is no state to corrupt.
+
+\begin{remark}[The role of the public seed]
+One subtlety carries over to the standard. Every hash in the tree is tweaked by a public seed and by an \emph{address} identifying the node's position, so that structurally identical nodes in different trees hash differently. Without this, an attacker could attack many positions at once (a multi-target attack). The seed is public but essential, and we return to it in the next chapter.
+\end{remark}
+
+\section{Summary}
+This chapter completed the ladder from one-time keys to a practical many-time signature:
+
+\begin{itemize}
+  \item a \textbf{Merkle tree} binds $2^h$ one-time keys under a single root, authenticated by an $h$-node path;
+  \item using each leaf once gives a \emph{stateful} scheme (XMSS), whose safety is fragile in deployment;
+  \item a \textbf{hypertree} of $d$ layers multiplies the key supply to $2^{dh}$ without building tall trees;
+  \item \textbf{hashing the message} to select the path removes the state entirely, with FORS absorbing the rare reuse.
+\end{itemize}
+
+Everything is now in place. The next chapter assembles these pieces exactly as the FIPS 205 standard specifies them, deriving all secrets deterministically from a handful of seeds and addresses.

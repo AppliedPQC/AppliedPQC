@@ -321,4 +321,4 @@ ML-DSA reuses the module-lattice world of Kyber and adds one genuinely new ingre
   \item unforgeability rests on Module-LWE (hiding the key) and Module-SIS (blocking short-vector forgeries).
 \end{itemize}
 
-The next chapter turns to a completely different foundation for signatures -- FIPS 205, SLH-DSA, which needs no lattices or number theory at all, only hash functions.
+The next chapter stays with lattices but takes a very different route to a signature: FN-DSA (Falcon), which abandons Fiat--Shamir for a hash-and-sign construction over NTRU lattices and, in exchange, produces the most compact signatures of the three standards.
