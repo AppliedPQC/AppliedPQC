@@ -1,0 +1,288 @@
+\chapter{Complete Implementation of ML-DSA (FIPS 204)}
+\chaptermark{ML-DSA (FIPS 204)}
+
+\section{Learning objectives}
+
+The previous part of the book built up to FIPS 203, the real ML-KEM standard for \emph{encryption and key exchange}. We now cross to the other half of public-key cryptography, \emph{digital signatures}, and to the first of three signature standards: FIPS 204, \textbf{ML-DSA}, better known by its submission name Dilithium.
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item explain what a signature scheme does and how it differs from a KEM;
+  \item follow the ML-DSA key generation flow and see that it reuses the module-lattice machinery of Kyber almost verbatim;
+  \item explain the two hard problems, Module-LWE and Module-SIS, and which part of the scheme each one protects;
+  \item follow the signing procedure phase by phase, and understand why it contains a rejection (``abort'') loop;
+  \item connect the rejection idea back to the role of noise studied in the LWE chapters.
+\end{enumerate}
+
+\section{Review: how signing differs from ML-KEM}
+
+ML-KEM answered the question \emph{how do two parties agree on a shared secret?} A signature answers a different question: \emph{how does a verifier know that a message really came from the holder of a secret key, unchanged?} The three algorithms mirror a KEM but serve this new goal:
+
+\begin{itemize}
+  \item \textbf{KeyGen} $\to$ a public verification key $pk$ and a secret signing key $sk$;
+  \item \textbf{Sign}$(sk, M)$ $\to$ a signature $\sigma$ on a message $M$;
+  \item \textbf{Verify}$(pk, M, \sigma)$ $\to$ \emph{accept} or \emph{reject}.
+\end{itemize}
+
+The security goal is \emph{unforgeability}: even after seeing many valid signatures, nobody without $sk$ can produce a valid signature on a new message. The remarkable fact is that ML-DSA achieves this on \emph{exactly} the same ring $R_q = \mathbb{Z}_q[x]/(x^{256}+1)$ and module structure we already built for Kyber. Only the modulus changes ($q = 8380417$), and the signing procedure is genuinely new.
+
+\section{The two hard problems}
+
+ML-DSA leans on two lattice problems in the module setting of Chapter~10.
+
+\begin{itemize}
+  \item \textbf{Module-LWE}, already familiar: from $(A,\ \mathbf{t}=A\mathbf{s}_1+\mathbf{s}_2)$ with short $\mathbf{s}_1,\mathbf{s}_2$, recovering the secret is hard. This hides the signing key inside the public key.
+  \item \textbf{Module-SIS} (Short Integer Solution): given a random $A$, finding a short nonzero $\mathbf{z}$ with $A\mathbf{z}=\mathbf{0}\pmod q$ is hard. This blocks forgery: a forger would have to produce a short vector satisfying a public equation.
+\end{itemize}
+
+SIS is the mirror image of LWE. LWE hides a secret inside noise; SIS asks you to \emph{find} a short solution to a random system. Both are hard for the same geometric reason -- short vectors in a high-dimensional lattice are hard to find.
+
+\section{The real input in FIPS 204}
+
+Exactly as in FIPS 203, key generation does not begin by sampling a matrix. It begins with a single short seed:
+\[
+\xi \in \{0,1\}^{256}.
+\]
+Everything else -- the public matrix, both secret vectors, and the internal PRF keys -- is expanded deterministically from $\xi$. Key generation is therefore a deterministic function $\mathrm{KeyGen}(\xi)$, just like ML-KEM.
+
+\section{Phase 1: expand the seed}
+
+The seed is hashed by $H$ (built on SHAKE-256) and split into three parts:
+\[
+(\rho,\ \rho',\ K) = H(\xi).
+\]
+Their roles are:
+\begin{itemize}
+  \item $\rho$ -- public, expands into the matrix $A$ (it will be stored in the public key);
+  \item $\rho'$ -- secret, seeds the sampling of $\mathbf{s}_1$ and $\mathbf{s}_2$;
+  \item $K$ -- secret, a PRF key used later to derive per-signature randomness.
+\end{itemize}
+
+\section{Phase 2: generate the matrix}
+
+As in Kyber, the matrix is never stored; it is regenerated on demand from its seed:
+\[
+A = \textsc{ExpandA}(\rho) \in R_q^{k\times \ell}.
+\]
+The dimensions $(k,\ell)$ are what distinguish the three security levels.
+
+\section{Phase 3: sample the secret vectors}
+
+The two short secrets are expanded from $\rho'$:
+\[
+(\mathbf{s}_1,\ \mathbf{s}_2) = \textsc{ExpandS}(\rho'),\qquad \mathbf{s}_1\in R_q^\ell,\ \mathbf{s}_2\in R_q^k,
+\]
+with coefficients in the small range $[-\eta,\eta]$. These play the role of the LWE secret and error.
+
+\section{Phase 4: compute and split the public value}
+
+The public value is the familiar Module-LWE equation:
+\[
+\mathbf{t} = A\mathbf{s}_1 + \mathbf{s}_2.
+\]
+To shrink the public key, $\mathbf{t}$ is split into a high part $\mathbf{t}_1$ (published) and a low part $\mathbf{t}_0$ (kept in the secret key):
+\[
+\mathbf{t} = \mathbf{t}_1\cdot 2^{d} + \mathbf{t}_0.
+\]
+The public key is $(\rho, \mathbf{t}_1)$; the secret key bundles $(\rho, K, \mathbf{t}_0, \mathbf{s}_1, \mathbf{s}_2)$ together with a hash $tr = H(pk)$ used during signing.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node[flownode] (xi) at (5,7.4) {seed $\xi \in \{0,1\}^{256}$};
+  \node[flownode] (h)  at (5,6.2) {$H(\xi)$};
+  \node[flownode] (rho)   at (1.3,5.0) {$\rho$};
+  \node[flownode] (rhop)  at (5,5.0) {$\rho'$};
+  \node[flownode] (K)     at (8.7,5.0) {$K$ (PRF key)};
+  \node[flownode, font=\scriptsize] (A)     at (1.5,3.6) {$A=\textsc{ExpandA}(\rho)$};
+  \node[flownode, font=\scriptsize] (s)     at (5.9,3.6) {$(\mathbf{s}_1,\mathbf{s}_2)=\textsc{ExpandS}(\rho')$};
+  \node[flownode] (t)     at (3.6,2.4) {$\mathbf{t}=A\mathbf{s}_1+\mathbf{s}_2$};
+  \node[flownode] (split) at (3.6,1.3) {split $\mathbf{t}=\mathbf{t}_1 2^d+\mathbf{t}_0$};
+  \node[keynode]  (pk)    at (1.7,-0.1) {public key $(\rho,\mathbf{t}_1)$};
+  \node[keynode]  (sk)    at (7.0,-0.1) {secret key\\[-2pt]$(\rho,K,tr,\mathbf{t}_0,\mathbf{s}_1,\mathbf{s}_2)$};
+  \draw[flowarrow] (xi) -- (h);
+  \draw[flowarrow] (h) -- (rho);
+  \draw[flowarrow] (h) -- (rhop);
+  \draw[flowarrow] (h) -- (K);
+  \draw[flowarrow] (rho) -- (A);
+  \draw[flowarrow] (rhop) -- (s);
+  \draw[flowarrow] (A) -- (t);
+  \draw[flowarrow] (s) -- (t);
+  \draw[flowarrow] (t) -- (split);
+  \draw[flowarrow] (split) -- (pk);
+  \draw[flowarrow] (split) -- (sk);
+  \draw[flowarrow] (K) to[out=270,in=0] (sk.east);
+\end{tikzpicture}
+\caption{ML-DSA key generation, in the same deterministic-expansion style as FIPS 203. A single seed $\xi$ fans out into the matrix, both secrets, and the PRF key; the public key stores only $(\rho,\mathbf{t}_1)$, from which $A$ can always be regenerated.}
+\label{fig:mldsa-keygen}
+\end{figure}
+
+\begin{algorithm}[H]
+\caption{ML-DSA.KeyGen (teaching form)}
+\label{alg:mldsa-keygen}
+\begin{algorithmic}[1]
+\Require Seed $\xi \in \{0,1\}^{256}$; parameters $(k,\ell,\eta,d)$
+\Ensure Public key $(\rho,\mathbf{t}_1)$; secret key $(\rho,K,tr,\mathbf{t}_0,\mathbf{s}_1,\mathbf{s}_2)$
+\State $(\rho,\rho',K) \gets H(\xi)$ \Comment{Phase 1}
+\State $A \gets \textsc{ExpandA}(\rho)$ \Comment{Phase 2}
+\State $(\mathbf{s}_1,\mathbf{s}_2) \gets \textsc{ExpandS}(\rho')$ \Comment{Phase 3}
+\State $\mathbf{t} \gets A\mathbf{s}_1 + \mathbf{s}_2$ \Comment{Phase 4}
+\State $(\mathbf{t}_1,\mathbf{t}_0) \gets \textsc{Power2Round}(\mathbf{t}, d)$
+\State $tr \gets H(\rho\,\|\,\mathbf{t}_1)$
+\State \Return $\big((\rho,\mathbf{t}_1),\ (\rho,K,tr,\mathbf{t}_0,\mathbf{s}_1,\mathbf{s}_2)\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{The signing idea: commitment, challenge, response}
+
+Signing is a three-move identification transcript made non-interactive by the Fiat--Shamir transform. Informally:
+
+\begin{enumerate}
+  \item \textbf{Commit.} Sample a random short masking vector $\mathbf{y}$ and form $\mathbf{w} = A\mathbf{y}$.
+  \item \textbf{Challenge.} Compute a small challenge polynomial $c$ by hashing the commitment together with the message: $c = H(tr\,\|\,\textsc{HighBits}(\mathbf{w})\,\|\,M)$.
+  \item \textbf{Respond.} Reply with $\mathbf{z} = \mathbf{y} + c\,\mathbf{s}_1$.
+\end{enumerate}
+
+A verifier can then recompute $A\mathbf{z} - c\,\mathbf{t}$ and check it matches $\mathbf{w}$ in the high bits, because
+\[
+A\mathbf{z} - c\,\mathbf{t} = A(\mathbf{y}+c\,\mathbf{s}_1) - c(A\mathbf{s}_1+\mathbf{s}_2) = A\mathbf{y} - c\,\mathbf{s}_2 \approx \mathbf{w}.
+\]
+The leftover $c\,\mathbf{s}_2$ is small, and the \textsc{HighBits} rounding absorbs it. Replacing the interactive verifier by the hash $H$ is precisely the Fiat--Shamir transform: the hash acts as an unpredictable, unmanipulable challenger.
+
+\section{Why signing must sometimes abort}
+
+The response $\mathbf{z} = \mathbf{y} + c\,\mathbf{s}_1$ carries the secret $\mathbf{s}_1$ directly. If the mask $\mathbf{y}$ is not large enough to swamp $c\,\mathbf{s}_1$, then $\mathbf{z}$ leaks information -- across many signatures the mask averages out and the secret emerges. This is the LWE lesson in a new costume: \emph{the mask must completely hide the secret}.
+
+ML-DSA's answer is \textbf{rejection sampling}, also called Fiat--Shamir \emph{with aborts}. After forming $\mathbf{z}$, the signer checks whether it lands in a safe region where its distribution is independent of $\mathbf{s}_1$. If not, it discards everything, draws a fresh $\mathbf{y}$, and retries. Only a leak-free $\mathbf{z}$ is ever released.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=5.5mm and 11mm]
+  \node[flownode] (y) {sample mask $\mathbf{y}$};
+  \node[flownode, right=of y] (w) {$\mathbf{w}=A\mathbf{y}$};
+  \node[flownode, right=of w] (c) {$c=H(tr\,\|\,\textsc{HighBits}(\mathbf{w})\,\|\,M)$};
+  \node[flownode, below=of c] (z) {$\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$};
+  \node[diamond, draw=pqcorange, thick, fill=white, align=center,
+        inner sep=1pt, font=\scriptsize, left=of z] (chk) {$\mathbf{z}$\\safe?};
+  \node[keynode, left=of chk] (out) {output\\[-2pt]\scriptsize $\sigma=(c,\mathbf{z},\mathbf{h})$};
+  \draw[flowarrow] (y) -- (w);
+  \draw[flowarrow] (w) -- (c);
+  \draw[flowarrow] (c) -- (z);
+  \draw[flowarrow] (z) -- (chk);
+  \draw[flowarrow] (chk) -- node[above,font=\scriptsize,pqcteal]{yes} (out);
+  \draw[flowarrow] (chk.north) |- ([yshift=3.5mm]y.north)
+        node[near end,above,font=\scriptsize,pqcorange]{no: restart} -- (y.north);
+\end{tikzpicture}
+\caption{The ML-DSA signing loop. A fresh mask $\mathbf{y}$ is drawn each round; the response $\mathbf{z}$ is released only when the safety checks confirm its distribution is independent of $\mathbf{s}_1$. On average only a few iterations are needed. The hint $\mathbf{h}$ lets the verifier recover the high bits despite the discarded low part $\mathbf{t}_0$.}
+\label{fig:mldsa-abort}
+\end{figure}
+
+\section{Signing and verification}
+
+Bringing the phases together gives the signing algorithm. Two bounds mark the safe region: $\|\mathbf{z}\|_\infty$ must stay below $\gamma_1-\beta$, and the low bits of $\mathbf{w}-c\mathbf{s}_2$ must stay below $\gamma_2-\beta$. A hint $\mathbf{h}$ compensates for the omitted $\mathbf{t}_0$.
+
+\begin{algorithm}[H]
+\caption{ML-DSA.Sign (teaching form)}
+\label{alg:mldsa-sign}
+\begin{algorithmic}[1]
+\Require Secret key $(\rho,K,tr,\mathbf{t}_0,\mathbf{s}_1,\mathbf{s}_2)$, message $M$
+\Ensure Signature $\sigma=(c,\mathbf{z},\mathbf{h})$
+\State $A \gets \textsc{ExpandA}(\rho)$;\quad $\mu \gets H(tr\,\|\,M)$
+\State $\kappa \gets 0$;\quad $\rho'' \gets H(K\,\|\,\mu)$ \Comment{deterministic per-message randomness}
+\Loop
+  \State $\mathbf{y} \gets \textsc{ExpandMask}(\rho'', \kappa)$;\quad $\kappa \gets \kappa+\ell$ \Comment{fresh mask each round}
+  \State $\mathbf{w} \gets A\mathbf{y}$;\quad $\mathbf{w}_1 \gets \textsc{HighBits}(\mathbf{w})$
+  \State $c \gets H(\mu\,\|\,\mathbf{w}_1)$ \Comment{Fiat--Shamir challenge}
+  \State $\mathbf{z} \gets \mathbf{y} + c\,\mathbf{s}_1$
+  \If{$\|\mathbf{z}\|_\infty \ge \gamma_1-\beta$ \textbf{ or } $\|\textsc{LowBits}(\mathbf{w}-c\mathbf{s}_2)\|_\infty \ge \gamma_2-\beta$}
+    \State \textbf{continue} \Comment{unsafe: discard and resample}
+  \EndIf
+  \State $\mathbf{h} \gets \textsc{MakeHint}(c\mathbf{t}_0,\ \mathbf{w}-c\mathbf{s}_2+c\mathbf{t}_0)$
+  \State \Return $(c,\mathbf{z},\mathbf{h})$
+\EndLoop
+\end{algorithmic}
+\end{algorithm}
+
+Verification recomputes the commitment from public data and checks the challenge hash matches, while also confirming $\mathbf{z}$ is genuinely short -- the short-vector check is what confronts a forger with Module-SIS.
+
+\begin{algorithm}[H]
+\caption{ML-DSA.Verify (teaching form)}
+\label{alg:mldsa-verify}
+\begin{algorithmic}[1]
+\Require Public key $(\rho,\mathbf{t}_1)$, message $M$, signature $(c,\mathbf{z},\mathbf{h})$
+\Ensure \emph{accept} or \emph{reject}
+\State $A \gets \textsc{ExpandA}(\rho)$;\quad $\mu \gets H(H(\rho\,\|\,\mathbf{t}_1)\,\|\,M)$
+\State $\mathbf{w}_1' \gets \textsc{UseHint}\big(\mathbf{h},\ A\mathbf{z} - c\,\mathbf{t}_1\cdot 2^d\big)$
+\State $c' \gets H(\mu\,\|\,\mathbf{w}_1')$
+\If{$c'=c$ \textbf{ and } $\|\mathbf{z}\|_\infty < \gamma_1-\beta$}
+  \State \Return \emph{accept}
+\Else
+  \State \Return \emph{reject}
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+Because $A\mathbf{z} - c\,\mathbf{t} = A\mathbf{y} - c\mathbf{s}_2$ agrees with $\mathbf{w}=A\mathbf{y}$ in its high bits, and the hint repairs the gap left by publishing only $\mathbf{t}_1$, both sides hash to the same challenge exactly when the signature is genuine.
+
+\section{Why a forger is stuck}
+
+An attacker without $sk$ may freely choose $\mathbf{z}$ and $c$, but to pass verification they must satisfy $c = H(\mu\,\|\,\textsc{HighBits}(A\mathbf{z}-c\mathbf{t}))$ \emph{and} keep $\mathbf{z}$ short. Because $H$ behaves like a random function, its output cannot be steered; the only route is to find a genuinely short $\mathbf{z}$ consistent with the equation -- a Module-SIS instance. And they cannot instead learn $\mathbf{s}_1$ from public data, because that is Module-LWE. The two hard problems shut both doors at once.
+
+\section{SageMath experiment}
+
+The core cancellation is easy to verify in miniature. Using small parameters, sample a key, form a masked response, and confirm the verification identity holds before any signature is even released.
+
+\begin{lstlisting}[language=Python]
+# toy sizes; real ML-DSA uses n=256, q=8380417
+q = 8380417
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^8 + 1)  # toy ring
+# ... build A, s1, s2, t = A*s1 + s2 as in the toy Kyber chapter ...
+# For a mask y and challenge c, check the verifier's identity:
+#   A*z - c*t  ==  A*y - c*s2   (should hold exactly)
+z = y + c*s1
+assert A*z - c*t == A*y - c*s2
+\end{lstlisting}
+
+Then repeat with several masks and count how often $\|\mathbf{z}\|_\infty$ exceeds the bound: this is exactly the rejection rate, and it shows why a signature takes a small, variable number of attempts.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: thinking the mask can be reused or made small.}
+The mask $\mathbf{y}$ must be fresh every attempt and large enough to hide $c\,\mathbf{s}_1$. Reusing a mask, or shrinking it to avoid rejections, leaks the secret. This is the whole reason for the abort loop.
+
+\paragraph{Pitfall 2: thinking the abort loop is a timing leak about the secret.}
+The number of iterations depends on the mask, which is fresh randomness, not on the secret in an exploitable way. FIPS 204 further derives the per-message randomness deterministically from $K$ and $M$, so the default signing mode is reproducible.
+
+\paragraph{Pitfall 3: thinking $A$ is stored in the key.}
+As in ML-KEM, $A$ is regenerated from $\rho$ every time. The public key is only $(\rho,\mathbf{t}_1)$.
+
+\section{Parameter sets}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Scheme & $(k,\ell)$ & NIST level & Comparable to \\
+\midrule
+ML-DSA-44 & $(4,4)$ & 2 & AES-128 \\
+ML-DSA-65 & $(6,5)$ & 3 & AES-192 \\
+ML-DSA-87 & $(8,7)$ & 5 & AES-256 \\
+\bottomrule
+\end{tabular}
+\caption{The three standardized ML-DSA parameter sets. All share $n=256$ and $q=8380417$.}
+\end{table}
+
+\section{Summary}
+
+ML-DSA reuses the module-lattice world of Kyber and adds one genuinely new ingredient, Fiat--Shamir with aborts:
+
+\begin{itemize}
+  \item key generation is a deterministic expansion from one seed $\xi$, exactly like FIPS 203;
+  \item a signature is a commitment--challenge--response transcript made non-interactive by hashing;
+  \item the response $\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$ carries the secret, so it is released only when rejection sampling confirms it hides the secret completely;
+  \item unforgeability rests on Module-LWE (hiding the key) and Module-SIS (blocking short-vector forgeries).
+\end{itemize}
+
+The next chapter turns to a completely different foundation for signatures -- FIPS 205, SLH-DSA, which needs no lattices or number theory at all, only hash functions.

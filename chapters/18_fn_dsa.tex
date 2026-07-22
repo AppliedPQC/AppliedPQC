@@ -1,0 +1,196 @@
+\chapter{Complete Implementation of FN-DSA (FIPS 206)}
+\chaptermark{FN-DSA (FIPS 206)}
+
+\section{Learning objectives}
+
+The third signature standard, FIPS 206, is \textbf{FN-DSA} -- the standardized form of Falcon. (At the time of writing it is the newest of the three, finalized after ML-DSA and SLH-DSA.) Where ML-DSA uses Fiat--Shamir with aborts and SLH-DSA uses only hashing, Falcon takes yet a third route: \emph{hash-and-sign} over NTRU lattices, using a Gaussian trapdoor sampler. The payoff is remarkably compact signatures and keys; the price is the most delicate implementation of the three.
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item contrast hash-and-sign with the Fiat--Shamir approach of ML-DSA;
+  \item describe the NTRU lattice and why a short secret basis is a trapdoor;
+  \item explain how signing is a nearest-lattice-point problem solved with a Gaussian sampler;
+  \item connect the sampler back to discrete Gaussians, good vs.\ bad bases, and CVP from Part~II;
+  \item understand why Falcon's floating-point arithmetic makes constant-time implementation hard.
+\end{enumerate}
+
+\section{Review: hash-and-sign versus Fiat--Shamir}
+
+ML-DSA built a signature from an interactive identification protocol collapsed by a hash. Falcon uses the older, more direct \emph{hash-and-sign} paradigm, the same shape as classical RSA signatures:
+
+\begin{enumerate}
+  \item hash the message to a target point $c$;
+  \item use the secret trapdoor to produce a short vector that ``explains'' $c$;
+  \item the verifier checks the vector is short and consistent with $c$.
+\end{enumerate}
+
+The difficulty that stalled lattice hash-and-sign for years was that a naive short vector \emph{leaks the secret basis}: every signature is a hint about the trapdoor. Falcon's core contribution is a sampler whose output distribution is provably independent of the secret -- a discrete Gaussian over the lattice. This is the same ``the mask must hide the secret'' principle as ML-DSA's aborts, achieved by a different mechanism.
+
+\section{The NTRU lattice and its trapdoor}
+
+Falcon works in the by-now-familiar ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$ with $n \in \{512, 1024\}$ and $q = 12289$. Key generation picks two \emph{short} secret polynomials $f, g \in R_q$ and publishes
+\[
+h = g \cdot f^{-1} \pmod q.
+\]
+The public key is just the single polynomial $h$. It defines the \textbf{NTRU lattice}
+\[
+\Lambda = \{ (u, v) \in R_q^2 : u + v\,h = 0 \pmod q \},
+\]
+a $2n$-dimensional lattice exactly of the kind studied in Part~II. From $h$ alone you can write down a basis for $\Lambda$, but it is a \emph{bad} basis -- long and skewed -- so finding short vectors in it is hard.
+
+The secret is a \emph{good} basis for the very same lattice. Key generation completes $(f,g)$ into a full short basis by solving the \textbf{NTRU equation}
+\[
+f\,G - g\,F = q
+\]
+for two more short polynomials $F, G$. The pair of rows $(g, -f)$ and $(G, -F)$ is a short, nearly orthogonal basis of $\Lambda$ -- precisely the ``good basis'' that Chapters~4--6 told us is the key to solving lattice problems.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.5]
+  \draw[pqcgray!40, thin] (-6.5,0) -- (6.5,0);
+  \draw[pqcgray!40, thin] (0,-5.5) -- (0,5.5);
+  \foreach \i in {-2,...,2} {
+    \foreach \j in {-2,...,2} {
+      \pgfmathsetmacro{\x}{2*\i+1*\j}
+      \pgfmathsetmacro{\y}{1*\i+3*\j}
+      \node[latticept] at (\x,\y) {};
+    }
+  }
+  \node[latticeptbold] at (0,0) {};
+  % target point c (off-lattice)
+  \node[circle, fill=pqcorange, inner sep=0pt, minimum size=5pt,
+        label={[font=\scriptsize,pqcorange]above right:{$c$ (hashed message)}}] (c) at (3.2,1.6) {};
+  % nearest lattice point
+  \node[latticeptbold, fill=pqcteal] (near) at (3,1) {};
+  \draw[shortvec] (near) -- (c);
+  \node[pqcteal, font=\scriptsize, below=1pt of near] {closest lattice point};
+\end{tikzpicture}
+\caption{Signing as a closest-vector problem. Hashing the message gives a target point $c$ (orange). The signer uses the secret \emph{good} basis of the NTRU lattice to find a lattice point very close to $c$; the short difference vector is the signature. With only the public \emph{bad} basis (from $h$) this closest point cannot be found -- that gap is the trapdoor.}
+\label{fig:falcon-cvp}
+\end{figure}
+
+\section{Phase 1: key generation}
+
+\begin{algorithm}[H]
+\caption{FN-DSA.KeyGen (teaching form)}
+\label{alg:fndsa-keygen}
+\begin{algorithmic}[1]
+\Require Ring $R_q$, $q=12289$, dimension $n$
+\Ensure Public key $h$; secret key (short basis) $(f,g,F,G)$
+\Repeat
+  \State sample short $f, g \in R_q$ (small Gaussian coefficients)
+\Until{$f$ is invertible mod $q$ \textbf{and} $(f,g)$ is short enough}
+\State solve the NTRU equation $fG - gF = q$ for short $F, G$
+\State $h \gets g \cdot f^{-1} \bmod q$
+\State \Return public $h$, secret $(f,g,F,G)$
+\end{algorithmic}
+\end{algorithm}
+
+The secret basis and the public $h$ describe the \emph{same} lattice; they differ only in quality. That is the entire trapdoor.
+
+\section{Phase 2: hash the message to a point}
+
+Signing begins by mapping the message to a random-looking target in the ring. A fresh salt $r$ is prepended so that signing the same message twice gives independent targets:
+\[
+c = \textsc{HashToPoint}(r \,\|\, M) \in R_q.
+\]
+
+\section{Phase 3: sample a short solution (the trapdoor sampler)}
+
+The signer must find a short pair $(s_1, s_2)$ satisfying
+\[
+s_1 + s_2\,h = c \pmod q,
+\]
+which is the same as finding a lattice point of $\Lambda$ close to $(c, 0)$. Using the good basis, the signer runs \textbf{fast Fourier sampling}: a discrete Gaussian sampler over the lattice coset, implemented efficiently over the FFT representation of the basis (organized as an ``LDL tree''). Two properties matter:
+
+\begin{itemize}
+  \item the result is \emph{short}, because the good basis makes nearby lattice points reachable;
+  \item its distribution is a \emph{discrete Gaussian} centered at the target, which -- crucially -- is independent of \emph{which} good basis produced it. This is what stops each signature from leaking the secret.
+\end{itemize}
+
+This is where the whole book converges: the discrete Gaussian of Chapter~7, the good-versus-bad-basis geometry of Chapters~4--5, and the closest-vector view of the LWE chapter all appear at once, in service of one signature.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=6mm and 10mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (m) {message $M$};
+  \node[flownode, right=of m] (hash) {$c=\textsc{HashToPoint}(r\|M)$};
+  \node[flownode, right=of hash] (samp) {Gaussian sampler\\[-2pt](uses secret basis)};
+  \node[flownode, below=of samp] (s) {short $(s_1,s_2)$\\[-2pt]$s_1+s_2 h = c$};
+  \node[flownode, left=of s] (comp) {compress $s_2$};
+  \node[keynode, left=of comp] (sig) {signature\\[-2pt]$\sigma=(r, s_2)$};
+  \draw[flowarrow] (m) -- (hash);
+  \draw[flowarrow] (hash) -- (samp);
+  \draw[flowarrow] (samp) -- (s);
+  \draw[flowarrow] (s) -- (comp);
+  \draw[flowarrow] (comp) -- (sig);
+\end{tikzpicture}
+\caption{The Falcon signing flow. The message is hashed to a target $c$; the secret basis drives a Gaussian sampler that returns a short solution of $s_1+s_2h=c$; only the salt $r$ and the compressed second component $s_2$ are output, since the verifier can recover $s_1$.}
+\label{fig:falcon-sign}
+\end{figure}
+
+\section{Phase 4: compress and output}
+
+Only $s_2$ needs to be sent: the verifier can recover $s_1 = c - s_2 h \bmod q$. Because $s_2$ has small Gaussian coefficients, it compresses well, giving Falcon its signature-size advantage. The signature is $\sigma = (r, \text{compress}(s_2))$.
+
+\begin{algorithm}[H]
+\caption{FN-DSA.Sign / Verify (teaching form)}
+\label{alg:fndsa-signverify}
+\begin{algorithmic}[1]
+\Statex \textbf{Sign}$(sk=(f,g,F,G),\ M)$:
+\State sample salt $r$;\quad $c \gets \textsc{HashToPoint}(r\|M)$
+\State $(s_1,s_2) \gets \textsc{FFSampling}$ of a short solution to $s_1+s_2h=c$ using the secret basis
+\State \Return $\sigma=(r,\ \textsc{Compress}(s_2))$
+\Statex
+\Statex \textbf{Verify}$(pk=h,\ M,\ \sigma=(r,\hat s_2))$:
+\State $s_2 \gets \textsc{Decompress}(\hat s_2)$;\quad $c \gets \textsc{HashToPoint}(r\|M)$
+\State $s_1 \gets c - s_2\,h \bmod q$ \Comment{recover the first component}
+\State \Return \emph{accept} if $\|(s_1,s_2)\|^2 \le \beta^2$, else \emph{reject} \Comment{must be short}
+\end{algorithmic}
+\end{algorithm}
+
+Verification is cheap: one multiplication to recover $s_1$, then a norm check. A forger without the good basis would have to solve the closest-vector problem in the NTRU lattice using only $h$ -- exactly the hardness Part~II established.
+
+\section{Why Falcon is the hardest to implement}
+
+The Gaussian sampler needs high-precision \emph{floating-point} arithmetic (FFT over the reals) to get the output distribution exactly right. Floating-point operations are notoriously variable-time and platform-dependent, which makes a \emph{constant-time} implementation -- one that leaks nothing through timing -- genuinely difficult. If the sampler's timing or rounding depends on the secret basis, an attacker can gradually reconstruct it. This is the direct motivation for the final chapter on side-channel security, and it is the main reason Falcon, despite its elegance and compactness, is the most demanding of the three standards to deploy safely.
+
+\section{Parameter sets}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Scheme & $n$ & NIST level & Public key & Signature \\
+\midrule
+FN-DSA-512  & 512  & 1 & $\approx 897$ B & $\approx 666$ B \\
+FN-DSA-1024 & 1024 & 5 & $\approx 1793$ B & $\approx 1280$ B \\
+\bottomrule
+\end{tabular}
+\caption{The two FN-DSA (Falcon) parameter sets, both with $q=12289$. Signatures and keys are markedly smaller than ML-DSA's or SLH-DSA's -- the reason Falcon exists.}
+\end{table}
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: sampling short vectors deterministically.}
+If the signer always returned the \emph{single} closest lattice point (e.g.\ via Babai rounding), every signature would trace the shape of the secret basis, and a few signatures would reveal it. The Gaussian \emph{randomization} of the output is essential, not a mere convenience.
+
+\paragraph{Pitfall 2: treating the floating-point sampler as ordinary code.}
+The sampler's timing, branches, and rounding must not depend on secret data. Naive floating-point code leaks; Falcon implementations go to great lengths (emulated fixed-precision, careful table lookups) to be constant-time.
+
+\paragraph{Pitfall 3: reusing the salt.}
+The per-signature salt $r$ must be fresh. Reusing it across different messages correlates their targets $c$ and erodes the Gaussian's hiding property.
+
+\section{Summary}
+
+FN-DSA (Falcon) is lattice hash-and-sign done right:
+
+\begin{itemize}
+  \item the public key $h$ and the secret short basis $(f,g,F,G)$ describe the same NTRU lattice, differing only in quality -- the trapdoor;
+  \item signing hashes the message to a target and uses a Gaussian sampler over the good basis to find a short, secret-hiding solution;
+  \item verification recovers $s_1=c-s_2 h$ and checks shortness, a closest-vector problem for anyone without the trapdoor;
+  \item the reward is very compact signatures; the cost is delicate floating-point, constant-time engineering.
+\end{itemize}
+
+This completes the trio of signature standards. Together with FIPS 203 (ML-KEM), the three FIPS signature standards -- 204, 205, and 206 -- span the three main design philosophies of post-quantum cryptography: structured lattices, pure hashing, and NTRU trapdoors. The remaining chapters step outside the NIST signature suite to look at code-based encryption and, finally, at the implementation attacks that Falcon's difficulties foreshadow.

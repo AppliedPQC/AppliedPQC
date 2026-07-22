@@ -61,12 +61,17 @@ The book source is split into chapter files under the `chapters/` directory, gro
 - `chapters/14_cbd.tex`
 - `chapters/15_seed_expansion.tex`
 
-**Part V -- Roadmap: Planned Chapters** (not yet written)
-- `chapters/16_dilithium.tex`
-- `chapters/17_hash_signature.tex`
-- `chapters/18_mceliece.tex`
-- `chapters/19_hqc.tex`
-- `chapters/20_side_channel.tex`
+**Part V -- Digital Signature Standards**
+- `chapters/16_ml_dsa.tex` (ML-DSA, FIPS 204)
+- `chapters/17_slh_dsa.tex` (SLH-DSA, FIPS 205)
+- `chapters/18_fn_dsa.tex` (FN-DSA, FIPS 206)
+
+**Part VI -- Code-Based Cryptography** (roadmap)
+- `chapters/19_mceliece.tex`
+- `chapters/20_hqc.tex`
+
+**Part VII -- Implementation Security** (roadmap)
+- `chapters/21_side_channel.tex`
 
 ## Publish to GitHub Pages
 
