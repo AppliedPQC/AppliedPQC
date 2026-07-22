@@ -2,6 +2,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{hyperref}
@@ -9,9 +10,26 @@
 \usepackage{booktabs}
 \usepackage{listings}
 \usepackage{titlesec}
+\usepackage{xcolor}
+\input{chapters/00_style}
 
-\title{Post-Quantum Cryptography}
-\author{Your Name}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{green!50!black},
+  showstringspaces=false,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true,
+  xleftmargin=1em,
+  aboveskip=0.6em,
+  belowskip=0.6em
+}
+
+\title{Post-Quantum Cryptography Learning Notes}
+\author{Stephen}
 \date{\today}
 
 \begin{document}
@@ -19,9 +37,34 @@
 \maketitle
 \tableofcontents
 
-\input{chapters/introduction}
-\input{chapters/foundations}
-\input{chapters/fips}
-\input{chapters/applications}
+\part{Mathematical Foundations}
+\input{chapters/01_sagemath_basics}
+\input{chapters/02_linear_algebra}
+\input{chapters/03_polynomial_ring}
+
+\part{Lattices and Hard Problems}
+\input{chapters/04_lattice}
+\input{chapters/05_lll}
+\input{chapters/06_svp}
+
+\part{Learning With Errors and Its Variants}
+\input{chapters/07_probability_error}
+\input{chapters/08_lwe}
+\input{chapters/09_rlwe}
+\input{chapters/10_module_lwe}
+
+\part{From Algebra to a Working Scheme}
+\input{chapters/11_circulant_convolution}
+\input{chapters/12_ntt}
+\input{chapters/13_toy_mlkem}
+\input{chapters/14_cbd}
+\input{chapters/15_seed_expansion}
+
+\part{Roadmap: Planned Chapters}
+\input{chapters/16_dilithium}
+\input{chapters/17_hash_signature}
+\input{chapters/18_mceliece}
+\input{chapters/19_hqc}
+\input{chapters/20_side_channel}
 
 \end{document}
