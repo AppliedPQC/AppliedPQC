@@ -1,5 +1,5 @@
-\chapter{Complete Implementation of ML-KEM Key Generation (FIPS 203)}
-\chaptermark{Complete ML-KEM Key Generation (FIPS 203)}
+\chapter{Complete Implementation of ML-KEM (FIPS 203)}
+\chaptermark{ML-KEM (FIPS 203)}
 \label{ch:fips203}
 
 \section{Learning Objectives}
@@ -7,11 +7,11 @@
 After finishing this chapter, you should be able to:
 
 \begin{enumerate}
-  \item understand the full ML-KEM KeyGen workflow;
-  \item know the input and output data types at every stage;
-  \item implement a teaching version of KeyGen in SageMath;
-  \item map the teaching implementation to the FIPS 203 reference algorithm line by line;
-  \item understand why a real implementation is almost entirely deterministic once the initial seed is fixed.
+  \item follow the full ML-KEM key generation workflow and its data types at every stage;
+  \item explain why key generation is almost entirely deterministic once the initial seed is fixed;
+  \item follow encapsulation and explain why a KEM encapsulates a \emph{random} secret rather than encrypting chosen data;
+  \item follow decapsulation and explain the Fujisaki--Okamoto ``re-encrypt and compare'' transform with implicit rejection;
+  \item distinguish the CPA-secure inner scheme (K-PKE) from the CCA-secure KEM (ML-KEM) built on top of it.
 \end{enumerate}
 
 \section{Review: Toy Kyber versus real ML-KEM}
@@ -226,7 +226,7 @@ The whole process can be summarized as follows:
 \label{fig:keygen-flow}
 \end{figure}
 
-This flow should be remembered because it will be revisited later when we study encapsulation and decapsulation. Written as pseudocode, the seven phases above collapse into a single short algorithm:
+This flow should be remembered because it reappears inside encapsulation and decapsulation below. Written as pseudocode, the seven phases above collapse into a single short algorithm:
 
 \begin{algorithm}[H]
 \caption{K-PKE.KeyGen (FIPS 203~\cite{fips203,kyber2018}, teaching form)}
@@ -245,6 +245,110 @@ This flow should be remembered because it will be revisited later when we study 
 \end{algorithm}
 
 Every line here is deterministic given $d$; the only place fresh randomness enters the entire computation is the sampling of $d$ itself.
+
+\section{From K-PKE to ML-KEM: the two layers}
+
+The algorithm above is not quite ML-KEM. It is the key generation of \textbf{K-PKE}, the underlying \emph{public-key encryption} scheme, which is only \emph{CPA-secure} -- safe against a passive eavesdropper, but not against an attacker who submits chosen ciphertexts and watches how decryption responds. ML-KEM is K-PKE wrapped in one more layer. K-PKE provides three routines,
+\[
+\textsc{K-PKE.KeyGen},\qquad \textsc{K-PKE.Encrypt}(ek, m, r),\qquad \textsc{K-PKE.Decrypt}(dk, c),
+\]
+and the \textbf{Fujisaki--Okamoto (FO) transform} turns them into a \emph{CCA-secure} key-encapsulation mechanism. ML-KEM key generation simply calls K-PKE key generation and stores a little extra in the secret key:
+
+\begin{algorithm}[H]
+\caption{ML-KEM.KeyGen (teaching form)}
+\label{alg:mlkem-keygen}
+\begin{algorithmic}[1]
+\Require Random seed $d \in \{0,1\}^{256}$
+\Ensure Encapsulation key $ek$; decapsulation key $dk$
+\State $\big((\rho,t),\ dk_{\mathrm{PKE}}\big) \gets \textsc{K-PKE.KeyGen}(d)$ \Comment{Algorithm~\ref{alg:kpke-keygen}}
+\State $ek \gets (\rho, t)$
+\State $z \gets \{0,1\}^{256}$ \Comment{secret ``implicit rejection'' value}
+\State \Return $ek,\ \ dk \gets \big(dk_{\mathrm{PKE}},\ ek,\ H(ek),\ z\big)$
+\end{algorithmic}
+\end{algorithm}
+
+The encapsulation key $ek=(\rho,t)$ is what a KEM publishes. The decapsulation key carries the PKE secret $dk_{\mathrm{PKE}}=s$, a copy of $ek$ and its hash $H(ek)$ (both needed to re-encrypt during decapsulation), and the random value $z$ whose role becomes clear below.
+
+\section{Encapsulation}
+
+Encapsulation produces a fresh \emph{shared secret} $K$ and a ciphertext $c$ from which the holder of $dk$ can recover the same $K$. The design choice that defines a KEM -- and the answer to ``why encapsulate a random secret instead of encrypting a chosen message?'' -- is that the encrypted message is \emph{not chosen by the sender at all}. Encapsulation samples a random $32$-byte value $m$, and derives both the shared key and the encryption randomness by \emph{hashing} it. That the randomness is a deterministic function of the message is exactly what the FO transform will exploit.
+
+\begin{algorithm}[H]
+\caption{ML-KEM.Encaps (teaching form)}
+\label{alg:mlkem-encaps}
+\begin{algorithmic}[1]
+\Require Encapsulation key $ek$
+\Ensure Shared secret $K$; ciphertext $c$
+\State $m \gets \{0,1\}^{256}$ \Comment{fresh random message, not chosen data}
+\State $(K, r) \gets G\big(m \,\|\, H(ek)\big)$ \Comment{$G=\mathrm{SHA3\text{-}512}$: shared key $K$ and encryption seed $r$}
+\State $c \gets \textsc{K-PKE.Encrypt}(ek, m, r)$
+\State \Return $(K, c)$
+\end{algorithmic}
+\end{algorithm}
+
+Inside $\textsc{K-PKE.Encrypt}$ the message is hidden in the same noisy-linear way as the toy scheme of Chapter~\ref{ch:toymlkem}, now driven by the seed $r$: the matrix is regenerated as $A=\textsc{ExpandA}(\rho)$, small vectors $y,e_1,e_2$ are sampled from CBD using $r$, and the ciphertext is the compressed pair
+\[
+u = A^{T} y + e_1, \qquad v = t^{T} y + e_2 + \mathrm{Encode}(m).
+\]
+The shared secret $K$ itself never travels on the wire; only $c$ does, and the recipient reconstructs $K$ from it.
+
+\section{Decapsulation and the Fujisaki--Okamoto transform}
+
+Decapsulation must recover $K$ from $c$ using $dk$, and -- this is the entire point of the FO transform -- it must do so in a way that gives an attacker \emph{no} usable signal from submitting malformed ciphertexts. The mechanism is \emph{re-encrypt and compare}: decrypt to a candidate message, deterministically re-run encapsulation from it, and check that the ciphertext that \emph{would} have been produced matches the one received.
+
+\begin{algorithm}[H]
+\caption{ML-KEM.Decaps (teaching form)}
+\label{alg:mlkem-decaps}
+\begin{algorithmic}[1]
+\Require Decapsulation key $dk=(dk_{\mathrm{PKE}}, ek, h, z)$; ciphertext $c$
+\Ensure Shared secret $K$
+\State $m' \gets \textsc{K-PKE.Decrypt}(dk_{\mathrm{PKE}}, c)$
+\State $(K', r') \gets G(m' \,\|\, h)$
+\State $c' \gets \textsc{K-PKE.Encrypt}(ek, m', r')$ \Comment{re-encrypt from the recovered message}
+\If{$c' = c$}
+  \State \Return $K'$ \Comment{ciphertext was honestly formed}
+\Else
+  \State \Return $J(z \,\|\, c)$ \Comment{\emph{implicit rejection}: a pseudorandom key from the secret $z$}
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=6mm and 11mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (c) {ciphertext $c$};
+  \node[flownode, right=of c] (dec) {$m'=\textsc{Decrypt}(dk,c)$};
+  \node[flownode, right=of dec] (g) {$(K',r')=G(m'\,\|\,h)$};
+  \node[flownode, below=of g] (re) {$c'=\textsc{Encrypt}(ek,m',r')$};
+  \node[diamond, draw=pqcorange, thick, fill=white, align=center, inner sep=1pt, left=of re] (cmp) {$c'=c$?};
+  \node[keynode, left=of cmp, align=center] (out) {$K'$ on match\\[-2pt]\scriptsize $J(z\,\|\,c)$ on mismatch};
+  \draw[flowarrow] (c) -- (dec);
+  \draw[flowarrow] (dec) -- (g);
+  \draw[flowarrow] (g) -- (re);
+  \draw[flowarrow] (re) -- (cmp);
+  \draw[flowarrow] (cmp) -- (out);
+\end{tikzpicture}
+\caption{ML-KEM decapsulation and the Fujisaki--Okamoto transform. The candidate message is decrypted, encapsulation is re-run deterministically from it, and the recomputed ciphertext is compared with the received one in constant time. A match returns the real shared key; a mismatch returns a pseudorandom key derived from the secret $z$, so success and failure are indistinguishable.}
+\label{fig:mlkem-fo}
+\end{figure}
+
+The subtlety is the \texttt{else} branch. A naive KEM would return an \emph{error} on a bad ciphertext -- but that error is an oracle: by observing whether decapsulation succeeds, an attacker can mount a chosen-ciphertext attack and, over many queries, extract the secret. \textbf{Implicit rejection} closes this door: on a mismatch, ML-KEM returns a \emph{pseudorandom} key $J(z\,\|\,c)$ derived from the secret $z$, of exactly the same form as a real key. Success and failure become indistinguishable to the caller, so there is no oracle. This is what lifts K-PKE from CPA to \emph{IND-CCA2} security; it is why the comparison $c'=c$ must run in constant time (Chapter~\ref{ch:sidechannel}); and it is the same mechanism the code-based KEM HQC uses (Chapter~\ref{ch:hqc}).
+
+\section{Parameter sets}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Scheme & $k$ & NIST level & Comparable to \\
+\midrule
+ML-KEM-512  & 2 & 1 & AES-128 \\
+ML-KEM-768  & 3 & 3 & AES-192 \\
+ML-KEM-1024 & 4 & 5 & AES-256 \\
+\bottomrule
+\end{tabular}
+\caption{The three ML-KEM parameter sets, all sharing $n=256$ and $q=3329$; only the module dimension $k$ changes. ML-KEM-768 is the common default.}
+\label{tab:mlkem-params}
+\end{table}
 
 \section{SageMath experiments}
 
@@ -304,28 +408,22 @@ CBD is not random sampling in the naive sense. It is a deterministic sampling pr
 
 In the real algorithm, the initial seed $d$ is the only place where fresh randomness is introduced. Everything after that is a deterministic transform.
 
+\paragraph{Pitfall 4: returning an error on decryption failure}
+
+An implementation that signals ``bad ciphertext'' instead of returning the implicit-rejection key $J(z\,\|\,c)$ reintroduces a decryption-failure oracle and breaks CCA security. Both the comparison $c'=c$ and the choice between $K'$ and $J(z\,\|\,c)$ must be constant-time.
+
 \section{Summary}
 
-The key message of this chapter is the following:
+ML-KEM is a two-layer construction, and this chapter built it end to end:
 
-\begin{quote}
-ML-KEM KeyGen is not a process of repeatedly generating random objects. It is a process of starting from one random seed and applying a series of deterministic transformations to produce the key material.
-\end{quote}
+\begin{itemize}
+  \item the inner \textbf{K-PKE} is a CPA-secure public-key encryption whose entire key generation is a deterministic expansion of one seed,
+  \[
+  d \longrightarrow (\rho,\sigma) \longrightarrow (A,s,e) \longrightarrow t \longrightarrow (\rho,t),
+  \]
+  publishing only $(\rho,t)$ and never $A$;
+  \item \textbf{encapsulation} hides a \emph{random} message $m$, deriving both the shared key $K$ and the encryption randomness $r$ by hashing $m$, so the ciphertext is a deterministic function of $m$;
+  \item \textbf{decapsulation} decrypts, re-encrypts, and compares -- returning the real key on a match and a pseudorandom key $J(z\,\|\,c)$ on a mismatch. This is the \textbf{Fujisaki--Okamoto} transform with implicit rejection, and it is what lifts CPA security to \emph{IND-CCA2}.
+\end{itemize}
 
-A compact summary is:
-
-\[
-d \longrightarrow (\rho,\sigma) \longrightarrow (A,s,e) \longrightarrow t \longrightarrow (\rho,t).
-\]
-
-This is the main conceptual thread that will guide the later chapters on encapsulation, decapsulation, and the full FIPS 203 reference implementation.
-
-\section{Suggested next chapter}
-
-The next chapter will introduce encapsulation. The central question will be:
-
-\begin{quote}
-Why does Kyber encapsulate a shared secret instead of directly encrypting a message?
-\end{quote}
-
-That is the natural bridge from traditional public-key encryption to the KEM view used in ML-KEM.
+That completes the first NIST post-quantum standard, FIPS 203, from a single random seed to a CCA-secure shared key. The next part turns from key establishment to the other half of public-key cryptography -- digital signatures -- beginning with the lattice-based standards ML-DSA and FN-DSA, which reuse much of the machinery (module lattices, CBD sampling, the NTT) built here.
