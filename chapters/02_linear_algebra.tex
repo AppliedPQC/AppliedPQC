@@ -1,46 +1,64 @@
 \chapter{Linear Algebra Foundations}
+\label{ch:linalg}
 
 \section{Why this chapter matters}
-This chapter is not a general linear algebra course in the traditional sense. Its purpose is to explain why the central constructions of post-quantum cryptography are built on linear algebra. In particular, we want to understand why LWE, RLWE, and lattice-based schemes can all be expressed through vectors, matrices, and linear transformations.
+This chapter is not a general linear algebra course. Its purpose is to develop, with enough precision to be useful later, the specific structures on which post-quantum cryptography is built: vector spaces over a finite field, linear maps and their matrices, and the rank--nullity relationship that governs when a linear system can be solved. The central object of lattice cryptography, the equation
+\[
+A\mathbf{s} + \mathbf{e} = \mathbf{b},
+\]
+is a linear system deliberately perturbed by a small error $\mathbf{e}$. To understand why the unperturbed system is easy and the perturbed one is (conjecturally) hard, we first need to be precise about what ``solving a linear system'' means.
 
 \section{Learning goals}
 After reading this chapter, you should be able to:
 
 \begin{itemize}
-  \item understand why an LWE instance can be written as $As+e=b$;
-  \item see how RLWE is a structured extension of matrix-vector algebra;
-  \item understand why a lattice is a discrete version of a vector space;
-  \item appreciate why concepts such as Gram--Schmidt, LLL, and BKZ appear later in the story.
+  \item state the axioms of a vector space and recognise $\mathbb{F}_q^n$ as the working example;
+  \item define linear independence, span, basis, and dimension, and know why dimension is well defined;
+  \item describe a matrix as the coordinate form of a linear map, and define its rank, kernel, and image;
+  \item state the rank--nullity theorem and use it to reason about solvability of $A\mathbf{x}=\mathbf{b}$;
+  \item explain precisely why $A\mathbf{s}=\mathbf{b}$ is easy while $A\mathbf{s}+\mathbf{e}=\mathbf{b}$ is the hard LWE problem.
 \end{itemize}
 
-\section{The chapter roadmap}
-The chapter is organized as follows:
+\section{Scalars: the underlying field}
+Every vector space is built over a set of \emph{scalars} that can be added, subtracted, multiplied, and divided. That set is a \emph{field} (Chapter~\ref{ch:sagemath}, where the finite field $\mathbb{F}_q = \mathrm{GF}(q)$ was introduced). We recall the definition because the rest of the chapter depends on it.
 
-\begin{itemize}
-  \item vectors and vector spaces;
-  \item bases and linear independence;
-  \item matrices and linear transformations;
-  \item rank, kernel, and image;
-  \item solving linear systems;
-  \item a first look at Gram--Schmidt and its role in lattice reduction.
-\end{itemize}
+\begin{definition}[Field]
+A \emph{field} is a set $\mathbb{F}$ with two operations $+$ and $\cdot$ such that $(\mathbb{F},+)$ is an abelian group with identity $0$, the nonzero elements $(\mathbb{F}\setminus\{0\},\cdot)$ form an abelian group with identity $1$, and multiplication distributes over addition. In particular every nonzero element has a multiplicative inverse.
+\end{definition}
 
-\section{Vector}
-In high school algebra, a vector is often seen as a coordinate pair such as $(1,2)$. In cryptography, however, a vector is better viewed as a structured container of data. For instance, a secret key in a scheme such as Kyber may be represented as a vector of many field elements.
-
-A typical object may look like
-
+The familiar fields are $\mathbb{Q}$, $\mathbb{R}$, and $\mathbb{C}$. Cryptography instead works over the finite field $\mathbb{F}_q$; for a prime $q$ this is simply the integers modulo $q$,
 \[
-s = \begin{bmatrix}2\\5\\1\\7\end{bmatrix},
+\mathbb{F}_q = \mathbb{Z}/q\mathbb{Z} = \{0,1,\dots,q-1\},
 \]
+with arithmetic reduced modulo $q$. The property that makes it a field, rather than merely a ring, is that division is available: because $q$ is prime, every nonzero residue has an inverse. This is exactly what lets Gaussian elimination run, and it is why cryptographic parameters such as $q=3329$ (Kyber) are chosen prime.
 
-and in a practical scheme one may have
+\section{Vectors and vector spaces}
+In school a vector is a coordinate tuple such as $(1,2)$. For our purposes a vector is an element of a \emph{vector space}: a structured container of field elements that can be added and scaled.
 
+\begin{definition}[Vector space]
+A \emph{vector space} over a field $\mathbb{F}$ is a set $V$ with an addition $V\times V\to V$ and a scalar multiplication $\mathbb{F}\times V\to V$ such that $(V,+)$ is an abelian group and, for all $a,b\in\mathbb{F}$ and $\mathbf{u},\mathbf{v}\in V$,
 \[
-s \in \mathrm{GF}(3329)^{256}.
+a(\mathbf{u}+\mathbf{v}) = a\mathbf{u}+a\mathbf{v},\quad
+(a+b)\mathbf{v} = a\mathbf{v}+b\mathbf{v},\quad
+(ab)\mathbf{v} = a(b\mathbf{v}),\quad
+1\mathbf{v} = \mathbf{v}.
 \]
+\end{definition}
 
-That means the secret is a vector of length $256$ whose entries lie in a finite field.
+\begin{example}[The space $\mathbb{F}_q^n$]
+The set of column vectors
+\[
+\mathbb{F}_q^n = \left\{ (v_1,\dots,v_n)^\top : v_i \in \mathbb{F}_q \right\},
+\]
+with entrywise addition and scalar multiplication, is a vector space over $\mathbb{F}_q$. It is finite: it contains exactly $q^n$ elements. A Kyber secret key lives in $\mathbb{F}_{3329}^{256}$, so it is one of $3329^{256}$ possible vectors -- already far more than the number of atoms in the observable universe.
+\end{example}
+
+A typical secret is written
+\[
+\mathbf{s} = \begin{bmatrix}2\\5\\1\\7\end{bmatrix} \in \mathbb{F}_{q}^{4},
+\qquad\text{or in practice}\qquad
+\mathbf{s} \in \mathbb{F}_{3329}^{256}.
+\]
 
 \subsection{Sage experiment: creating a vector}
 
@@ -50,37 +68,18 @@ v = vector(F, [1, 2, 3])
 v
 \end{lstlisting}
 
-The output is
+To inspect its type, use \texttt{type(v)}. Sage reports it as a \emph{free module element} rather than a plain list. This is not pedantry: a vector space over a field is the special case of a \emph{module} over a ring in which the ring happens to be a field, and Module-LWE (Chapter~\ref{ch:mlwe}) will use exactly the more general object.
 
-\begin{lstlisting}[language=Python]
-(1, 2, 3)
-\end{lstlisting}
-
-To inspect its type, use:
-
-\begin{lstlisting}[language=Python]
-type(v)
-\end{lstlisting}
-
-In Sage, this is often reported as a module element rather than a plain vector type. This is not an accident: when we later discuss module-LWE, the same object will reappear in a more general algebraic setting.
-
-\subsection{Vector addition}
+\subsection{Vector addition and scalar multiplication}
 
 \begin{lstlisting}[language=Python]
 a = vector(F, [1, 2, 3])
 b = vector(F, [5, 6, 7])
-a + b
+a + b        # (6, 8, 10)
+3 * a        # (3, 6, 9)
 \end{lstlisting}
 
-The result is
-
-\begin{lstlisting}[language=Python]
-(6, 8, 10)
-\end{lstlisting}
-
-If the base field were $\mathrm{GF}(7)$ instead, then $6 + 5 = 4$ modulo $7$.
-
-Over $\mathbb{R}$ or $\mathbb{Q}$, vector addition also has the familiar geometric picture shown in Figure~\ref{fig:vector-addition}: place both vectors tail to tail at the origin, and their sum is the diagonal of the parallelogram they span.
+All arithmetic is modulo the field characteristic: over $\mathbb{F}_7$ the sum $6+5$ is $4$, not $11$. Over $\mathbb{R}$ or $\mathbb{Q}$ addition has the familiar parallelogram picture of Figure~\ref{fig:vector-addition}.
 
 \begin{figure}[H]
 \centering
@@ -100,94 +99,65 @@ Over $\mathbb{R}$ or $\mathbb{Q}$, vector addition also has the familiar geometr
 \label{fig:vector-addition}
 \end{figure}
 
-\subsection{Scalar multiplication}
+\section{Linear combinations, independence, and span}
+The single most important operation in the whole subject is forming a \emph{linear combination}.
 
-\begin{lstlisting}[language=Python]
-3 * a
-\end{lstlisting}
+\begin{definition}[Linear combination and span]
+Given vectors $\mathbf{v}_1,\dots,\mathbf{v}_k \in V$ and scalars $c_1,\dots,c_k\in\mathbb{F}$, the vector $\sum_{i=1}^k c_i\mathbf{v}_i$ is a \emph{linear combination} of the $\mathbf{v}_i$. The set of all such combinations is their \emph{span}, written $\mathrm{span}(\mathbf{v}_1,\dots,\mathbf{v}_k)$; it is the smallest subspace of $V$ containing every $\mathbf{v}_i$.
+\end{definition}
 
-which produces
-
-\begin{lstlisting}[language=Python]
-(3, 6, 9)
-\end{lstlisting}
-
-\section{Vector space}
-A vector space is a set of objects that can be added together and multiplied by scalars in a consistent way. For cryptography, the important point is that a vector space is the collection of all valid vectors of a given type.
-
-For example,
-
+\begin{definition}[Linear independence]
+The vectors $\mathbf{v}_1,\dots,\mathbf{v}_k$ are \emph{linearly independent} if the only linear combination equal to the zero vector is the trivial one:
 \[
-\mathrm{GF}(17)^2
+\sum_{i=1}^k c_i \mathbf{v}_i = \mathbf{0} \quad\Longrightarrow\quad c_1 = \cdots = c_k = 0.
 \]
+Otherwise they are \emph{linearly dependent}, meaning one of them is a linear combination of the others.
+\end{definition}
 
-contains all pairs of elements from the finite field $\mathrm{GF}(17)$. There are $17^2$ such vectors in total.
+For instance $(1,0)$ and $(0,1)$ are independent, whereas $(1,2)$ and $(2,4)$ are dependent, since the second is twice the first.
 
-\subsection{Sage experiment: a vector space over a finite field}
-
-\begin{lstlisting}[language=Python]
-V = VectorSpace(GF(17), 2)
-V
-\end{lstlisting}
-
-This creates a two-dimensional vector space over $\mathrm{GF}(17)$. A random element can be generated by:
-
-\begin{lstlisting}[language=Python]
-V.random_element()
-\end{lstlisting}
-
-\section{Basis}
-A basis is a collection of vectors from which every vector in the space can be built by linear combination. In the usual two-dimensional case, the vectors
-
-\[
-(1,0), \quad (0,1)
-\]
-
-form the standard basis. Any vector $(a,b)$ can be written as
-
-\[
-a(1,0) + b(0,1).
-\]
-
-Another equally valid basis is given by
-
-\[
-(2,1), \quad (1,1).
-\]
-
-The important idea is that the same vector space can be described by many different bases.
-
-\subsection{Sage experiment: two different bases}
-
-\begin{lstlisting}[language=Python]
-B = Matrix(GF(17), [[1, 0], [0, 1]])
-B2 = Matrix(GF(17), [[2, 1], [1, 1]])
-\end{lstlisting}
-
-Later, the comparison of good and bad bases will become central in lattice reduction.
-
-\section{Linear independence}
-Two vectors are linearly independent if neither can be expressed as a scalar multiple of the other. For example, $(1,0)$ and $(0,1)$ are independent, but $(1,2)$ and $(2,4)$ are not, since the second is just twice the first.
-
-\subsection{Sage experiment: checking rank}
+\subsection{Sage experiment: detecting dependence through rank}
+Dependence is detected numerically by \emph{rank}, defined precisely below: stacking the vectors as rows, the rank counts how many are genuinely independent.
 
 \begin{lstlisting}[language=Python]
 A = Matrix(GF(17), [[1, 2], [2, 4]])
-A.rank()
+A.rank()      # 1: only one independent direction
 \end{lstlisting}
 
-The result is $1$, meaning that the matrix has only one independent direction.
+\section{Basis and dimension}
+\begin{definition}[Basis]
+A \emph{basis} of a vector space $V$ is a set of vectors that is both linearly independent and spans $V$. Equivalently, every $\mathbf{v}\in V$ has a \emph{unique} expression as a linear combination of the basis vectors.
+\end{definition}
 
-\section{Matrix}
-Matrices are the main objects that connect vectors and linear transformations. In later chapters, the central equation for LWE will appear in the form
+The standard basis of $\mathbb{F}_q^2$ is $\{(1,0),(0,1)\}$, since $(a,b)=a(1,0)+b(0,1)$. But $\{(2,1),(1,1)\}$ is an equally valid basis of the same space: the space is intrinsic, the basis is a chosen coordinate system for it. The number of vectors in a basis is not a matter of choice.
 
+\begin{theorem}[Dimension is well defined]
+Any two bases of a finite-dimensional vector space $V$ have the same number of elements. This common number is the \emph{dimension} $\dim V$.
+\end{theorem}
+
+Thus $\dim \mathbb{F}_q^n = n$. The freedom to change basis without changing the space is the seed of the entire theory of lattice reduction (Chapter~\ref{ch:lll}): a lattice, too, has many bases, and finding a \emph{good} one is the central algorithmic problem.
+
+\subsection{Sage experiment: two bases for one space}
+
+\begin{lstlisting}[language=Python]
+B1 = Matrix(GF(17), [[1, 0], [0, 1]])
+B2 = Matrix(GF(17), [[2, 1], [1, 1]])
+# both have rank 2, so each is a basis of GF(17)^2
+print(B1.rank(), B2.rank())
+\end{lstlisting}
+
+\section{Matrices as linear maps}
+A matrix is best understood not as a grid of numbers but as the coordinate form of a \emph{linear map}.
+
+\begin{definition}[Linear map]
+A map $T\colon \mathbb{F}^n \to \mathbb{F}^m$ is \emph{linear} if it respects both operations:
 \[
-A s + e = b,
+T(\mathbf{u}+\mathbf{v}) = T(\mathbf{u})+T(\mathbf{v}),\qquad T(a\mathbf{v}) = a\,T(\mathbf{v}).
 \]
+Once bases are fixed, every linear map is given by an $m\times n$ matrix $A$ via $T(\mathbf{v})=A\mathbf{v}$, and every such matrix defines a linear map.
+\end{definition}
 
-where $A$ is a matrix, $s$ is a secret vector, $e$ is an error vector, and $b$ is the observed value.
-
-\subsection{Sage experiment: matrix-vector multiplication}
+The product $A\mathbf{v}$ is itself a linear combination: it is the combination of the \emph{columns} of $A$ weighted by the entries of $\mathbf{v}$. Concretely, entry $i$ of the result is the inner product of row $i$ of $A$ with $\mathbf{v}$, which is exactly the double loop of Algorithm~\ref{alg:matvec}.
 
 \begin{lstlisting}[language=Python]
 F = GF(17)
@@ -195,10 +165,6 @@ A = Matrix(F, [[1, 2], [3, 4]])
 v = vector(F, [5, 6])
 A * v
 \end{lstlisting}
-
-This reveals how linear transformations act on vectors, and it is the first step toward understanding LWE.
-
-Underneath the single command \texttt{A * v}, Sage runs exactly the double loop of Algorithm~\ref{alg:matvec}. This computation is foundational for the rest of the book: it is the same loop that computes $As$ in the LWE equation $As+e=b$, and later, in ring form, the same loop reappears as the schoolbook polynomial multiplication used for RLWE and Kyber.
 
 \begin{algorithm}[H]
 \caption{Matrix--Vector Product}
@@ -216,61 +182,80 @@ Underneath the single command \texttt{A * v}, Sage runs exactly the double loop 
 \end{algorithmic}
 \end{algorithm}
 
-\section{Why matrix multiplication matters}
-This is the key cryptographic intuition. If we had only
+This same loop is foundational for the whole book: it computes $A\mathbf{s}$ in the LWE equation, and in ring form (Chapter~\ref{ch:rlwe}) it reappears as the schoolbook polynomial multiplication used by RLWE and Kyber.
 
+\section{Rank, kernel, and image}
+Three subspaces measure what a linear map $A\colon\mathbb{F}^n\to\mathbb{F}^m$ does.
+
+\begin{definition}[Image, kernel, rank]
+The \emph{image} (or column space) is $\operatorname{im}A = \{A\mathbf{v} : \mathbf{v}\in\mathbb{F}^n\}\subseteq\mathbb{F}^m$; its dimension is the \emph{rank} of $A$. The \emph{kernel} (or null space) is $\ker A = \{\mathbf{v}\in\mathbb{F}^n : A\mathbf{v}=\mathbf{0}\}\subseteq\mathbb{F}^n$; its dimension is the \emph{nullity}.
+\end{definition}
+
+The image is exactly the set of right-hand sides $\mathbf{b}$ for which $A\mathbf{x}=\mathbf{b}$ has a solution. The kernel measures how far a solution is from unique: if $A\mathbf{x}_0=\mathbf{b}$, then the full solution set is $\mathbf{x}_0 + \ker A$. These two dimensions are tied together.
+
+\begin{theorem}[Rank--nullity]
+For any linear map $A\colon \mathbb{F}^n \to \mathbb{F}^m$,
 \[
-b = As,
+\dim(\ker A) + \operatorname{rank}(A) = n.
 \]
+\end{theorem}
 
-then the problem would be an ordinary linear system and could be solved by Gaussian elimination. The introduction of an error term,
+In particular, a square matrix $A\in\mathbb{F}^{n\times n}$ is invertible if and only if its rank is $n$, equivalently $\ker A=\{\mathbf{0}\}$, equivalently its columns are a basis of $\mathbb{F}^n$. When $A$ is invertible, $A\mathbf{x}=\mathbf{b}$ has exactly one solution for every $\mathbf{b}$.
 
-\[
-b = As + e,
-\]
-
-turns the problem into the learning with errors problem. In suitable parameter regimes, this becomes the hard computational problem that underlies many lattice-based cryptosystems.
-
-\section{Experiments}
-The following experiments are recommended.
-
-\subsection{Experiment 1: random vectors}
-
-\begin{lstlisting}[language=Python]
-F = GF(17)
-V = VectorSpace(F, 4)
-for _ in range(5):
-    print(V.random_element())
-\end{lstlisting}
-
-\subsection{Experiment 2: random matrices and vectors}
-
-\begin{lstlisting}[language=Python]
-F = GF(17)
-A = random_matrix(F, 4, 4)
-v = random_vector(F, 4)
-print(A)
-print(v)
-print(A * v)
-\end{lstlisting}
-
-\subsection{Experiment 3: matrix invertibility}
+\subsection{Sage experiment: rank governs invertibility}
 
 \begin{lstlisting}[language=Python]
 F = GF(17)
 for _ in range(10):
     A = random_matrix(F, 4, 4)
-    print(A.rank())
+    print(A.rank())   # 4 (invertible) almost always over a field
 \end{lstlisting}
 
-\subsection{Experiment 4: the same vector in different bases}
-This helps build an important intuition: the vector itself does not change, but its coordinate description changes when the basis changes. This idea is central to lattice geometry, Gram--Schmidt orthogonalization, LLL, and BKZ.
+Over a finite field a random square matrix is invertible with high probability, so a random $A$ almost always has full rank.
+
+\section{Solving linear systems, and the leap to LWE}
+Given $A$ and $\mathbf{b}$, the equation $A\mathbf{x}=\mathbf{b}$ is solved by \emph{Gaussian elimination}: row operations reduce $A$ to echelon form, and back-substitution recovers $\mathbf{x}$.
+
+\begin{proposition}[Linear systems are easy]
+Over a field, Gaussian elimination solves an $n\times n$ system $A\mathbf{x}=\mathbf{b}$ (or reports that no solution exists) using $O(n^3)$ field operations. If $A$ is invertible the solution is unique.
+\end{proposition}
+
+This efficiency is precisely why a plain linear system carries \emph{no} cryptographic value: anyone who sees $A$ and $\mathbf{b}=A\mathbf{s}$ can recover the secret $\mathbf{s}$ in cubic time. The entire idea of lattice cryptography is to break this by adding a small, structured error. Given samples
+\[
+\mathbf{b} = A\mathbf{s} + \mathbf{e},
+\]
+with $\mathbf{e}$ short, the equation is no longer exactly consistent, Gaussian elimination no longer applies, and recovering $\mathbf{s}$ becomes the \emph{Learning With Errors} problem (Chapter~\ref{ch:lwe}) -- believed hard even for quantum computers. The whole difficulty is manufactured by the single step of replacing an exact equation with an approximate one.
+
+\begin{remark}
+It is worth pausing on how little changes on the page and how much changes in difficulty. The map $\mathbf{s}\mapsto A\mathbf{s}$ is linear and invertible; the map $\mathbf{s}\mapsto A\mathbf{s}+\mathbf{e}$ is not even a function of $\mathbf{s}$ alone. Cryptographic hardness lives in that gap.
+\end{remark}
+
+\section{Experiments}
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+# 1. random vectors
+V = VectorSpace(F, 4)
+for _ in range(5): print(V.random_element())
+
+# 2. a matrix acting on a vector
+A = random_matrix(F, 4, 4); v = random_vector(F, 4)
+print(A * v)
+
+# 3. exact solve is easy; try recovering s from b = A*s
+s = random_vector(F, 4); b = A * s
+print(A.solve_right(b) == s)   # True: Gaussian elimination recovers s
+
+# 4. now perturb by a small error and watch exact recovery fail
+e = vector(F, [1, 0, 16, 0])   # 16 == -1 mod 17
+print(A.solve_right(b + e) == s)  # almost always False
+\end{lstlisting}
+
+Experiment~4 is the whole book in miniature: a one-line perturbation turns a solvable system into one whose exact solution no longer reveals the secret.
 
 \section{Connection to the next chapter}
-The next chapter, \emph{Polynomial Rings}, moves from ordinary linear algebra to the polynomial setting used in RLWE and Kyber. There, the algebraic structure becomes richer, and the ring
-
+The next chapter, \emph{Polynomial Rings}, keeps the linear-algebraic viewpoint but changes the scalars-and-vectors picture into a single richer object. A structured (circulant) matrix will be encoded by one polynomial, matrix--vector multiplication will become polynomial multiplication, and the vector space $\mathbb{F}_q^n$ will be upgraded to the quotient ring
 \[
-R_q = \mathbb{Z}_q[x]/(x^n + 1)
+R_q = \mathbb{Z}_q[x]/(x^n + 1),
 \]
-
-will appear as the natural next step beyond simple vector spaces.
+the natural home of RLWE and Kyber.

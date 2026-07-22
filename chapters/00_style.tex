@@ -36,6 +36,18 @@
 \renewcommand{\algorithmicrequire}{\textbf{Input:}}
 \renewcommand{\algorithmicensure}{\textbf{Output:}}
 
+% ---- Theorem-like environments (shared counter, numbered by chapter) ----
+\usepackage{amsthm}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{example}[definition]{Example}
+\theoremstyle{plain}
+\newtheorem{theorem}[definition]{Theorem}
+\newtheorem{proposition}[definition]{Proposition}
+\newtheorem{lemma}[definition]{Lemma}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
 % ---- Running headers show "Chapter N. Title" on every page, not section
 % titles. Long \section{} titles otherwise collide with the page number
 % when they land on a recto page; showing chapter context on both sides

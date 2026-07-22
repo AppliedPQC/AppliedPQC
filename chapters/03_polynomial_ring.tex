@@ -1,167 +1,124 @@
 \chapter{Polynomial Rings}
 
 \section{Why this chapter matters}
-This chapter marks the transition from ordinary linear algebra to the algebraic structures used in modern post-quantum cryptography. If the previous chapter explained why LWE can be written as $As+e=b$, then this chapter explains why the same idea can be moved into polynomial rings and why that is useful for RLWE, Kyber, and Dilithium.
+The previous chapter expressed cryptographic objects as vectors and matrices over a field. This chapter changes the algebra: instead of a vector space $\mathbb{F}_q^n$ we work in a \emph{quotient polynomial ring}
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1),
+\]
+the setting of RLWE, Kyber, and Dilithium. The payoff is structural. A single element of $R_q$ carries the same information as a whole structured $n\times n$ matrix, and multiplication in $R_q$ is a form of convolution that admits a fast transform (the NTT of Chapter~\ref{ch:ntt}). To use this ring safely we need to be precise about what it is: what a ring is, what a quotient by a polynomial means, and why the particular modulus $x^n+1$ is chosen.
 
 \section{Learning goals}
 After reading this chapter, you should be able to:
 
 \begin{itemize}
-  \item understand why polynomials are useful for representing structured vectors;
-  \item perform addition and multiplication of polynomials in SageMath;
-  \item build polynomial rings and quotient rings;
-  \item understand why the ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$ is central to RLWE and Kyber.
+  \item state what a (commutative) ring is and recognise $\mathbb{F}_q[x]$ as one;
+  \item perform Euclidean division of polynomials and explain why it makes quotient rings well defined;
+  \item construct the quotient ring $\mathbb{F}_q[x]/(f)$ and count its elements;
+  \item state when the quotient is a field, and why $x^n+1$ (for $n$ a power of two) is the natural modulus;
+  \item describe multiplication in $R_q$ as negacyclic convolution and connect it to the NTT.
 \end{itemize}
 
-\section{Why we need polynomials}
-A basic reason is efficiency. In LWE, a public matrix $A \in \mathbb{Z}_q^{n \times n}$ can be large. For example, if $n=512$, then the matrix has $512 \times 512 = 262144$ entries. Even with small coefficients, storing and manipulating such a matrix is expensive.
+\section{Rings and fields}
+A field, from Chapter~\ref{ch:linalg}, supports addition, subtraction, multiplication, \emph{and} division. A ring is the weaker structure in which division may fail.
 
-The key insight behind RLWE is that some matrices are highly structured. A circulant matrix can be represented by a short list of coefficients, and that list is exactly what a polynomial encodes. In this way, a large structured matrix can be replaced by a much smaller algebraic object.
+\begin{definition}[Commutative ring]
+A \emph{commutative ring with identity} is a set $R$ with operations $+$ and $\cdot$ such that $(R,+)$ is an abelian group with identity $0$, multiplication is associative and commutative with an identity $1$, and multiplication distributes over addition. A \emph{field} is the special case in which every nonzero element has a multiplicative inverse.
+\end{definition}
 
-\section{What is a polynomial?}
-A polynomial such as
+The integers $\mathbb{Z}$ form a ring but not a field ($2$ has no integer inverse); the integers modulo a prime, $\mathbb{F}_q$, form a field. The distinction matters here because we will build new rings out of polynomials, and those are generally not fields.
 
+\section{The polynomial ring $\mathbb{F}_q[x]$}
+\begin{definition}[Polynomial ring]
+For a field $\mathbb{F}$, the \emph{polynomial ring} $\mathbb{F}[x]$ consists of all finite expressions
 \[
-f(x)=3x^4+2x^2+5
+f(x) = a_0 + a_1 x + \cdots + a_d x^d,\qquad a_i\in\mathbb{F},
 \]
+with addition and multiplication of polynomials. The \emph{degree} $\deg f$ is the largest $i$ with $a_i\neq 0$. It is a commutative ring with identity $1$.
+\end{definition}
 
-can be viewed as a list of coefficients:
+A polynomial is, coefficient by coefficient, just a vector: $f(x)=3x^4+2x^2+5$ is the coefficient list $(5,0,2,0,3)$. Addition of polynomials is addition of these coefficient vectors. The new ingredient is \emph{multiplication}, and it is not entrywise.
 
+\begin{proposition}[Multiplication is convolution]
+If $f(x)=\sum_i a_i x^i$ and $g(x)=\sum_j b_j x^j$, then
 \[
-(5,0,2,0,3).
+(fg)(x) = \sum_{k} c_k x^k, \qquad c_k = \sum_{i+j=k} a_i b_j.
 \]
+The coefficient sequence $(c_k)$ is the \emph{convolution} of $(a_i)$ and $(b_j)$.
+\end{proposition}
 
-That is, the polynomial is really a compact way to represent a vector of coefficients.
+For example $(x+1)(x+2)=x^2+3x+2$, where the middle coefficient $3=1\cdot 2+1\cdot 1$ is a sum of cross terms. This convolution is the operation that the NTT will later accelerate.
 
-\subsection{Sage experiment: creating a polynomial}
+\subsection{Sage experiment: the polynomial ring}
 
 \begin{lstlisting}[language=Python]
 F = GF(17)
 R.<x> = PolynomialRing(F)
 f = 3*x^4 + 2*x^2 + 5
-f
+print(f.degree())        # 4
+print(f.list())          # [5, 0, 2, 0, 3]: the coefficient vector
+print((x+1)*(x+2))       # x^2 + 3*x + 2
 \end{lstlisting}
 
-The output is
+\section{Euclidean division}
+The one structural fact that makes everything below work is that polynomials over a field can be divided with remainder, exactly like integers.
 
-\begin{lstlisting}[language=Python]
-3*x^4 + 2*x^2 + 5
-\end{lstlisting}
-
-Its degree is:
-
-\begin{lstlisting}[language=Python]
-f.degree()
-\end{lstlisting}
-
-and the coefficients can be inspected with:
-
-\begin{lstlisting}[language=Python]
-f.coefficients()
-\end{lstlisting}
-
-If you want the full coefficient list including zeros, use:
-
-\begin{lstlisting}[language=Python]
-f.list()
-\end{lstlisting}
-
-This is a useful bridge between the language of vectors and the language of polynomials.
-
-\section{Polynomial addition}
-Polynomial addition is the same idea as vector addition, but expressed in algebraic form. For example,
-
+\begin{theorem}[{Division algorithm in $\mathbb{F}[x]$}]
+For $f,g\in\mathbb{F}[x]$ with $g\neq 0$ there exist \emph{unique} polynomials $q$ (quotient) and $r$ (remainder) with
 \[
-(x^2+3) + (2x^2+x+5) = 3x^2+x+8.
+f = q\,g + r, \qquad \deg r < \deg g.
 \]
+\end{theorem}
 
-\subsection{Sage experiment}
+Uniqueness of the remainder is what will let us reduce every polynomial modulo a fixed $g$ to a single canonical form of degree below $\deg g$. That canonical form is the coefficient vector we actually store.
 
-\begin{lstlisting}[language=Python]
-a = x^2 + 3
-b = 2*x^2 + x + 5
-a + b
-\end{lstlisting}
+\section{Quotient rings}
+Left unbounded, degrees grow without limit under multiplication. We tame this by declaring a fixed polynomial to be zero.
 
-\section{Polynomial multiplication}
-Multiplication is where the algebra becomes richer. For example,
+\begin{definition}[Ideal and quotient ring]
+The \emph{principal ideal} generated by $f\in\mathbb{F}[x]$ is the set of all multiples $(f)=\{f\cdot h : h\in\mathbb{F}[x]\}$. The \emph{quotient ring} $\mathbb{F}[x]/(f)$ has as its elements the residue classes of polynomials modulo $f$; two polynomials are identified when they differ by a multiple of $f$. Arithmetic is done as in $\mathbb{F}[x]$ and then reduced modulo $f$.
+\end{definition}
 
-\[
-(x+1)(x+2)=x^2+3x+2.
-\]
+By Euclidean division, every class has a unique representative of degree less than $\deg f$, so the quotient is not some abstract fog: it is a concrete, finite set of low-degree polynomials.
 
-\subsection{Sage experiment}
+\begin{proposition}[Size of the quotient]
+If $\mathbb{F}=\mathbb{F}_q$ and $\deg f = n$, then $\mathbb{F}_q[x]/(f)$ has exactly $q^n$ elements, one for each coefficient vector $(c_0,\dots,c_{n-1})\in\mathbb{F}_q^n$.
+\end{proposition}
 
-\begin{lstlisting}[language=Python]
-(x + 1) * (x + 2)
-\end{lstlisting}
+So as a set, $R_q=\mathbb{Z}_q[x]/(x^n+1)$ is just $\mathbb{F}_q^n$; what the ring structure adds on top of the vector space is a \emph{multiplication}.
 
-This operation is central in cryptography because many schemes involve products of polynomials rather than ordinary scalar operations.
-
-\section{Polynomial rings}
-The set of all polynomials with coefficients in a field is itself a ring. For example,
-
-\[
-\mathrm{GF}(17)[x]
-\]
-
-is the ring of polynomials over the finite field $\mathrm{GF}(17)$.
-
-\subsection{Sage experiment}
-
-\begin{lstlisting}[language=Python]
-R.<x> = PolynomialRing(GF(17))
-R
-\end{lstlisting}
-
-This creates a univariate polynomial ring over $\mathrm{GF}(17)$.
-
-\section{Why quotient rings are needed}
-If we allow polynomials of arbitrarily high degree, the ring becomes too large for convenient manipulation. To make the structure finite and more practical, we impose a relation such as
-
-\[
-x^4 = -1.
-\]
-
-Then higher powers can be reduced back to lower ones. This leads to a quotient ring:
-
-\[
-\mathrm{GF}(17)[x]/(x^4+1).
-\]
-
-\subsection{Sage experiment}
+\subsection{Sage experiment: building a quotient ring}
 
 \begin{lstlisting}[language=Python]
 R.<x> = PolynomialRing(GF(17))
 S.<y> = R.quotient(x^4 + 1)
+print(y^4)     # 16 == -1 mod 17: the relation x^4 = -1
+print(y^5)     # 16*y == -y
 \end{lstlisting}
 
-Now the relation $y^4 = -1$ holds. In the field $\mathrm{GF}(17)$, the value $-1$ is represented by $16$, so the relation is exactly $y^4 = -1$.
+\section{When is the quotient a field?}
+Whether $\mathbb{F}[x]/(f)$ is a field is governed entirely by whether $f$ can be factored.
 
-Check this directly:
+\begin{theorem}[Irreducibility and fields]
+$\mathbb{F}[x]/(f)$ is a field if and only if $f$ is irreducible over $\mathbb{F}$. If $f$ factors non-trivially, the quotient has zero divisors and is only a ring.
+\end{theorem}
 
-\begin{lstlisting}[language=Python]
-y^4
-\end{lstlisting}
+This is the polynomial analogue of ``$\mathbb{Z}/m\mathbb{Z}$ is a field iff $m$ is prime.'' It will matter twice. Over $\mathbb{Q}$ the modulus $x^n+1$ is irreducible (below), which is what gives the associated number field its clean structure; but over $\mathbb{Z}_q$ the \emph{same} polynomial deliberately factors, and that factorisation is precisely what the NTT exploits.
 
-and then:
+\section{The modulus $x^n+1$ and cyclotomic polynomials}
+Modern lattice schemes fix $n$ to be a power of two and work modulo $x^n+1$. This choice is not cosmetic.
 
-\begin{lstlisting}[language=Python]
-y^5
-\end{lstlisting}
+\begin{definition}[Cyclotomic polynomial]
+The $m$-th \emph{cyclotomic polynomial} $\Phi_m(x)$ is the minimal polynomial over $\mathbb{Q}$ of a primitive $m$-th root of unity; its roots are exactly the primitive $m$-th roots of unity.
+\end{definition}
 
-The second result is consistent with the relation $y^5 = -y$.
+\begin{proposition}
+For $n=2^k$, one has $x^n+1 = \Phi_{2n}(x)$, and it is irreducible over $\mathbb{Q}$.
+\end{proposition}
 
-\section{Why Kyber uses $x^{256}+1$}
-A central design choice in RLWE-based systems is the use of a special polynomial modulus. In many modern schemes one works in a ring of the form
+Thus $\mathbb{Z}[x]/(x^n+1)$ is the ring of integers of the cyclotomic field $\mathbb{Q}(\zeta_{2n})$ -- a highly structured, well-studied object, which is the deeper reason it supports both strong security reductions and fast arithmetic. Working modulo a power-of-two degree also makes the reduction step trivial to implement, as the next section shows.
 
-\[
-R_q = \mathbb{Z}_q[x]/(x^n+1).
-\]
-
-The choice $x^{256}+1$ is not arbitrary. It is attractive because the polynomial is a cyclotomic polynomial, which has strong algebraic properties and supports efficient arithmetic. This is one reason it appears in systems such as Kyber.
-
-The relation $x^n=-1$ has a very concrete effect on the coefficient vector of a polynomial: multiplying by $x$ shifts every coefficient one slot to the right, and the coefficient that would fall off the top does not vanish -- it wraps back into slot $0$ with its sign flipped. Figure~\ref{fig:negacyclic-wrap} shows this for the small case $n=4$ already used above.
+\subsection{Negacyclic wrap-around}
+The relation $x^n=-1$ has a very concrete effect on the coefficient vector. Multiplying by $x$ shifts every coefficient one slot to the right, and the coefficient that would fall off the top wraps back into slot $0$ with its sign flipped.
 
 \begin{figure}[H]
 \centering
@@ -183,10 +140,11 @@ The relation $x^n=-1$ has a very concrete effect on the coefficient vector of a 
 \label{fig:negacyclic-wrap}
 \end{figure}
 
-\section{Polynomials as cyclic convolution}
-A very important observation is that multiplication in a quotient ring often behaves like cyclic convolution. This means that the product of two polynomials can be seen as a wrapped version of ordinary convolution. This is precisely the phenomenon that makes fast transforms such as the FFT and NTT effective.
-
-Algorithm~\ref{alg:polymul-negacyclic} makes this precise: it is the direct schoolbook counterpart of Figure~\ref{fig:negacyclic-wrap}, where every product term that would land at degree $n$ or higher gets folded back into the result with the sign flip forced by $x^n=-1$.
+Carrying the sign flip through a full product gives the \emph{negacyclic convolution}: the coefficients of $c(x)=a(x)b(x) \bmod (x^n+1)$ are
+\[
+c_k = \sum_{i+j=k} a_i b_j \;-\; \sum_{i+j=k+n} a_i b_j,
+\]
+the ordinary convolution minus the part that has wrapped past degree $n-1$. Algorithm~\ref{alg:polymul-negacyclic} is the direct schoolbook realisation.
 
 \begin{algorithm}[H]
 \caption{Polynomial Multiplication modulo $x^n+1$}
@@ -209,62 +167,51 @@ Algorithm~\ref{alg:polymul-negacyclic} makes this precise: it is the direct scho
 \end{algorithmic}
 \end{algorithm}
 
-\section{RLWE and the relation to LWE}
-We can now see the transition clearly:
+\section{Splitting modulo $q$: the door to the NTT}
+Over $\mathbb{Q}$ the modulus is irreducible, but over $\mathbb{Z}_q$ it need not be, and we \emph{want} it to factor.
 
+\begin{proposition}[Full splitting]
+If $2n \mid q-1$, then $\mathbb{F}_q$ contains a primitive $2n$-th root of unity, $x^n+1$ splits into $n$ distinct linear factors over $\mathbb{F}_q$, and the Chinese Remainder Theorem gives a ring isomorphism
 \[
-\text{LWE: } As + e = b
+\mathbb{Z}_q[x]/(x^n+1) \;\cong\; \mathbb{F}_q \times \cdots \times \mathbb{F}_q \quad (n\text{ copies}).
 \]
+\end{proposition}
 
-becomes
+Under this isomorphism, multiplication of polynomials becomes coordinatewise multiplication of $n$ scalars -- an $O(n)$ operation once the map is applied. The map itself, and its inverse, are computed in $O(n\log n)$ by the NTT (Chapter~\ref{ch:ntt}); that is the entire reason the NTT exists.
 
+\begin{remark}[Kyber's partial split]
+Kyber uses $q=3329$ and $n=256$, and $q-1 = 3328 = 2^8\cdot 13$. Here $n=2^8$ divides $q-1$ but $2n=2^9$ does not, so $\mathbb{F}_q$ has a primitive $256$-th root of unity but no primitive $512$-th root. Consequently $x^{256}+1$ does not split completely; it factors into $128$ irreducible \emph{quadratics}, and Kyber's NTT maps $R_q$ to $128$ copies of $\mathbb{F}_q[x]/(\text{quadratic})$ rather than to $256$ scalars. The principle is identical -- CRT turns one multiplication into many independent small ones -- only the block size differs.
+\end{remark}
+
+\section{RLWE as structured LWE}
+With the ring in hand, the transition from LWE to RLWE is a change of alphabet:
 \[
-\text{RLWE: } a(x)s(x) + e(x) = b(x).
+\underbrace{A\mathbf{s}+\mathbf{e}=\mathbf{b}}_{\text{LWE, over } \mathbb{F}_q^n}
+\qquad\longrightarrow\qquad
+\underbrace{a(x)\,s(x)+e(x)=b(x)}_{\text{RLWE, over } R_q}.
 \]
-
-In this view, the matrix $A$ is replaced by a polynomial $a(x)$, the secret vector is replaced by a polynomial $s(x)$, and the error is also represented as a polynomial. This is the key reason RLWE can be seen as a structured version of LWE.
+The random matrix $A$ collapses to a single polynomial $a(x)$, because a polynomial encodes an entire negacyclic (circulant-like) matrix; the secret and error become polynomials. This is why RLWE public keys are a factor of $n$ smaller than plain LWE keys, and it is the subject of Chapter~\ref{ch:rlwe}.
 
 \section{Experiments}
 
-\subsection{Experiment 1: random polynomials}
-
-\begin{lstlisting}[language=Python]
-R.<x> = PolynomialRing(GF(17))
-R.random_element(degree=5)
-\end{lstlisting}
-
-\subsection{Experiment 2: verify the quotient relation}
-
 \begin{lstlisting}[language=Python]
 R.<x> = PolynomialRing(GF(17))
 S.<y> = R.quotient(x^4 + 1)
-print(y^4)
-print(y^5)
-print(y^8)
+
+# 1. the quotient relation and its powers
+print(y^4, y^5, y^8)          # -1, -y, 1
+
+# 2. negacyclic wrap-around by hand: multiply by y
+c = 2 + 3*y + 4*y^2 + 5*y^3
+print(y * c)                   # top coeff returns to slot 0 negated
+
+# 3. a quotient element is a length-4 coefficient vector
+print((3*y^3 + y + 2).lift().list())
 \end{lstlisting}
-
-\subsection{Experiment 3: observe the wrap-around effect}
-
-\begin{lstlisting}[language=Python]
-R.<x> = PolynomialRing(GF(17))
-S.<y> = R.quotient(x^4 + 1)
-print((y^7 + y^6 + y^5 + y^4).lift())
-\end{lstlisting}
-
-\subsection{Experiment 4: polynomials as vectors}
-
-\begin{lstlisting}[language=Python]
-f = 3*x^4 + x^2 + 2
-f.list()
-\end{lstlisting}
-
-This shows that a polynomial can be interpreted as a coefficient vector, which is a very useful perspective for later implementation work.
 
 \section{Summary}
-This chapter introduced the central algebraic object behind RLWE and the ring-based view of modern post-quantum cryptography. The ring
-
+This chapter built the ring
 \[
 R_q = \mathbb{Z}_q[x]/(x^n+1)
 \]
-
-combines the ideas of finite fields, linear algebra, and polynomial arithmetic into a single framework. The next chapter, \emph{Lattices}, will explain why these algebraic structures are tied to hard geometric problems and why lattices are the natural next object to study.
+from the ground up: a polynomial ring $\mathbb{F}_q[x]$, made finite by quotienting out the ideal $(x^n+1)$, whose elements are length-$n$ coefficient vectors and whose multiplication is negacyclic convolution. Choosing $n$ a power of two makes the modulus a cyclotomic polynomial with excellent structure, and choosing $q$ so that the modulus splits mod $q$ opens the door to the NTT. The next chapter, \emph{Lattices}, turns from this algebraic view to the geometric one, where the hardness of the underlying problems actually lives.

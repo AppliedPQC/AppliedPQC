@@ -1,4 +1,5 @@
 \chapter{SageMath Basics for Post-Quantum Cryptography}
+\label{ch:sagemath}
 
 \section{Why this chapter matters}
 This chapter is not meant to teach SageMath in isolation. Its purpose is to build a small experimental laboratory for post-quantum cryptography. Later chapters on LWE, RLWE, Kyber, Dilithium, McEliece, and lattice attacks all depend on the objects introduced here.
@@ -165,7 +166,23 @@ CC(1 + 2*I)
 These domains become relevant later when discussing numerical methods, Fourier-style transforms, and related implementation ideas.
 
 \section{Finite fields}
-Finite fields are among the most important structures in modern cryptography. A finite field is usually written as $\mathrm{GF}(q)$ or $\mathbb{F}_q$.
+Finite fields are among the most important structures in modern cryptography. A finite field is usually written as $\mathrm{GF}(q)$ or $\mathbb{F}_q$. Before computing with them, it is worth stating precisely what they are, because the whole book rests on them.
+
+\begin{definition}[Field]
+A \emph{field} is a set $\mathbb{F}$ with addition and multiplication such that $(\mathbb{F},+)$ and $(\mathbb{F}\setminus\{0\},\cdot)$ are both abelian groups (with identities $0$ and $1$) and multiplication distributes over addition. Concretely: one can add, subtract, multiply, and divide by anything nonzero.
+\end{definition}
+
+A \emph{finite} field is simply a field with finitely many elements. Their existence is completely classified.
+
+\begin{theorem}[Classification of finite fields]
+A finite field of order $q$ exists if and only if $q=p^m$ is a power of a prime $p$, and it is then unique up to isomorphism, denoted $\mathbb{F}_q$ or $\mathrm{GF}(q)$. When $m=1$ it is simply the integers modulo $p$,
+\[
+\mathbb{F}_p = \mathbb{Z}/p\mathbb{Z} = \{0,1,\dots,p-1\},
+\]
+with arithmetic reduced modulo $p$.
+\end{theorem}
+
+Almost every modulus in this book is a prime, so the working picture is the clean one: $\mathbb{F}_q$ is ``clock arithmetic'' modulo $q$ in which division is also available. That last property -- division -- is exactly what separates a field from the ring $\mathbb{Z}$, and it is what makes Gaussian elimination, and hence key generation, possible. Kyber's $q=3329$ and Dilithium's $q=8380417$ are both prime for this reason.
 
 \subsection{Creating a finite field}
 For example, the field with seven elements is:
