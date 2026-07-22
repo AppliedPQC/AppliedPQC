@@ -11,9 +11,10 @@ on paper; it runs on a physical device that takes time, draws current, radiates,
 and can be poked with a laser. If any of those measurable, physical quantities
 depends on the secret key, an attacker can read the key off the machine without ever
 touching the mathematics. This chapter's warning is blunt:
-\emph{the math can be perfect and the deployment still broken.} It is the natural
-bridge to the final part, where correct, side-channel-safe implementation becomes one
-requirement among several for getting these schemes into real systems.
+\emph{the math can be perfect and the deployment still broken.} It opens the final part
+of the book, on practice: correct, side-channel-safe implementation is one requirement
+among several for getting these schemes into real systems, alongside the protocol
+integration and migration that the chapters after it take up.
 
 After finishing this chapter, you should be able to:
 
@@ -424,8 +425,9 @@ The defense is a discipline, not a gadget:
         promise to preserve it.
 \end{itemize}
 
-And this is where the whole book closes the loop. The standards did not treat
-implementation security as an afterthought; they engineered for it. CBD was chosen
+And this is where the theory of the previous parts closes the loop with practice. The
+standards did not treat implementation security as an afterthought; they engineered for
+it. CBD was chosen
 over the Gaussian precisely because it is constant-time-friendly (\ref{ch:cbd});
 ML-DSA derives its per-signature randomness deterministically so its abort loop leaks
 nothing exploitable (\ref{ch:mldsa}); ML-KEM decapsulation is built on implicit

@@ -2,7 +2,7 @@
 \label{ch:applications}
 
 \section{Why this chapter matters}
-The previous parts built and analysed the algorithms. This final chapter is about the harder half of the problem: getting them into real systems -- web protocols, digital certificates, and even smart contracts -- correctly and in time. The forcing function is \emph{harvest now, decrypt later} (Chapter~\ref{ch:quantum}): an adversary can record encrypted traffic today and decrypt it once a quantum computer exists, so any long-lived secret is already exposed. Migration must therefore begin before the threat arrives, not after, and migration is an engineering project at least as much as a mathematical one.
+The previous parts built and analysed the algorithms. This chapter is about the harder half of the problem: getting them into real systems -- web protocols, digital certificates, and even smart contracts -- correctly and in time. The forcing function is \emph{harvest now, decrypt later} (Chapter~\ref{ch:quantum}): an adversary can record encrypted traffic today and decrypt it once a quantum computer exists, so any long-lived secret is already exposed. Migration must therefore begin before the threat arrives, not after, and migration is an engineering project at least as much as a mathematical one.
 
 \section{Learning goals}
 After reading this chapter, you should be able to:
@@ -142,4 +142,4 @@ The mathematics of the previous parts defeats Shor's algorithm, but that is wher
   \item scheme choice is a trade-off among size, speed, and assumption strength, and every deployment must be constant-time.
 \end{itemize}
 
-Post-quantum cryptography is no longer a paper exercise: the standards exist, and the migration is under way. Real security will arrive only when these schemes are deployed correctly, agilely, and side-channel-safely across the protocols and systems that the world already depends on -- which is the work that begins where this book ends.
+Post-quantum cryptography is no longer a paper exercise: the standards exist, and the migration is under way. Real security will arrive only when these schemes are deployed correctly, agilely, and side-channel-safely across the protocols and systems that the world already depends on. The next chapter turns to one of the hardest cases of all -- the blockchains, where the funds themselves are secured by exactly the signatures now at risk.
