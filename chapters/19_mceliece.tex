@@ -1,10 +1,265 @@
 \chapter{Classic McEliece}
+\label{ch:mceliece}
+
+\section{Learning objectives}
+
+The whole of Parts II--V rested on one hard problem family: lattices. This part opens a second, entirely independent foundation. Code-based cryptography does not ask you to find short vectors in a lattice; it asks you to \emph{decode} a random-looking linear code. It is the oldest post-quantum family of all -- Robert McEliece proposed his scheme in 1978, the same year RSA appeared -- and after more than forty years of attack it stands essentially unbroken. That track record is precisely why it is prized: where the lattice standards trade a little conservatism for small keys and speed, Classic McEliece makes the opposite bet.
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item state the basic objects of a binary linear code -- generator matrix, parity-check matrix, Hamming weight and distance, and the syndrome of an error;
+  \item explain the \emph{syndrome decoding} problem and why its NP-hardness (with no known quantum shortcut beyond Grover) is the security foundation of the scheme;
+  \item describe the trapdoor: a secret code that \emph{can} be decoded efficiently, disguised as a code that cannot;
+  \item follow the KeyGen, Encapsulate, and Decapsulate algorithms and see exactly where the secret decoder is used;
+  \item explain the trade-off Classic McEliece makes -- very large public keys in exchange for tiny ciphertexts and a long, conservative security record.
+\end{enumerate}
+
+\paragraph{Why this chapter matters.}
+Code-based cryptography is one of the three problem families named in the Quantum Threat chapter (Chapter~\ref{ch:quantum}), alongside lattices and hashes. Each is a different bet against an uncertain quantum future, and the value of holding more than one bet is that they fail independently: a breakthrough against lattices would say nothing about codes. Classic McEliece is the flagship of the code-based hedge. Understanding it also completes the picture of what ``post-quantum'' means -- not one idea, but several unrelated hard problems, any one of which could carry public-key cryptography through the quantum era.
+
+\section{A crash course in linear codes}
+
+The reader has met lattices and polynomial rings but not, so far, coding theory. This section builds the handful of objects the scheme needs. Everything lives over the binary field $\mathbb{F}_2 = \{0,1\}$, where addition is XOR.
+
+\paragraph{Codes as subspaces.}
+A \textbf{binary linear code} $C$ is simply a linear subspace of $\mathbb{F}_2^n$. If that subspace has dimension $k$, we call $C$ an $[n,k]$ code: it contains $2^k$ codewords, each an $n$-bit string. The idea is redundancy. We take a $k$-bit message and spread it across $n > k$ bits, so that if a few of those bits are flipped in transit we can still recover the original.
+
+\paragraph{The generator matrix.}
+Because $C$ is a $k$-dimensional subspace, it has a basis of $k$ codewords. Stacking that basis as the rows of a $k \times n$ matrix $G$ gives the \textbf{generator matrix}. Encoding a message $m \in \mathbb{F}_2^k$ is then a single matrix product:
+\[
+c = m\,G \in \mathbb{F}_2^n .
+\]
+As $m$ ranges over all $2^k$ messages, $mG$ ranges over all codewords. The generator matrix \emph{is} the code, written down.
+
+\paragraph{The parity-check matrix.}
+The same subspace can be described from the outside, by the linear constraints its codewords satisfy. The \textbf{parity-check matrix} $H$ is an $(n-k) \times n$ matrix whose null space is exactly $C$:
+\[
+H\,c^\top = 0 \quad\text{for every codeword } c \in C .
+\]
+So $G$ tells you how to \emph{build} codewords and $H$ tells you how to \emph{recognize} them. The two are linked by $G H^\top = 0$.
+
+\paragraph{Weight, distance, and error correction.}
+The \textbf{Hamming weight} $\mathrm{wt}(x)$ of a vector is the number of nonzero coordinates, and the \textbf{Hamming distance} between two vectors is the weight of their difference, $d(x,y) = \mathrm{wt}(x-y)$. The \textbf{minimum distance} $d$ of a code is the smallest distance between two distinct codewords. A code with minimum distance $d$ can \emph{correct} up to
+\[
+t = \left\lfloor \tfrac{d-1}{2} \right\rfloor
+\]
+bit errors: if a codeword is corrupted in at most $t$ positions, it is still closer to the original codeword than to any other, so the original can in principle be recovered.
+
+\paragraph{The syndrome.}
+Suppose a codeword $c$ is sent and arrives as $y = c + e$, where $e$ is an unknown \textbf{error vector}. Multiplying the received word by the parity-check matrix gives
+\[
+s = H\,y^\top = H\,c^\top + H\,e^\top = H\,e^\top ,
+\]
+because $Hc^\top = 0$. The result $s \in \mathbb{F}_2^{\,n-k}$ is the \textbf{syndrome}. Two things are worth pausing on. First, the syndrome depends only on the error, not on which codeword was sent. Second, \emph{decoding} -- recovering $e$ (and hence $c$) -- is exactly the task of finding a low-weight $e$ that produces the observed syndrome. This single observation is the hinge of the entire chapter.
+
+\section{The hard problem: syndrome decoding}
+
+For a code with helpful structure, decoding is easy -- that is the whole point of designing codes. But strip the structure away and the picture inverts.
 
 \begin{quote}
-\textit{This chapter is planned but not yet written.}
+\textbf{Syndrome Decoding.} Given a \emph{random} parity-check matrix $H \in \mathbb{F}_2^{(n-k)\times n}$, a target syndrome $s \in \mathbb{F}_2^{\,n-k}$, and a weight $t$, find an error vector $e$ with $\mathrm{wt}(e) \le t$ and $H\,e^\top = s$.
 \end{quote}
 
-\section{Purpose}
-McEliece is a historic code-based encryption scheme with a very different security foundation from lattices.
-\section{Key ideas}
-This chapter outlines the Goppa-code construction and the trade-offs between security, key size, and efficiency.
+For a code with no exploitable structure, this is genuinely hard. It was proved \textbf{NP-complete} by Berlekamp, McEliece, and van Tilborg in 1978 -- the same year the encryption scheme was proposed. Intuitively, the linear system $He^\top = s$ has many solutions, but almost all of them have large weight; the constraint $\mathrm{wt}(e) \le t$ picks out an exponentially rare needle, and there is no linear-algebra shortcut to it.
+
+The best known attacks are the family of \textbf{information-set decoding} (ISD) algorithms, refined steadily since the 1960s. They run in time exponential in the code parameters, and decades of optimization have improved only the constant in the exponent, never removed it. Crucially, quantum computers do not change this picture qualitatively: the strongest quantum variants apply Grover-style search inside ISD and gain at most a square-root speedup, exactly the mild erosion the Quantum Threat chapter described for all the post-quantum families. There is no Shor-like collapse. Doubling the parameters restores the lost margin, just as it does for a symmetric cipher.
+
+This is the security foundation. If we can present an attacker with what looks like a random parity-check matrix and a syndrome, and the secret is a low-weight error, then breaking the scheme means solving syndrome decoding.
+
+\section{The trapdoor: a decodable code in disguise}
+
+The problem, of course, is that the honest parties also see only the public matrix. If it were truly random, \emph{nobody} could decode, and the scheme would be useless. The resolution is the central trick of trapdoor cryptography: start from a code that \emph{does} have an efficient decoder, then disguise it so thoroughly that from the outside it is indistinguishable from a random code.
+
+\paragraph{The secret code.}
+Classic McEliece builds its secret from a \textbf{binary Goppa code}. The details of Goppa codes are beyond this chapter, but the two properties we need are simple to state:
+\begin{itemize}
+  \item it is an $[n,k]$ linear code, with a generator matrix $G$, chosen so that it can correct $t$ errors;
+  \item it comes with an \emph{efficient} $t$-error decoding algorithm $\mathcal{D}_g$ (Patterson's algorithm), which takes any word within distance $t$ of a codeword and returns the codeword and the error.
+\end{itemize}
+Goppa codes are the workhorse here for a specific reason: after four decades of scrutiny, a scrambled Goppa code still cannot be told apart from a random linear code by any known efficient test. Other code families that looked equally promising (for instance, certain algebraic codes) were later shown to leak their structure and were broken. Goppa codes have held.
+
+\paragraph{The disguise.}
+Two secret ingredients hide the structure:
+\begin{itemize}
+  \item a random invertible \textbf{scrambler} matrix $S$ of size $k \times k$ over $\mathbb{F}_2$, which mixes the rows of $G$ (it changes the basis, not the code);
+  \item a random $n \times n$ \textbf{permutation} matrix $P$, which shuffles the coordinates.
+\end{itemize}
+The public key is the transformed generator matrix
+\[
+G' = S\,G\,P .
+\]
+Scrambling by $S$ and permuting by $P$ both preserve the fact that this is \emph{some} $[n,k]$ code, but they destroy every visible trace of the Goppa structure that made $G$ decodable. To anyone without $S$, $P$, and $\mathcal{D}_g$, the matrix $G'$ is just a random-looking code with no known efficient decoder.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=22mm, every node/.style={font=\small}]
+  \node[keynode, align=center, text width=4cm] (goppa)
+    {Secret Goppa code\\[1pt] generator $G$\\ $t$-error decoder $\mathcal{D}_g$};
+  \node[flownode, align=center, text width=4cm, right=of goppa] (pub)
+    {Public key\\[1pt] $G' = S\,G\,P$\\ a scrambled $k\times n$ matrix};
+  \draw[flowarrow] (goppa) -- (pub);
+  \node[font=\scriptsize, pqcgray, align=center, anchor=south]
+    at ($(goppa.east)!0.5!(pub.west)+(0,1pt)$) {scramble by $S$,\\ permute by $P$};
+  \node[font=\scriptsize, pqcteal, below=7mm of goppa, align=center]
+    {structured:\\ decoding is easy};
+  \node[font=\scriptsize, pqcorange, below=7mm of pub, align=center]
+    {random-looking:\\ decoding is hard};
+\end{tikzpicture}
+\caption{The trapdoor as a disguise. A structured Goppa code, which the secret decoder $\mathcal{D}_g$ can correct up to $t$ errors, is scrambled by an invertible matrix $S$ and a coordinate permutation $P$ into a public matrix $G'$ that looks like a random code. Anyone can \emph{encrypt} against $G'$ -- take a codeword and add a weight-$t$ error -- but only the holder of $S$, $P$, and $\mathcal{D}_g$ can peel the disguise away and \emph{decode}. Everyone else faces syndrome decoding of a random code.}
+\label{fig:mceliece-disguise}
+\end{figure}
+
+The asymmetry in the caption is the whole scheme in one sentence. Encryption adds a weight-$t$ error to a public codeword; this is easy for anyone. Decryption removes that error; this is easy only for the trapdoor holder and, for everyone else, is syndrome decoding.
+
+\section{The scheme}
+
+We present two views of the same idea. The original 1978 form encrypts a message directly and is the clearest illustration of the trapdoor. The modern form -- the one the NIST ``Classic McEliece'' submission actually specifies -- is a key-encapsulation mechanism (KEM) built on the dual, parity-check description of the code. Both rely on the same secret decoder.
+
+\subsection{The original 1978 encryption}
+
+Key generation produces the disguise of the previous section: a secret Goppa code with decoder $\mathcal{D}_g$, a scrambler $S$, a permutation $P$, and the public generator $G' = SGP$.
+
+To \textbf{encrypt} a message $m \in \mathbb{F}_2^k$, the sender encodes it against the public matrix and deliberately adds a fresh random error $e$ of weight exactly $t$:
+\[
+c = m\,G' + e , \qquad \mathrm{wt}(e) = t .
+\]
+The ciphertext $c$ is a codeword of the public code, knocked off the code in $t$ positions. To an eavesdropper, recovering $m$ means removing $e$ -- syndrome decoding of a random-looking code.
+
+To \textbf{decrypt}, the receiver peels the disguise off one layer at a time, and this is where the secret is spent. The key algebraic fact is that a permutation only reshuffles the error's positions, so it never changes its weight.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=7mm, every node/.style={font=\small}]
+  \node[flownode, align=center, text width=6cm] (c)
+    {ciphertext $c = m\,G' + e$\\[1pt]\scriptsize weight-$t$ error, public code};
+  \node[flownode, align=center, text width=6cm, below=of c] (cp)
+    {$c\,P^{-1} = m S G + e P^{-1}$\\[1pt]\scriptsize Goppa codeword $+$ weight-$t$ error};
+  \node[flownode, align=center, text width=6cm, below=of cp] (dec)
+    {decode $\mathcal{D}_g$: strip the error\\[1pt]\scriptsize recover the ``message'' $mS$};
+  \node[keynode, align=center, text width=6cm, below=of dec] (m)
+    {$m = (mS)\,S^{-1}$};
+  \draw[flowarrow] (c) -- (cp);
+  \draw[flowarrow] (cp) -- (dec);
+  \draw[flowarrow] (dec) -- (m);
+  \node[font=\scriptsize, pqcgray, anchor=west] at ($(c)!0.5!(cp)+(3.3,0)$) {undo permutation $P^{-1}$};
+  \node[font=\scriptsize, pqcgray, anchor=west] at ($(cp)!0.5!(dec)+(3.3,0)$) {run the \emph{secret} decoder};
+  \node[font=\scriptsize, pqcgray, anchor=west] at ($(dec)!0.5!(m)+(3.3,0)$) {undo scrambler $S^{-1}$};
+\end{tikzpicture}
+\caption{McEliece decryption peels the disguise in reverse. Applying $P^{-1}$ turns the ciphertext into a genuine Goppa codeword $mSG$ plus an error $eP^{-1}$ of the same weight $t$; the secret decoder $\mathcal{D}_g$ removes that error and returns $mS$; finally $S^{-1}$ recovers the message $m$. The middle step is the only one an attacker cannot perform, because only the trapdoor holder knows the Goppa structure.}
+\label{fig:mceliece-decrypt}
+\end{figure}
+
+Written out, decryption is: compute $cP^{-1} = mSG + eP^{-1}$, which is a Goppa codeword $mSG$ corrupted in exactly $t$ positions; run $\mathcal{D}_g$ to strip the error and read off $mS$; then multiply by $S^{-1}$ to get $m$. Without the secret decoder, the second step is impossible, and that is the whole security of the scheme.
+
+\subsection{The modern KEM: sending a syndrome}
+
+The NIST submission uses the \textbf{Niederreiter} presentation, which is the dual of the picture above. Instead of a scrambled generator matrix it publishes a scrambled parity-check matrix, and instead of encrypting a chosen message it encapsulates a random key. This form has smaller ciphertexts and is what you should think of as ``Classic McEliece'' today.
+
+The public key is now a disguised parity-check matrix
+\[
+H' = S\,H\,P ,
+\]
+where $H$ is the parity-check matrix of the secret Goppa code, $S$ is an invertible $(n-k)\times(n-k)$ scrambler, and $P$ is again a coordinate permutation. (In the actual specification $H'$ is reduced to systematic form $[\,I \mid T\,]$, so only the sub-block $T$ needs to be stored; the scrambler $S$ is exactly the row reduction that achieves this. We keep $S$ explicit here for clarity.)
+
+The idea of encapsulation is that \emph{the secret is a low-weight error vector}, and the ciphertext is its syndrome. Because the syndrome of a weight-$t$ error under a random-looking $H'$ is a hard thing to invert, the ciphertext hides the error from everyone but the trapdoor holder. The shared key is then derived by hashing that error.
+
+\begin{algorithm}[H]
+\caption{Classic McEliece KeyGen (teaching form)}
+\label{alg:mce-keygen}
+\begin{algorithmic}[1]
+\Require Code parameters $(n,k,t)$
+\Ensure Public key $H'$; secret key $(\mathcal{D}_g, S, P)$
+\State choose a binary Goppa code with parity-check matrix $H \in \mathbb{F}_2^{(n-k)\times n}$
+\Statex \hspace{1.4em}and efficient $t$-error decoder $\mathcal{D}_g$ \Comment{the structured secret code}
+\State $S \gets$ random invertible $(n-k)\times(n-k)$ matrix over $\mathbb{F}_2$ \Comment{scrambler}
+\State $P \gets$ random $n\times n$ permutation matrix \Comment{coordinate shuffle}
+\State $H' \gets S\,H\,P$ \Comment{disguise: looks like a random code}
+\State \Return $\big(\,H',\ (\mathcal{D}_g, S, P)\,\big)$
+\end{algorithmic}
+\end{algorithm}
+
+Encapsulation never touches the secret. It just samples a random error of the prescribed weight and reports its syndrome.
+
+\begin{algorithm}[H]
+\caption{Classic McEliece Encapsulate (teaching form)}
+\label{alg:mce-encap}
+\begin{algorithmic}[1]
+\Require Public key $H'$; parameters $(n,t)$
+\Ensure Ciphertext $c$; shared key $K$
+\State $e \gets$ random vector in $\mathbb{F}_2^{\,n}$ with $\mathrm{wt}(e) = t$ \Comment{the secret is the error itself}
+\State $c \gets H'\,e^\top$ \Comment{ciphertext is the syndrome, only $n-k$ bits}
+\State $K \gets \mathrm{Hash}(e)$ \Comment{shared key hashes the error}
+\State \Return $(c, K)$
+\end{algorithmic}
+\end{algorithm}
+
+Decapsulation is where the trapdoor is spent. The receiver undoes the scrambler, hands the result to the secret Goppa decoder to recover a permuted error, then undoes the permutation and re-hashes -- arriving at the same key the sender computed.
+
+\begin{algorithm}[H]
+\caption{Classic McEliece Decapsulate (teaching form)}
+\label{alg:mce-decap}
+\begin{algorithmic}[1]
+\Require Ciphertext $c$; secret key $(\mathcal{D}_g, S, P)$
+\Ensure Shared key $K$
+\State $s' \gets S^{-1}\,c$ \Comment{now $s'$ is a Goppa syndrome: $s' = H(\,eP^\top)^\top$}
+\State $\tilde e \gets \mathcal{D}_g(s')$ \Comment{\emph{secret} decoder recovers the weight-$t$ error}
+\State $e \gets \tilde e\,P$ \Comment{undo the permutation}
+\State $K \gets \mathrm{Hash}(e)$ \Comment{re-derive the shared key}
+\State \Return $K$
+\end{algorithmic}
+\end{algorithm}
+
+The correctness is the mirror of Figure~\ref{fig:mceliece-decrypt}: multiplying by $S^{-1}$ turns the public ciphertext $c = SHP\,e^\top$ into $H(Pe^\top)$, a genuine syndrome of the Goppa code for a permuted-but-same-weight error; the decoder $\mathcal{D}_g$ recovers that error because its weight is exactly $t$; undoing $P$ restores the original $e$; and hashing $e$ reproduces the sender's key. An attacker who sees only $H'$ and $c$ is left with syndrome decoding.
+
+\paragraph{A note on real-world hardening.}
+The teaching form above sets $K = \mathrm{Hash}(e)$. To achieve security against active (chosen-ciphertext) attackers, the actual specification hashes the ciphertext into the key as well and uses \emph{implicit rejection}: if decoding fails or the recovered error has the wrong weight, decapsulation does not abort but returns a pseudorandom key derived from a secret stored in the key. This hides from the attacker whether decoding succeeded, closing a class of reaction attacks. The essential structure -- error in, syndrome out, decode with the trapdoor -- is exactly as shown.
+
+\section{Trade-offs and status}
+
+Classic McEliece makes an unusual and deliberate trade. Its public key is enormous -- a dense matrix of hundreds of kilobytes, up to about a megabyte at the highest security level -- because the public key essentially \emph{is} a random-looking code, and there is no seed to compress it down to (contrast the lattice standards, where the public matrix regenerates from a 32-byte seed). But everything else is small and fast: the ciphertext is merely a syndrome, well under a few hundred bytes, and encapsulation and decapsulation are quick. Where a lattice KEM balances all its sizes, Classic McEliece pushes the entire cost into a one-time, static public key that can be generated once and reused for a long time.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrl}
+\toprule
+Scheme & Public key & Ciphertext & Hardness assumption \\
+\midrule
+Classic McEliece \texttt{348864}  & $\approx 261$\,KB & $96$\,B  & syndrome decoding (codes) \\
+Classic McEliece \texttt{6960119} & $\approx 1.0$\,MB & $194$\,B & syndrome decoding (codes) \\
+ML-KEM-768                        & $1184$\,B          & $1088$\,B & Module-LWE (lattices) \\
+\bottomrule
+\end{tabular}
+\caption{Classic McEliece against a lattice KEM. The public keys differ by three orders of magnitude, but the ciphertexts run the other way, and -- the point of this whole part of the book -- the two rest on \emph{independent} hard problems. A break of one says nothing about the other.}
+\label{tab:mce-vs-mlkem}
+\end{table}
+
+\paragraph{Status.}
+Classic McEliece competed in the NIST post-quantum project as a key-encapsulation candidate and advanced into the fourth round dedicated to additional KEMs. It is \emph{not} one of the four FIPS 203--206 standards; NIST selected the lattice scheme ML-KEM as its primary KEM and, from the round-4 alternatives, chose the code-based scheme HQC of the next chapter as the additional KEM to standardize -- largely on the strength of HQC's far smaller keys. Classic McEliece continues toward standardization through other bodies, and it retains a distinctive role in practice: because its underlying assumption has survived more than forty years of concentrated attack, it is widely deployed as a \emph{conservative hedge}, often in hybrid combination with a lattice KEM, so that a future break of one component still leaves the other standing. Conservatism, not efficiency, is what it sells, and for high-value long-lived keys that is exactly the desired property.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: thinking the large public key is a flaw to be fixed.}
+The size is intrinsic. The public key is a random-looking code, and a random code has no shorter description than the matrix itself. You cannot regenerate it from a small seed the way ML-KEM regenerates its matrix $A$, because a seed-expandable matrix would carry exploitable structure. The large key is the price of the conservative assumption, not an implementation oversight.
+
+\paragraph{Pitfall 2: thinking the error weight is negotiable.}
+The decoder $\mathcal{D}_g$ corrects \emph{up to} $t$ errors and no more. Encapsulation must use weight exactly $t$: too few and it is easier to attack, too many and honest decoding fails. The weight is a fixed scheme parameter, not a tunable knob at encryption time.
+
+\paragraph{Pitfall 3: assuming any decodable code family will do.}
+The security rests on the scrambled code being \emph{indistinguishable} from random. Several families that offered efficient decoders (such as certain algebraic and low-density codes) were shown to leak their structure through the disguise and were broken. Binary Goppa codes are used precisely because, so far, they do not.
+
+\paragraph{Pitfall 4: skipping the chosen-ciphertext hardening.}
+The bare scheme in the algorithm boxes is only passively secure. Real deployments must bind the ciphertext into the key and use implicit rejection, exactly as the lattice KEMs apply a Fujisaki--Okamoto-style transform. Omitting it exposes reaction attacks that learn the secret from whether decoding succeeds.
+
+\section{Summary}
+
+Code-based cryptography rests on a hard problem wholly separate from lattices: decoding a random linear code, formalized as syndrome decoding, which is NP-hard and enjoys no quantum shortcut beyond Grover's mild square-root erosion. Classic McEliece turns this into a cryptosystem by the classic trapdoor manoeuvre:
+
+\begin{itemize}
+  \item it starts from a \textbf{binary Goppa code}, which has an efficient $t$-error decoder $\mathcal{D}_g$;
+  \item it \textbf{disguises} that code with a secret scrambler $S$ and permutation $P$, publishing $G' = SGP$ (or, dually, $H' = SHP$), which looks random;
+  \item anyone can \textbf{encapsulate} -- add or send a weight-$t$ error -- but only the holder of $S$, $P$, and $\mathcal{D}_g$ can \textbf{decapsulate}, because only they can decode;
+  \item it buys unusually strong \textbf{conservatism} -- a forty-year unbroken record -- at the cost of a very large public key, while keeping ciphertexts tiny.
+\end{itemize}
+
+The lesson beyond the mechanics is that ``post-quantum'' is not a single idea but a portfolio of independent bets. Classic McEliece is the code-based family's oldest and most cautious member, decoding disguised as a random code. The next chapter, on HQC, takes a different route through the same code-based territory: rather than hiding a strongly structured Goppa code, it builds security on the hardness of decoding \emph{quasi-cyclic} codes, trading Classic McEliece's giant keys for something far more compact -- and, in doing so, became the code-based scheme NIST chose to standardize.

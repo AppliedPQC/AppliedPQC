@@ -1,10 +1,240 @@
 \chapter{HQC}
+\label{ch:hqc}
 
-\begin{quote}
-\textit{This chapter is planned but not yet written.}
-\end{quote}
+\section{Learning objectives}
 
-\section{Purpose}
-HQC is a code-based key encapsulation mechanism that offers another path to post-quantum security.
-\section{Key ideas}
-The chapter explains the design structure and compares it with other code-based and lattice-based approaches.
+After reading this chapter, you should be able to:
+
+\begin{itemize}
+  \item explain how HQC differs from Classic McEliece (Chapter~\ref{ch:mceliece}): McEliece \emph{hides the code}, HQC \emph{hides the noise};
+  \item state the hard problem HQC rests on -- decoding a random quasi-cyclic code -- and why the code itself is public;
+  \item read the ring $\mathbb{F}_2[x]/(x^n-1)$ as quasi-cyclic blocks, and multiplication in it as cyclic convolution over $\mathbb{F}_2$;
+  \item follow the KeyGen / Encapsulate / Decapsulate pipeline and verify the algebraic cancellation $v - u\,y \approx mG$ by hand;
+  \item explain why a publicly known, efficiently decodable code $C$ removes the leftover low-weight error and recovers the message;
+  \item place HQC among the post-quantum standards as NIST's code-based backup to the lattice-based ML-KEM.
+\end{itemize}
+
+\section{Why this chapter matters}
+
+The previous chapter built Classic McEliece, the oldest code-based scheme, whose security has survived since 1978. Its drawback is well known: the public key is enormous, hundreds of kilobytes to a megabyte. HQC (\emph{Hamming Quasi-Cyclic}) is a much younger code-based KEM that attacks the same goal -- post-quantum key encapsulation from coding theory -- but from the opposite direction, and with far smaller keys.
+
+The reason this matters beyond efficiency is \emph{diversity}. Nearly all of the first NIST post-quantum standards (Chapter~\ref{ch:quantum}) rest on lattice problems: ML-KEM, ML-DSA, and FN-DSA are all lattice schemes. If a single unexpected advance were to weaken lattice assumptions, the entire deployed base would be at risk at once. A backup built on a genuinely different hard problem is therefore valuable in its own right. In March 2025 NIST selected \textbf{HQC} for standardization as an additional key-encapsulation mechanism, to complement ML-KEM with a scheme whose security rests on the hardness of decoding random codes rather than on lattices. It is a deliberate hedge: the same job, a different mathematical bet.
+
+\section{The key idea: hide the noise, not the code}
+
+Both Classic McEliece and HQC are code-based, and both ultimately rely on the fact that \emph{decoding a random-looking linear code is hard}. But they exploit that fact in opposite ways.
+
+\begin{itemize}
+  \item \textbf{Classic McEliece hides the code.} The secret is a structured code (a binary Goppa code) that the owner knows how to decode efficiently. The public key is a scrambled generator matrix that looks like a random code with no usable structure. Security rests on the attacker being unable to tell the disguised structured code apart from a random one, and being unable to decode it. Because the public object is essentially a full random-looking generator matrix, it is large.
+  \item \textbf{HQC hides the noise.} The decodable code $C$ is \emph{public and fixed}. Everyone -- including the attacker -- knows $C$ and knows how to decode it. What is secret is a pair of \emph{low-weight} vectors. Security rests on the attacker being unable to recover those low-weight secrets from the public data, which is exactly the problem of decoding a random \emph{quasi-cyclic} code. Nothing structural is hidden, so there is no large disguised matrix to publish.
+\end{itemize}
+
+This is the same move that took us from LWE to Ring-LWE earlier in the book, transplanted into coding theory. Plain code-based cryptography, like plain LWE, needs a big unstructured matrix. Adding \emph{quasi-cyclic} structure lets a single row (a single ring element) stand in for an entire circulant block, shrinking the key by a large factor -- exactly as a circulant matrix is determined by its first row. HQC is to McEliece roughly as Ring-LWE is to LWE: it buys small keys by adding algebraic structure, at the cost of relying on a more structured assumption. The NTRU construction of Section~\ref{sec:ntru} makes the same trade in the lattice world; HQC is its coding-theory cousin.
+
+\section{The ring: quasi-cyclic blocks as ring elements}
+
+Fix a length $n$ (a prime, in the real scheme). The objects of HQC live in the ring
+\[
+R = \mathbb{F}_2[x]\big/(x^n-1).
+\]
+An element of $R$ is a binary polynomial of degree less than $n$, equivalently a binary vector of length $n$. Two facts make this ring the right home for HQC.
+
+\paragraph{Multiplication is cyclic convolution.} Because $x^n \equiv 1$, multiplying by $x$ cyclically rotates the coefficient vector. Multiplying two ring elements $h$ and $y$ therefore convolves their coefficient vectors cyclically over $\mathbb{F}_2$:
+\[
+(h\cdot y)_k \;=\; \bigoplus_{i+j\equiv k \ (\mathrm{mod}\ n)} h_i\, y_j .
+\]
+This is exactly the circulant/convolution picture of Figure~\ref{fig:circulant-grid}: the map $y \mapsto h\cdot y$ is multiplication by the circulant matrix whose first row is $h$. Storing the single vector $h$ is enough to describe that entire $n\times n$ circulant -- this is the ``quasi-cyclic'' compression, and it is why HQC keys are small.
+
+\paragraph{Weight is what stays secret.} The \emph{Hamming weight} of a ring element is the number of nonzero coefficients. A \emph{low-weight} element has only a handful of ones among its $n$ coordinates. HQC's secrets are low-weight elements; a uniformly random $h$ is not. The whole security argument turns on the gap between ``low weight'' and ``random.'' (For scale, HQC-128 uses $n = 17669$ with secret weight $w = 66$: sixty-six ones hidden among more than seventeen thousand coordinates.)
+
+\section{The scheme}
+
+HQC has the same algebraic silhouette as the toy ML-KEM pipeline (Figure~\ref{fig:toy-mlkem-pipeline}): a public ``syndrome'' built from a secret, a ciphertext that reuses the public key against fresh randomness, and a decryption that cancels the shared term and decodes a small leftover error. Only the arithmetic changes -- integers modulo $q$ become bits, and ``small'' means \emph{low Hamming weight} rather than \emph{small magnitude}.
+
+\subsection{Key generation}
+
+Sample a uniformly random $h \in R$ and two low-weight secrets $x, y \in R$ (each of weight $w$). Publish
+\[
+s \;=\; x + h\cdot y .
+\]
+The public key is $(h, s)$ and the secret key is $(x, y)$.
+
+The pair $(h, s)$ is exactly a quasi-cyclic syndrome: $s$ is a random-looking ring element, and recovering the low-weight $(x, y)$ from $(h, s)$ is the \textbf{Quasi-Cyclic Syndrome Decoding} problem, believed hard even for a quantum computer. Note that $h$ and $s$ together are just two length-$n$ vectors -- there is no large matrix to store.
+
+\begin{algorithm}[H]
+\caption{HQC KeyGen (teaching form)}
+\label{alg:hqc-keygen}
+\begin{algorithmic}[1]
+\Require Ring $R=\mathbb{F}_2[x]/(x^n-1)$; secret weight $w$
+\Ensure Public key $(h,s)$; secret key $(x,y)$
+\State $h \gets$ uniformly random element of $R$
+\State $x \gets$ random element of $R$ of Hamming weight $w$
+\State $y \gets$ random element of $R$ of Hamming weight $w$
+\State $s \gets x + h\cdot y$ \Comment{quasi-cyclic syndrome; looks random}
+\State \Return $\big((h,s),\ (x,y)\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Encapsulation}
+
+Encapsulation encrypts a message $m$ under the public code $C$, then derives the shared key by hashing $m$. Let $G$ be the public generator matrix of $C$, so that $mG \in R$ is the codeword carrying the $k$-bit message $m$. Sample fresh low-weight randomness $r_1, r_2, e$ and compute
+\[
+u \;=\; r_1 + h\cdot r_2, \qquad
+v \;=\; mG + s\cdot r_2 + e .
+\]
+The ciphertext is $(u, v)$ and the shared key is $K = H(m)$ for a hash function $H$.
+
+The two halves mirror KeyGen: $u$ reuses the public $h$ against the fresh secret $r_2$ (just as $s$ used $h$ against $y$), and $v$ hides the codeword $mG$ under the public $s$ times $r_2$ plus a little extra noise $e$. Every one of $r_1, r_2, e$ is low weight -- that is what makes decapsulation's leftover small.
+
+\begin{algorithm}[H]
+\caption{HQC Encapsulate (teaching form)}
+\label{alg:hqc-encaps}
+\begin{algorithmic}[1]
+\Require Public key $(h,s)$; public code $C$ with generator $G$; message $m\in\mathbb{F}_2^{k}$
+\Ensure Ciphertext $(u,v)$; shared key $K$
+\State $r_1 \gets$ low-weight element of $R$ \Comment{weight $w_r$}
+\State $r_2 \gets$ low-weight element of $R$ \Comment{weight $w_r$}
+\State $e \gets$ low-weight element of $R$ \Comment{weight $w_e$}
+\State $u \gets r_1 + h\cdot r_2$
+\State $v \gets mG + s\cdot r_2 + e$ \Comment{$mG$ is the codeword of $C$ carrying $m$}
+\State $K \gets H(m)$ \Comment{shared secret derived from the message}
+\State \Return $\big((u,v),\ K\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Decapsulation}
+
+The holder of $(x, y)$ computes $v - u\cdot y$ and decodes the result with the \emph{public} code $C$. The point of the algebra is that the term shared between $s$ and $u$ cancels, leaving a codeword plus a low-weight error:
+\[
+\begin{aligned}
+v - u\cdot y
+  &= \big(mG + s\,r_2 + e\big) - \big(r_1 + h\,r_2\big)\,y \\[2pt]
+  &= mG + (x + h\,y)\,r_2 + e - r_1\,y - h\,r_2\,y \\[2pt]
+  &= mG + x\,r_2 + \underbrace{h\,y\,r_2 - h\,r_2\,y}_{=\,0} + e - r_1\,y \\[2pt]
+  &= mG + \big(x\,r_2 - y\,r_1 + e\big).
+\end{aligned}
+\]
+The two copies of $h\,y\,r_2$ cancel because $R$ is commutative. (Over $\mathbb{F}_2$ subtraction is the same as addition, so the leftover is really $x r_2 + y r_1 + e$; we keep the minus signs only to mirror the cancellation.) The leftover
+\[
+e' \;=\; x\,r_2 - y\,r_1 + e
+\]
+is a sum of products of low-weight vectors: $x\,r_2$ has weight at most $w\cdot w_r$, and likewise $y\,r_1$, so $e'$ has small, bounded weight. It is precisely a low-weight error added to the genuine codeword $mG$. Because $C$ is a \emph{known, efficiently decodable} code chosen so that its decoder corrects up to that many errors, running the public decoder on $v - u\,y$ removes $e'$ and returns $m$.
+
+\begin{algorithm}[H]
+\caption{HQC Decapsulate (teaching form)}
+\label{alg:hqc-decaps}
+\begin{algorithmic}[1]
+\Require Secret key $(x,y)$; public code $C$ with decoder $\textsc{Decode}_C$; ciphertext $(u,v)$
+\Ensure Shared key $K$
+\State $w' \gets v - u\cdot y$ \Comment{$= mG + (x r_2 - y r_1 + e)$: codeword $+$ low-weight error}
+\State $m' \gets \textsc{Decode}_C(w')$ \Comment{public decoder removes the low-weight error}
+\State $K \gets H(m')$
+\State \Return $K$
+\end{algorithmic}
+\end{algorithm}
+
+Decapsulation succeeds whenever the weight of $e'$ stays within the decoding radius of $C$. As in ML-KEM, the parameters $n$, $w$, $w_r$, $w_e$ and the code $C$ are tuned so that this fails only with negligible probability.
+
+\subsection{The pipeline at a glance}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=22mm and 22mm]
+  \node[flownode] (kg) {KeyGen};
+  \node[flownode, right=of kg] (enc) {Encapsulate};
+  \node[flownode, right=of enc] (dec) {Decapsulate};
+  \node[keynode, right=of dec] (out) {shared\\[-2pt]\scriptsize key $K$};
+  \draw[flowarrow] (kg) -- (enc);
+  \draw[flowarrow] (enc) -- (dec);
+  \draw[flowarrow] (dec) -- (out);
+  % edge labels as separate nodes above the arrow midpoints
+  \node[font=\scriptsize, pqcgray, align=center] at ($(kg)!0.5!(enc)+(0,4.5mm)$) {public key\\$(h,s)$};
+  \node[font=\scriptsize, pqcgray, align=center] at ($(enc)!0.5!(dec)+(0,4.5mm)$) {ciphertext\\$(u,v)$};
+  % secret key feeding decapsulation from below
+  \node[keynode, below=12mm of dec] (sk) {secret key\\[-2pt]\scriptsize $(x,y)$};
+  \draw[flowarrow] (sk) -- (dec);
+\end{tikzpicture}
+\caption{The HQC pipeline. KeyGen publishes $(h,s)$ and keeps $(x,y)$; Encapsulate turns a message into a ciphertext $(u,v)$ and a shared key $K=H(m)$; Decapsulate uses the secret $(x,y)$ to recover $m$ and recompute $K$. The public code $C$ is fixed and known to everyone -- it is not part of any key.}
+\label{fig:hqc-pipeline}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm, every node/.style={font=\small}]
+  \node[flownode, minimum width=52mm] (compute) {Decapsulate computes $\;v - u\cdot y$};
+  \node[flownode, minimum width=72mm, below=of compute] (expand)
+       {$= mG + (x + h\,y)\,r_2 + e - r_1\,y - h\,r_2\,y$};
+  \node[flownode, minimum width=72mm, below=of expand] (cancel)
+       {$= mG + \big(x\,r_2 - y\,r_1 + e\big)$};
+  \node[flownode, minimum width=72mm, below=of cancel] (form)
+       {codeword $mG\;$ $+\;$ low-weight error $e'$};
+  \node[flownode, minimum width=52mm, below=of form] (decode) {$\textsc{Decode}_C(\,\cdot\,)$ removes $e'$};
+  \node[keynode, minimum width=52mm, below=of decode] (msg) {message $m$ recovered};
+  \draw[flowarrow] (compute) -- (expand);
+  \draw[flowarrow] (expand) -- (cancel);
+  \draw[flowarrow] (cancel) -- (form);
+  \draw[flowarrow] (form) -- (decode);
+  \draw[flowarrow] (decode) -- (msg);
+  % annotation for the cancelling term
+  \node[font=\scriptsize, pqcorange, right=3mm of expand.east, align=left]
+       {the two $h\,y\,r_2$\\terms cancel};
+\end{tikzpicture}
+\caption{Why decapsulation works. The public term shared between $s$ and $u$ (the two copies of $h\,y\,r_2$) cancels because the ring is commutative, leaving the genuine codeword $mG$ plus a low-weight leftover $e' = x r_2 - y r_1 + e$. Since every ingredient is low weight, $e'$ is small enough for the public decoder of $C$ to strip away, revealing $m$.}
+\label{fig:hqc-cancellation}
+\end{figure}
+
+\section{The public code $C$}
+
+Everything hinges on $C$ being a fixed, public code that is \emph{efficiently decodable} up to the weight of $e'$. This is the exact opposite of McEliece, where the ability to decode is the closely guarded secret. In HQC there is nothing to hide about $C$: the attacker gains no advantage from knowing how to decode it, because decoding $v - u\,y$ requires first computing $u\,y$, which needs the secret $y$.
+
+The standardized HQC uses a \emph{concatenated} code for $C$: an outer Reed--Solomon code composed with an inner duplicated Reed--Muller code. The concatenation is chosen purely for its decoding performance -- a large, reliable error-correction radius at a good rate -- since $C$ contributes nothing to security. For this chapter the only property that matters is the interface: $C$ has a public generator $G$ (so $mG$ is a codeword) and a public decoder $\textsc{Decode}_C$ that corrects any error of weight up to its radius.
+
+\section{From CPA to CCA: the FO transform}
+
+Algorithms~\ref{alg:hqc-keygen}--\ref{alg:hqc-decaps} describe the \emph{passively secure} core: they resist an eavesdropper, but not an attacker who submits chosen ciphertexts and watches how decapsulation responds. As with ML-KEM, HQC upgrades this core to chosen-ciphertext (CCA) security with a \textbf{Fujisaki--Okamoto (FO) transform}.
+
+At a high level, the FO transform makes encapsulation \emph{deterministic in the message}: the randomness $r_1, r_2, e$ is not sampled freshly but derived by hashing $m$. Decapsulation then recovers $m'$, \emph{re-runs} encapsulation with that same $m'$, and checks that the resulting ciphertext matches the one received. If it does, the ciphertext was honestly formed and the key $K = H(m')$ is returned; if it does not, decapsulation returns a pseudorandom key derived from a secret seed instead of signalling an error. This ``re-encrypt and compare'' step is what defeats chosen-ciphertext attacks, and it is the same mechanism used throughout the lattice KEMs. The teaching algorithms above deliberately omit it to keep the algebra in focus.
+
+\section{Where HQC sits}
+
+The following table places HQC between its code-based ancestor and the lattice KEM it backs up. The single most useful column is \emph{what is hidden}: it is the cleanest way to remember why the key sizes come out as they do.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & Classic McEliece & HQC & ML-KEM \\
+\midrule
+Family        & code-based        & code-based            & lattice-based \\
+What is hidden & the decodable code & low-weight noise      & low-norm noise \\
+The code $C$   & secret (disguised) & public and fixed      & --- \\
+Hard problem   & decode hidden Goppa code & decode random QC code & Module-LWE \\
+Public key     & large ($\sim$\,100s\,kB) & medium ($\sim$\,few\,kB) & small ($<1$\,kB) \\
+Extra structure & none (unstructured)  & quasi-cyclic          & module / ring \\
+\bottomrule
+\end{tabular}
+\caption{Classic McEliece versus HQC versus ML-KEM. McEliece hides an entire structured code and pays for it with a huge public key; HQC keeps the code public and hides only low-weight noise, so quasi-cyclic structure shrinks the key to a few kilobytes; ML-KEM is smaller still but rests on lattices. HQC and ML-KEM solve the same problem on deliberately different assumptions.}
+\label{tab:hqc-comparison}
+\end{table}
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: thinking the code is the secret.} In McEliece the secret is the ability to decode; in HQC the code $C$ and its decoder are fully public. Confusing the two inverts the whole security argument. In HQC what protects the message is the secret \emph{low-weight} pair $(x,y)$, without which one cannot even form $u\,y$, let alone decode.
+
+\paragraph{Pitfall 2: reading ``low weight'' as ``small numbers.''} Everything is over $\mathbb{F}_2$, so coefficients are only $0$ or $1$. ``Small'' here means \emph{few ones} -- low Hamming weight -- not small magnitude. The security gap is between a weight-$w$ vector and a uniformly random one, which is roughly half weight.
+
+\paragraph{Pitfall 3: forgetting that the leftover error must fit the decoder.} Decapsulation only works if $e' = x r_2 - y r_1 + e$ stays within the decoding radius of $C$. Raising the secret weights $w, w_r, w_e$ strengthens the assumption but enlarges $e'$; if it exceeds the radius, decoding fails. This is HQC's analogue of ML-KEM's decryption-failure budget, and the parameters are tuned to make failure negligible.
+
+\paragraph{Pitfall 4: assuming quasi-cyclic structure is free.} Adding quasi-cyclic structure is what shrinks the key from McEliece's hundreds of kilobytes to a few, but it also narrows the assumption: HQC relies on decoding random \emph{quasi-cyclic} codes, a more structured problem than decoding fully random codes. This is the same efficiency-versus-structure trade seen with Ring-LWE and NTRU (Section~\ref{sec:ntru}), and it is a conscious design choice, not an oversight.
+
+\paragraph{Pitfall 5: using the passive core directly.} The teaching algorithms here are only CPA-secure. A deployable HQC wraps them in the FO transform's re-encrypt-and-compare check; skipping it exposes the scheme to chosen-ciphertext attacks.
+
+\section{Summary}
+
+\begin{itemize}
+  \item \textbf{HQC hides the noise, not the code.} The decodable code $C$ is public and fixed; the secret is a pair of low-weight vectors $(x,y)$.
+  \item \textbf{Security is quasi-cyclic syndrome decoding.} Recovering $(x,y)$ from $(h,\,s=x+hy)$ is decoding a random quasi-cyclic code -- believed hard classically and quantumly.
+  \item \textbf{The algebra mirrors ML-KEM.} KeyGen publishes a syndrome $s$; encapsulation builds $u = r_1 + h r_2$ and $v = mG + s r_2 + e$; decapsulation cancels the shared $h y r_2$ term so that $v - u y = mG + e'$ with $e'$ low weight, and the public decoder of $C$ removes $e'$.
+  \item \textbf{Quasi-cyclic structure buys small keys.} A single ring element stands in for an entire circulant block, replacing McEliece's huge matrix with a few kilobytes -- at the cost of a more structured assumption, the coding-theory analogue of the LWE-to-Ring-LWE step.
+  \item \textbf{HQC is NIST's code-based backup.} Selected in March 2025 as an additional KEM, it complements the lattice-based ML-KEM with a scheme resting on an independent hard problem, so that a single advance against lattices would not break everything at once.
+\end{itemize}

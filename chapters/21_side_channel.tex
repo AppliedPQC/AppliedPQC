@@ -1,10 +1,435 @@
 \chapter{Side-Channel Security}
+\label{ch:sidechannel}
+\chaptermark{Side-Channel Security}
 
-\begin{quote}
-\textit{This chapter is planned but not yet written.}
-\end{quote}
+\section{Learning objectives}
 
-\section{Purpose}
-Practical deployments must resist implementation attacks as well as mathematical attacks.
-\section{Key ideas}
-This chapter highlights timing attacks, constant-time programming, and the importance of implementation security in PQC.
+Every earlier chapter of this book argued about security \emph{on paper}: a lattice
+problem is hard, a forgery reduces to Module-SIS, a distinguisher would break LWE.
+That kind of security is necessary. It is also not sufficient. A scheme does not run
+on paper; it runs on a physical device that takes time, draws current, radiates,
+and can be poked with a laser. If any of those measurable, physical quantities
+depends on the secret key, an attacker can read the key off the machine without ever
+touching the mathematics. This closing chapter is the book's final warning:
+\emph{the math can be perfect and the deployment still broken.}
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item explain why provable, mathematical security is necessary but not sufficient,
+        and say precisely what a \emph{side channel} is;
+  \item name the main families of implementation attacks -- timing, cache, power,
+        electromagnetic, and fault -- and state what each one actually observes;
+  \item state the rules of \emph{constant-time} programming and write a constant-time
+        conditional select and a constant-time comparison;
+  \item connect these ideas to concrete PQC design choices already met in this book:
+        CBD instead of Gaussian sampling (\ref{ch:cbd}), Falcon's floating-point
+        sampler (\ref{ch:fndsa}), ML-DSA's deterministic abort loop (\ref{ch:mldsa}),
+        and the implicit rejection built into ML-KEM decapsulation (\ref{ch:fips203});
+  \item describe the higher-order countermeasures -- masking and blinding -- and
+        weigh their cost against constant-time coding.
+\end{enumerate}
+
+\paragraph{Why this chapter matters.}
+Shor's algorithm, the threat that motivated the whole book, attacks the
+\emph{structure} of the problem: it factors, it computes discrete logs. The schemes
+we built defeat it because no efficient quantum algorithm is known for the lattice
+and code problems underneath. A side-channel attack does something completely
+different. It ignores the problem structure and instead measures the execution:
+how long a decryption took, which cache lines it touched, how much power the chip
+drew on each clock cycle. These attacks are often far \emph{cheaper} than the
+mathematical ones -- minutes with an oscilloscope rather than aeons on a quantum
+computer -- which is exactly why they matter. The concern is not hypothetical for
+PQC: several of the schemes in this book have delicate implementation requirements,
+and those requirements shaped the standards. It is why ML-KEM samples noise with CBD
+rather than a Gaussian (\ref{ch:cbd}), and why Falcon is the hardest of the three
+signature standards to deploy safely (\ref{ch:fndsa}).
+
+\section{The attack families}
+
+A side channel is any observable output of the computation other than the intended
+result. Below are the families a PQC implementer must keep in mind. Each is sketched
+in one paragraph; the common thread is that all of them turn a physical measurement
+into information about the secret.
+
+\paragraph{Timing attacks.}
+The total time a computation takes depends on the data it processed. If that data
+includes the secret, the running time leaks it. The textbook example is a
+comparison that returns as soon as it finds the first differing byte: an attacker
+who can vary an input and time the response learns the secret one byte at a time.
+Timing leaks are the most dangerous class because they need no special equipment
+and can often be measured \emph{remotely}, over a network.
+
+\paragraph{Cache attacks.}
+Modern CPUs cache recently used memory. If a program indexes a table at a
+secret-dependent position -- as many Gaussian samplers and cipher S-boxes do -- then
+which table entries land in the cache depends on the secret. An attacker sharing the
+same machine (a co-resident cloud tenant, say) does not see the values, but can time
+its \emph{own} memory accesses to learn which cache lines were touched, using
+techniques such as Flush+Reload or Prime+Probe. Secret-dependent memory addresses are
+therefore just as leaky as secret-dependent timing.
+
+\paragraph{Power analysis.}
+The instantaneous power a chip consumes correlates with the operations it performs
+and the bits it moves. \emph{Simple power analysis} (SPA) reads a single trace to
+recognize the sequence of operations -- for instance, telling a multiply from a
+square in a modular exponentiation, which spells out exponent bits. \emph{Differential
+power analysis} (DPA) is stronger: it collects many traces and correlates them,
+sample by sample, against a hypothesis about a few key bits, pulling the secret out
+even when it sits far below the measurement noise.
+
+\paragraph{Electromagnetic analysis.}
+A switching transistor radiates. The same information that power analysis reads from
+the supply line can be read from the electromagnetic emanations near the chip, often
+with a small probe and no electrical contact. EM analysis can also be spatially
+localized to a single region of the die, which sometimes defeats countermeasures that
+only balance the \emph{global} power draw.
+
+\paragraph{Fault injection.}
+The attacks above are passive: they observe. Fault injection is active. By glitching
+the supply voltage or clock, or firing a laser or EM pulse at the die, an attacker
+induces a controlled error -- a skipped instruction, a flipped bit, a corrupted
+value -- and exploits the faulty output. Signature schemes are especially fragile
+here: a single faulty signature can, through differential fault analysis, reveal the
+signing key, and skipping a bounds check can leak the mask in a scheme like ML-DSA.
+
+\section{Constant-time programming}
+
+The central software defense against the passive families -- timing, cache, power,
+EM -- is \textbf{constant-time programming}. The name is slightly misleading: the
+goal is not that the code always takes the same wall-clock time, but that its timing,
+memory-access pattern, and operation sequence \emph{do not depend on secret data}.
+Variation that depends only on public data (the length of a message, the public
+iteration count of a loop) is fine.
+
+The discipline reduces to three rules:
+
+\begin{itemize}
+  \item \textbf{No secret-dependent branches.} An \texttt{if} whose condition
+        involves a secret takes one path or another, and the two paths almost never
+        cost the same. Replace the branch with straight-line arithmetic.
+  \item \textbf{No secret-dependent memory indices.} Never use a secret as an array
+        index or a jump target. A table lookup at a secret address leaks through the
+        cache even if the code has no branches at all.
+  \item \textbf{Avoid variable-time instructions on secret data.} Division and modulo,
+        and on some processors even multiplication, take a data-dependent number of
+        cycles. Early-exit library routines such as \texttt{memcmp} are the same
+        hazard in disguise. Use fixed-cost operations, or reduce with Montgomery/Barrett
+        arithmetic instead of a hardware divide.
+\end{itemize}
+
+Figure~\ref{fig:ct-branch} contrasts the hazard with its fix. On the left, a secret
+bit chooses between a short path and a long path; the difference in duration is the
+leak. On the right, the same choice is computed with a mask so that every input runs
+the identical sequence of operations.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  % ---- Left: leaky secret-dependent branch ----
+  \node[font=\small\bfseries] at (3.1,4.9) {Secret-dependent branch (leaks)};
+  \node[flownode] (inA) at (0,3.3) {input};
+  \node[diamond, draw=pqcorange, thick, fill=white, align=center,
+        inner sep=1pt] (d) at (1.9,3.3) {secret\\bit?};
+  \node[flownode] (t1) at (4.1,4.2) {op};
+  \node[flownode] (b1) at (3.3,2.3) {op};
+  \node[flownode] (b2) at (4.5,2.3) {op};
+  \node[flownode] (b3) at (5.7,2.3) {op};
+  \node[keynode]  (outA) at (7.2,3.3) {result};
+  \node[font=\tiny, pqcteal] at (2.7,4.15) {bit $=1$};
+  \node[font=\tiny, pqcorange] at (2.55,2.62) {bit $=0$};
+  \draw[flowarrow] (inA) -- (d);
+  \draw[flowarrow] (d) |- (t1);
+  \draw[flowarrow] (t1) -| (outA);
+  \draw[flowarrow] (d) |- (b1);
+  \draw[flowarrow] (b1) -- (b2);
+  \draw[flowarrow] (b2) -- (b3);
+  \draw[flowarrow] (b3) -| (outA);
+  \node[font=\tiny, pqcorange, align=center] at (3.5,1.4)
+       {one path is short, the other long:\\ duration reveals the secret bit};
+
+  % ---- Divider ----
+  \draw[pqcgray!40, dashed] (-0.9,0.7) -- (8.3,0.7);
+
+  % ---- Bottom: constant-time straight line ----
+  \node[font=\small\bfseries] at (3.1,0.1) {Constant-time (safe)};
+  \node[flownode] (c0) at (0,-1.1) {input};
+  \node[flownode] (c1) at (1.9,-1.1) {op};
+  \node[flownode] (c2) at (3.4,-1.1) {op};
+  \node[flownode] (c3) at (4.9,-1.1) {op};
+  \node[flownode] (c4) at (6.2,-1.1) {mask};
+  \node[keynode]  (c5) at (7.7,-1.1) {result};
+  \draw[flowarrow] (c0) -- (c1);
+  \draw[flowarrow] (c1) -- (c2);
+  \draw[flowarrow] (c2) -- (c3);
+  \draw[flowarrow] (c3) -- (c4);
+  \draw[flowarrow] (c4) -- (c5);
+  \node[font=\tiny, pqcteal, align=center] at (3.7,-2.0)
+       {every input runs the same operations:\\ duration is independent of the secret};
+\end{tikzpicture}
+\caption{Top: a branch on a secret bit takes a short or a long path, so the running
+time (and the power and cache trace) carries the secret. Bottom: the same conditional,
+computed as one fixed sequence of operations ending in a masked select. The result is
+identical, but nothing about the execution depends on the secret.}
+\label{fig:ct-branch}
+\end{figure}
+
+The workhorse that removes a secret branch is the \emph{constant-time select}. It
+turns the selector bit into an all-ones or all-zero \emph{mask} and uses that mask to
+blend the two candidate values with bitwise arithmetic, so both candidates are always
+computed and no branch is taken.
+
+\begin{algorithm}[H]
+\caption{\textsc{CTSelect} -- constant-time conditional select}
+\label{alg:ctselect}
+\begin{algorithmic}[1]
+\Require Selector bit $s \in \{0,1\}$; machine words $a$ and $b$
+\Ensure $a$ if $s=1$, else $b$ -- with no data-dependent branch
+\State $mask \gets -\,s$
+       \Comment{two's complement: all-ones word if $s=1$, all-zero if $s=0$}
+\State \Return $(a \mathbin{\&} mask) \mathbin{|} (b \mathbin{\&} \overline{mask})$
+       \Comment{$\overline{mask}$ is the bitwise complement of $mask$}
+\end{algorithmic}
+\end{algorithm}
+
+The trick is the mask $-s$: negating the bit $1$ in two's complement gives the
+all-ones word, and negating $0$ gives the all-zero word. When $s=1$ the first term
+passes $a$ and the second term is zeroed; when $s=0$ the roles swap. There is no
+branch and no secret-dependent address. The same masking idea gives a constant-time
+\emph{equality} test, \textsc{ct\_eq}, which must never return early: it accumulates
+the differences across \emph{all} bytes and only then collapses the result to a
+single bit.
+
+Listing~\ref{lst:ct-c} shows both patterns in C: the leaky branch, its masked
+replacement, and a no-early-exit comparison.
+
+\begin{lstlisting}[language=C,label=lst:ct-c,caption={Leaky versus constant-time patterns in C.}]
+#include <stdint.h>
+#include <stddef.h>
+
+/* LEAKY: the branch condition is a secret; the two paths differ */
+uint32_t leaky_select(int secret_bit, uint32_t a, uint32_t b) {
+    if (secret_bit)      /* timing/cache/power all reveal which way */
+        return a;
+    else
+        return b;
+}
+
+/* CONSTANT-TIME: no branch, no secret-dependent memory access */
+uint32_t ct_select(uint32_t secret_bit, uint32_t a, uint32_t b) {
+    uint32_t mask = -secret_bit;   /* 0xFFFFFFFF if 1, 0x00000000 if 0 */
+    return (a & mask) | (b & ~mask);
+}
+
+/* CONSTANT-TIME equality: 1 if equal, else 0, never exits early */
+uint32_t ct_eq(const uint8_t *x, const uint8_t *y, size_t n) {
+    uint8_t diff = 0;
+    for (size_t i = 0; i < n; i++)
+        diff |= x[i] ^ y[i];       /* fold every byte, no break */
+    /* top bit of (diff | -diff) is 1 iff diff != 0 */
+    uint32_t nz = ((uint32_t)diff | (0u - (uint32_t)diff)) >> 31;
+    return nz ^ 1u;                /* invert: equal -> 1 */
+}
+\end{lstlisting}
+
+\section{PQC-specific concerns}
+
+Constant-time discipline is general, but post-quantum schemes concentrate the risk in
+a few specific places. Each of the following ties back to a design choice made in an
+earlier chapter.
+
+\paragraph{Sampling: the reason CBD exists.}
+The noise in a lattice scheme must be sampled every time a key or ciphertext is made.
+A discrete \emph{Gaussian} sampler is the natural mathematical choice, but it is a
+side-channel minefield: it typically needs rejection loops (a secret-dependent number
+of iterations), table lookups (secret-dependent memory addresses), and floating-point
+arithmetic (variable-time on most hardware). This is exactly why ML-KEM and ML-DSA do
+not use a Gaussian at all. They sample from the \emph{centered binomial distribution}
+of Chapter~\ref{ch:cbd}, which is nothing but ``count the ones in two bit strings and
+subtract'': no rejection, no tables, no floating point, and no data-dependent branch.
+CBD is a security choice as much as an efficiency one. Falcon (\ref{ch:fndsa}) is the
+cautionary opposite. Its trapdoor sampler genuinely needs a high-precision Gaussian
+over the reals, computed with floating-point FFT, and making \emph{that} constant-time
+is the hardest implementation problem among all the standards -- if the sampler's
+timing or rounding leaks, the secret basis can be reconstructed. That difficulty,
+forward-referenced at the end of Chapter~\ref{ch:fndsa}, is this chapter: it is the
+single strongest reason Falcon is the most demanding of the three signature standards
+to deploy safely.
+
+\paragraph{Rejection sampling in ML-DSA.}
+ML-DSA signing (\ref{ch:mldsa}) also loops: it draws a fresh mask, forms the response
+$\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$, and \emph{aborts} to retry whenever
+$\mathbf{z}$ would leak the secret. The number of iterations is therefore variable --
+but it depends on the freshly sampled mask, not on the secret key, so the abort count
+is safe to reveal as public information. What must \emph{not} leak is the secret
+inside the rejected attempts. FIPS 204 helps here by deriving the per-signature
+randomness deterministically, as $\rho'' = H(K\,\|\,\mu)$ from the secret PRF key $K$
+and the message: signing becomes reproducible, and its timing profile is a function of
+public inputs rather than a fresh secret drawn on every call.
+
+\paragraph{Decapsulation and the Fujisaki--Okamoto transform.}
+The subtlest PQC side channel lives in KEM decapsulation. A raw lattice decryption can
+\emph{fail}, and whether it failed depends on the secret key and the (possibly
+attacker-chosen) ciphertext. If decapsulation ever behaved differently on success
+versus failure -- returned an error, took longer, or drew different power -- the
+attacker would gain a \emph{decryption-failure} or \emph{plaintext-checking} oracle,
+querying malformed ciphertexts and using the yes/no answers to peel the secret apart.
+The Fujisaki--Okamoto (FO) transform closes this door with \textbf{implicit
+rejection}. Decapsulation re-encrypts the recovered message and compares the result to
+the received ciphertext in constant time. On a match it returns the real shared key;
+on a mismatch it returns a \emph{pseudorandom} key derived from a secret seed and the
+ciphertext -- not an error. Both outcomes produce a key of identical form, and the
+final choice is a constant-time select, so the caller cannot tell success from
+failure. Figure~\ref{fig:fo-implicit} shows the flow.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node[flownode] (ct)   at (2,6.1) {ciphertext $ct$};
+  \node[flownode] (dec)  at (2,4.9) {$m' = \textsc{Decrypt}(sk, ct)$};
+  \node[flownode, align=center] (re) at (2,3.5)
+       {$(K',r) = G(m'\,\|\,h)$\\ $ct' = \textsc{Encrypt}(pk, m'; r)$};
+  \node[diamond, draw=pqcorange, thick, fill=white, align=center, inner sep=1pt]
+       (cmp) at (2,1.7) {$ct' = ct$\\ ?};
+  \node[flownode] (kreal) at (6.2,3.5) {real key $K'$};
+  \node[flownode, align=center] (kfake) at (6.2,0.4)
+       {$\bar K = J(z, ct)$\\ (pseudorandom)};
+  \node[flownode, align=center] (sel) at (6.2,1.9)
+       {\textsc{CTSelect}\\ $(\text{match},K',\bar K)$};
+  \node[keynode] (out) at (9.4,1.9) {shared key $K$};
+  \draw[flowarrow] (ct)  -- (dec);
+  \draw[flowarrow] (dec) -- (re);
+  \draw[flowarrow] (re)  -- (cmp);
+  \draw[flowarrow] (re.east) -- (kreal.west);
+  \draw[flowarrow] (kreal) -- (sel);
+  \draw[flowarrow] (kfake) -- (sel);
+  \draw[flowarrow] (cmp) -- node[above,font=\tiny,pqcgray]{match bit} (sel);
+  \draw[flowarrow] (sel) -- (out);
+  \node[font=\tiny, pqcgray, align=center] (zseed) at (3.7,0.4)
+       {$z$: secret\\ reject seed};
+  \draw[flowarrow, dashed] (zseed) -- (kfake.west);
+\end{tikzpicture}
+\caption{FO decapsulation with implicit rejection. The recovered message is
+re-encrypted and compared to the received ciphertext in constant time. A match yields
+the real key $K'$; a mismatch yields a pseudorandom key $\bar K = J(z,ct)$ derived
+from a secret seed $z$. Because the two outputs have identical form and the choice is
+a constant-time select, success and failure are indistinguishable to the caller -- no
+decryption-failure oracle exists.}
+\label{fig:fo-implicit}
+\end{figure}
+
+\paragraph{The NTT and polynomial arithmetic.}
+The number-theoretic transform and the modular polynomial arithmetic that surround it
+run on secret data on every operation. They must be constant-time too: the modular
+reductions after each butterfly should use fixed-cost Montgomery or Barrett reduction
+rather than a hardware division, and there must be no secret-dependent branch anywhere
+in the transform. This is usually easy to achieve -- the NTT is naturally
+straight-line -- but it is easy to spoil with a careless conditional subtraction that
+runs only ``when the coefficient is too large.''
+
+\section{Countermeasures beyond constant-time}
+
+Constant-time coding defeats attacks that read a \emph{single} execution: timing,
+cache, SPA. Differential power and EM analysis are stronger, because they average many
+traces and can pull out a secret that influences the power draw even when the control
+flow is perfectly uniform. Defeating those needs a further layer.
+
+\paragraph{Masking.}
+The main tool is \textbf{masking}: split every secret value into several random
+\emph{shares} whose combination (XOR, for Boolean masking; addition mod $q$, for
+arithmetic masking) equals the secret, and compute on the shares so that no single
+intermediate value in the whole computation ever equals, or correlates with, the
+secret. A first-order masking uses two shares and forces the attacker to combine
+measurements from two points at once; an order-$d$ masking uses $d+1$ shares. The
+security grows with $d$, but so does the cost -- the number of shares grows linearly
+while the number of secure operations and the fresh randomness they consume grow
+faster, so masking overhead is often several-fold and sometimes an order of magnitude.
+For lattice schemes the specific difficulty is that they mix \emph{Boolean} operations
+(hashing, comparison in the FO check) with \emph{arithmetic} operations (the NTT), and
+securely converting between Boolean and arithmetic masking is the expensive, delicate
+part.
+
+\paragraph{Blinding.}
+A lighter-weight relative is \textbf{blinding}: randomize the \emph{representation} of
+a computation without changing its result, so that traces do not line up across runs.
+One can add a random multiple of the modulus to a value before an operation, randomize
+the projective coordinates in an elliptic-curve step, or shuffle the order in which
+independent coefficients are processed so the attacker cannot know which sample in a
+trace corresponds to which secret element. Blinding is cheaper than full masking but
+weaker; the two are often combined.
+
+\paragraph{Cost and benefit.}
+None of this is free, and none of it is always necessary. A server behind a network,
+where an attacker can only measure timing remotely, needs constant-time code but rarely
+full masking. A smart card or an embedded key store, where the attacker holds the
+device and can wire up an oscilloscope, needs masking and fault countermeasures as
+well. The right level is a threat-model decision, not a fixed recipe -- but
+constant-time coding is the floor beneath all of it.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: assuming the compiler preserves your constant-time code.}
+An optimizing compiler is free to rewrite $(a \mathbin{\&} mask)\mathbin{|}(b
+\mathbin{\&}\overline{mask})$ back into a branch or a conditional move, or to
+short-circuit a masked comparison, if it decides that is faster. Constant-time
+behavior is a property of the emitted machine code, not of the source. It must be
+checked -- by reading the assembly, using verification tools, or barriers that stop the
+optimizer -- not assumed.
+
+\paragraph{Pitfall 2: confusing constant-time with constant wall-clock time.}
+Constant-time does not mean the code always runs for the same number of nanoseconds.
+It means no \emph{secret}-dependent variation. Variation that depends only on public
+data -- the length of a message, or the public number of ML-DSA aborts -- is perfectly
+acceptable. Chasing literally constant duration is both unnecessary and, on modern
+out-of-order CPUs, impossible.
+
+\paragraph{Pitfall 3: reporting a decapsulation failure.}
+Returning an error, or logging, or taking a fast path when lattice decryption fails,
+hands the attacker exactly the plaintext-checking oracle the FO transform was built to
+deny. Decapsulation must always run to completion and always return a key; use implicit
+rejection, never an error branch.
+
+\paragraph{Pitfall 4: comparing secrets with \texttt{memcmp}.}
+The standard library comparison returns as soon as it finds a differing byte, so its
+timing reveals how many leading bytes matched -- fatal for a MAC tag or the FO
+ciphertext check. Always use a no-early-exit comparison such as \textsc{ct\_eq}.
+
+\paragraph{Pitfall 5: masking that leaks anyway.}
+Two shares that are correct on paper still leak if the hardware or the compiler
+recombines them -- for example, if consecutive instructions write both shares to the
+same register or bus, or if masking is applied without fresh, independent randomness
+each run. Masking is only as good as the independence of its shares in the actual
+silicon.
+
+\section{Summary}
+
+This is the closing argument of the book, so it is worth stating plainly. The
+post-quantum mathematics we spent the previous chapters building is genuine: it
+defeats Shor's algorithm, and no efficient quantum attack on the underlying lattice
+and code problems is known. But that mathematics protects only the abstract scheme. A
+careless implementation can hand the very same secret to an attacker with an
+oscilloscope, a shared cache, or a laser -- an attack that costs minutes and dollars
+rather than a quantum computer.
+
+The defense is a discipline, not a gadget:
+
+\begin{itemize}
+  \item write \textbf{constant-time} code -- no secret-dependent branches, no
+        secret-dependent memory addresses, no variable-time instructions on secrets;
+  \item where the threat model includes physical access, add \textbf{masking} and
+        \textbf{fault} countermeasures on top;
+  \item verify the property in the emitted machine code, because the compiler does not
+        promise to preserve it.
+\end{itemize}
+
+And this is where the whole book closes the loop. The standards did not treat
+implementation security as an afterthought; they engineered for it. CBD was chosen
+over the Gaussian precisely because it is constant-time-friendly (\ref{ch:cbd});
+ML-DSA derives its per-signature randomness deterministically so its abort loop leaks
+nothing exploitable (\ref{ch:mldsa}); ML-KEM decapsulation is built on implicit
+rejection so success and failure are indistinguishable (\ref{ch:fips203}); and
+Falcon's floating-point sampler stands as the standing reminder that when a scheme is
+hard to implement safely, that difficulty is itself a security cost (\ref{ch:fndsa}).
+Post-quantum security is not only a theorem to be proved. It is a property of the
+running system -- and keeping it there, all the way down to the machine code, is not
+optional.
