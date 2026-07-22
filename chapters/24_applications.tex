@@ -70,6 +70,7 @@ SLH-DSA-128s (FIPS 205) & 32 & $\approx 7856$ \\
 As of writing, hybrid key exchange has shipped in production browsers and servers -- for example Cloudflare's edge, Google Chrome, and OpenSSL 3.5 -- while post-quantum \emph{authentication} is rolling out more cautiously because of these sizes.
 
 \section{Verifying post-quantum signatures on-chain}
+\label{sec:onchain}
 A very different deployment target is the blockchain, where a smart contract may need to \emph{verify} a post-quantum signature -- for a quantum-resistant wallet, or a cross-chain bridge. Here the constraint is not bandwidth but \emph{gas}: every operation the Ethereum Virtual Machine (EVM) executes costs money, and a lattice verifier does a great deal of modular arithmetic.
 
 The dominant cost is the NTT (Chapter~\ref{ch:ntt}) that ML-DSA and Falcon verification rely on. Hand-optimized implementations -- reported under the names \textbf{ETHDILITHIUM} and \textbf{ETHFALCON}, written at the EVM's low-level \texttt{Yul} layer -- have driven verification cost down by more than an order of magnitude, from roughly $20$ million gas to about $1.5$ million, largely by making the NTT cheap.
