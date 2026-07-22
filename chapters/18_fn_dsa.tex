@@ -1,5 +1,6 @@
 \chapter{Complete Implementation of FN-DSA (FIPS 206)}
 \chaptermark{FN-DSA (FIPS 206)}
+\label{ch:fndsa}
 
 \section{Learning objectives}
 
@@ -29,7 +30,7 @@ The difficulty that stalled lattice hash-and-sign for years was that a naive sho
 
 \section{The NTRU lattice and its trapdoor}
 
-Falcon works in the by-now-familiar ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$ with $n \in \{512, 1024\}$ and $q = 12289$. Key generation picks two \emph{short} secret polynomials $f, g \in R_q$ and publishes
+Falcon rests on the NTRU assumption introduced in Section~\ref{sec:ntru}. It works in the by-now-familiar ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$ with $n \in \{512, 1024\}$ and $q = 12289$. Key generation picks two \emph{short} secret polynomials $f, g \in R_q$ and publishes
 \[
 h = g \cdot f^{-1} \pmod q.
 \]

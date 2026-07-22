@@ -135,9 +135,44 @@ The public key is $(\rho, \mathbf{t}_1)$; the secret key bundles $(\rho, K, \mat
 \end{algorithmic}
 \end{algorithm}
 
+\section{Interlude: the Fiat--Shamir transform}
+\label{sec:fiat-shamir}
+
+Before diving into ML-DSA's signing, it is worth isolating the general technique it uses, because it is a basic building block that appears far beyond this one scheme.
+
+An \textbf{identification scheme} lets a prover convince a verifier that it knows a secret $s$ (whose public image is $t$), without revealing $s$. It is a three-move conversation: the prover sends a \emph{commitment} $w$; the verifier replies with a random \emph{challenge} $c$; the prover sends a \emph{response} $z$ that only someone knowing $s$ could produce, and the verifier checks a relation among $(w,c,z,t)$. If the response is properly randomized, the transcript reveals nothing about $s$.
+
+The \textbf{Fiat--Shamir transform} turns this interactive protocol into a signature by \emph{removing the verifier}. Instead of waiting for a random challenge, the prover computes the challenge itself as a hash of the commitment together with the message:
+\[
+c = H(w \,\|\, m).
+\]
+Because $H$ behaves like an unpredictable random function, the prover cannot steer $c$ to its advantage; and because $c$ depends on $m$, the whole transcript is bound to that message -- it \emph{is} a signature on $m$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\scriptsize]
+  \node[font=\small\bfseries] at (1.5,3.5) {Interactive identification};
+  \node[flownode] (P) at (0,2.9) {Prover};
+  \node[flownode] (V) at (3,2.9) {Verifier};
+  \draw[pqcgray!45, dashed] (0,2.5) -- (0,0.1);
+  \draw[pqcgray!45, dashed] (3,2.5) -- (3,0.1);
+  \draw[flowarrow] (0,2.0) -- node[above]{commitment $w$} (3,2.0);
+  \draw[flowarrow] (3,1.35) -- node[above]{random $c$} (0,1.35);
+  \draw[flowarrow] (0,0.7) -- node[above]{response $z$} (3,0.7);
+  \node[pqcteal] at (3,0.25) {check};
+  \node[pqcorange, font=\Large] at (4.7,1.6) {$\Rightarrow$};
+  \node[font=\small\bfseries] at (8.2,3.5) {Non-interactive (Fiat--Shamir)};
+  \node[flownode, align=center] (P2) at (8.2,2.3) {Prover computes $w$,\\then $c=H(w\,\|\,m)$ itself};
+  \node[keynode] (sig) at (8.2,1.0) {signature $\sigma=(c,z)$};
+  \draw[flowarrow] (P2) -- (sig);
+\end{tikzpicture}
+\caption{The Fiat--Shamir transform. On the left, an interactive identification protocol: three messages, with the verifier supplying a fresh random challenge $c$. On the right, the same transcript made non-interactive by having the prover compute $c=H(w\,\|\,m)$ itself -- the hash plays the role of the verifier, and binding it to the message $m$ turns the transcript into a signature. This recipe underlies many signature schemes; ML-DSA instantiates it with module lattices.}
+\label{fig:fiat-shamir}
+\end{figure}
+
 \section{The signing idea: commitment, challenge, response}
 
-Signing is a three-move identification transcript made non-interactive by the Fiat--Shamir transform. Informally:
+Signing instantiates exactly that identification transcript, with the module-lattice objects playing the roles of commitment, challenge, and response:
 
 \begin{enumerate}
   \item \textbf{Commit.} Sample a random short masking vector $\mathbf{y}$ and form $\mathbf{w} = A\mathbf{y}$.

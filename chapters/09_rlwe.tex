@@ -229,6 +229,33 @@ Practical deployment & uncommon & widespread \\
 
 A classic interview question is: why is Kyber not pure RLWE? The answer is that Kyber uses a vector of polynomials rather than a single polynomial. In other words, the secret is not just one ring element but a module element over the ring. That is the origin of Module-LWE, which we will study next.
 
+\section{A sibling assumption: NTRU}
+\label{sec:ntru}
+
+RLWE is not the only way to build a hard problem inside the ring $R_q$. An older construction, \textbf{NTRU} (from 1996, predating LWE), lives in the same ring but hides its secret differently. Instead of the additive-noise equation $b = a s + e$, NTRU picks \emph{two} short secret polynomials $f, g \in R_q$ (with $f$ invertible) and publishes a single quotient:
+\[
+h = g \cdot f^{-1} \pmod q.
+\]
+The \textbf{NTRU assumption} is that $h$ looks like a uniformly random ring element, and that recovering the short pair $(f,g)$ from $h$ is hard.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+f = S([1,-1,0,1,0,0,-1,0])   # short
+g = S([0,1,-1,0,1,0,0,-1])   # short
+h = g * f^(-1)               # public key: looks random
+print(h)
+\end{lstlisting}
+
+There is an equivalent lattice picture, and it is exactly the good-basis/bad-basis story of Part~\ref{part:lattices}. The \emph{NTRU lattice}
+\[
+\Lambda = \{ (u,v) \in R_q^2 : u + v\,h \equiv 0 \pmod q \}
+\]
+contains the short vector $(g, -f)$, because $g - f\,h = g - f\,(g/f) = 0$. From $h$ alone one can only write down a \emph{bad} (long) basis of $\Lambda$; the short pair $(f,g)$ is a \emph{good} basis. Recovering it is a shortest-vector problem in $\Lambda$.
+
+So RLWE and NTRU are two siblings in the same ring: RLWE hides its secret in additive noise, NTRU hides two short polynomials inside a quotient, and both reduce to finding short vectors in a structured lattice. We single NTRU out here because the Falcon signature (FIPS 206, Chapter~\ref{ch:fndsa}) is built entirely on it.
+
 \section{Summary}
 
 The central idea is simple:
