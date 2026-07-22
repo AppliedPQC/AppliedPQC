@@ -1,0 +1,336 @@
+\chapter{SageMath Basics for Post-Quantum Cryptography}
+
+\section{Why this chapter matters}
+This chapter is not meant to teach SageMath in isolation. Its purpose is to build a small experimental laboratory for post-quantum cryptography. Later chapters on LWE, RLWE, Kyber, Dilithium, McEliece, and lattice attacks all depend on the objects introduced here.
+
+\section{Learning goals}
+After finishing this chapter, you should be able to:
+
+\begin{itemize}
+  \item create integers, rationals, reals, complex numbers, finite fields, vectors, matrices, and polynomials in SageMath;
+  \item distinguish Sage objects from ordinary Python values;
+  \item express algebraic structures such as $\mathbb{F}_q$, $R_q = \mathbb{Z}_q[x]/(f(x))$, and $Ax=b$ in Sage;
+  \item run small experiments that foreshadow later cryptographic constructions.
+\end{itemize}
+
+Every algebraic object used later in the book is a specialization of a small handful of number systems. Figure~\ref{fig:number-systems} lays out that map before we start building each piece in Sage.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm and 9mm]
+  \node[flownode] (zz) {$\mathbb{Z}$\\[-2pt]\scriptsize \texttt{ZZ}};
+  \node[flownode, right=of zz] (qq) {$\mathbb{Q}$\\[-2pt]\scriptsize \texttt{QQ}};
+  \node[flownode, right=of qq] (rc) {$\mathbb{R}/\mathbb{C}$\\[-2pt]\scriptsize \texttt{RR/CC}};
+  \node[flownode, below=of zz] (gf) {$\mathrm{GF}(q)$\\[-2pt]\scriptsize finite field};
+  \node[flownode, below left=15mm and 6mm of gf] (vecs) {Vectors/Matrices\\[-2pt]\scriptsize over $\mathrm{GF}(q)$};
+  \node[flownode, below right=15mm and 6mm of gf] (rq) {$R_q=\mathrm{GF}(q)[x]/(f(x))$};
+  \draw[flowarrow] (zz) -- (qq);
+  \draw[flowarrow] (zz) -- (rc);
+  \draw[flowarrow] (zz) -- (gf);
+  \draw[flowarrow] (gf) -- (vecs);
+  \draw[flowarrow] (gf) -- (rq);
+\end{tikzpicture}
+\caption{The map of algebraic objects this book builds on. Ordinary integers $\mathbb{Z}$ extend to fractions $\mathbb{Q}$ and to $\mathbb{R}/\mathbb{C}$ for numerical and Fourier-style reasoning, but the object cryptography actually computes with is the finite field $\mathrm{GF}(q)$, obtained by reducing $\mathbb{Z}$ modulo a prime $q$. Everything in later chapters -- vectors and matrices for LWE, and the quotient ring $R_q$ for RLWE and Kyber -- is built on top of $\mathrm{GF}(q)$.}
+\label{fig:number-systems}
+\end{figure}
+
+\section{Installing SageMath}
+There are two practical ways to begin.
+
+\subsection{Option 1: Docker}
+A convenient approach is to start SageMath from a container:
+
+\begin{lstlisting}[language=Python]
+docker run -it sagemath/sagemath sage
+\end{lstlisting}
+
+Once the shell starts, you can enter Sage commands directly.
+
+\subsection{Option 2: Local installation}
+On Ubuntu, a typical installation command is:
+
+\begin{lstlisting}[language=Python]
+sudo apt install sagemath
+\end{lstlisting}
+
+On macOS, one may use:
+
+\begin{lstlisting}[language=Python]
+brew install sage
+\end{lstlisting}
+
+\subsection{Notebook workflow}
+For experiments and exploratory work, a notebook interface is often most convenient:
+
+\begin{lstlisting}[language=Python]
+sage -n jupyter
+\end{lstlisting}
+
+Then open the displayed local URL in a browser.
+
+\section{SageMath and Python}
+SageMath is built on top of Python, but it adds richer mathematical types and objects. A plain Python integer and a Sage integer are not the same thing.
+
+\begin{lstlisting}[language=Python]
+a = 3
+b = 4
+a + b
+\end{lstlisting}
+
+In Python, the result is an ordinary integer. In Sage, the corresponding object may carry algebraic meaning.
+
+\begin{lstlisting}[language=Python]
+a = Integer(3)
+b = Integer(4)
+a + b
+\end{lstlisting}
+
+To inspect the type, use:
+
+\begin{lstlisting}[language=Python]
+type(a)
+\end{lstlisting}
+
+This matters in cryptography because the symbol $3$ may represent an ordinary integer in one context, but a field element in another. For example, $3 \in \mathrm{GF}(7)$ is not the same object as the integer $3$ in $\mathbb{Z}$.
+
+\section{Basic number systems}
+SageMath provides several standard number domains that are useful in later cryptographic work.
+
+\subsection{Integers $\mathbb{Z}$}
+The integer ring is available as \texttt{ZZ}.
+
+\begin{lstlisting}[language=Python]
+ZZ
+\end{lstlisting}
+
+You can create integers explicitly:
+
+\begin{lstlisting}[language=Python]
+a = ZZ(10)
+a
+\end{lstlisting}
+
+Basic arithmetic works as expected:
+
+\begin{lstlisting}[language=Python]
+a = ZZ(10)
+b = ZZ(3)
+a + b
+\end{lstlisting}
+
+Division behaves more carefully than in Python because Sage keeps symbolic and exact arithmetic whenever possible:
+
+\begin{lstlisting}[language=Python]
+10/3
+\end{lstlisting}
+
+The result is the rational number $\frac{10}{3}$. Integer division is available through:
+
+\begin{lstlisting}[language=Python]
+10//3
+\end{lstlisting}
+
+and modular arithmetic through:
+
+\begin{lstlisting}[language=Python]
+10 % 3
+\end{lstlisting}
+
+\subsection{Rationals $\mathbb{Q}$}
+The rational field is \texttt{QQ}.
+
+\begin{lstlisting}[language=Python]
+a = QQ(1)/3
+a
+\end{lstlisting}
+
+This is useful because many lattice algorithms, such as LLL and Gram--Schmidt-style computations, work naturally over rational numbers.
+
+\subsection{Reals $\mathbb{R}$ and complexes $\mathbb{C}$}
+SageMath also supports real and complex domains.
+
+\begin{lstlisting}[language=Python]
+RR
+CC
+\end{lstlisting}
+
+For example:
+
+\begin{lstlisting}[language=Python]
+sqrt(2)
+RR(sqrt(2))
+CC(1 + 2*I)
+\end{lstlisting}
+
+These domains become relevant later when discussing numerical methods, Fourier-style transforms, and related implementation ideas.
+
+\section{Finite fields}
+Finite fields are among the most important structures in modern cryptography. A finite field is usually written as $\mathrm{GF}(q)$ or $\mathbb{F}_q$.
+
+\subsection{Creating a finite field}
+For example, the field with seven elements is:
+
+\begin{lstlisting}[language=Python]
+F = GF(7)
+F
+\end{lstlisting}
+
+Elements are created by coercing values into the field:
+
+\begin{lstlisting}[language=Python]
+a = F(3)
+a
+\end{lstlisting}
+
+Arithmetic is performed modulo the prime:
+
+\begin{lstlisting}[language=Python]
+a = F(6)
+a + F(3)
+\end{lstlisting}
+
+The result is $2$, because $6 + 3 = 9 \equiv 2 \pmod{7}$.
+
+\subsection{Inverses}
+In cryptography, inverses appear constantly. For a field element $a$, the inverse $a^{-1}$ satisfies $a a^{-1} = 1$.
+
+\begin{lstlisting}[language=Python]
+a = F(3)
+a.inverse()
+\end{lstlisting}
+
+Since $3 \cdot 5 = 15 \equiv 1 \pmod{7}$, the inverse is $5$.
+
+Under the hood, \texttt{a.inverse()} does not search through all field elements; it runs the extended Euclidean algorithm, which computes $\gcd(a,q)$ while simultaneously tracking the coefficients of a Bézout identity $as+tq=\gcd(a,q)$, so that when $\gcd(a,q)=1$ the coefficient $s$ is exactly $a^{-1} \bmod q$.
+
+\begin{algorithm}[H]
+\caption{Extended Euclidean Algorithm for Modular Inverse}
+\label{alg:ext-euclid}
+\begin{algorithmic}[1]
+\Require Integer $a$ with $1 \le a < q$; modulus $q$ with $\gcd(a,q)=1$
+\Ensure $a^{-1} \bmod q$, the unique $x \in \{0,\dots,q-1\}$ with $ax \equiv 1 \pmod{q}$
+\State $(r_0, r_1) \gets (q, a)$
+\State $(s_0, s_1) \gets (0, 1)$ \Comment{invariant: $a\, s_i \equiv r_i \pmod q$ at every step}
+\While{$r_1 \neq 0$}
+    \State $t \gets \lfloor r_0 / r_1 \rfloor$
+    \State $(r_0, r_1) \gets (r_1,\ r_0 - t\, r_1)$
+    \State $(s_0, s_1) \gets (s_1,\ s_0 - t\, s_1)$
+\EndWhile
+\State \Return $s_0 \bmod q$ \Comment{$r_0=\gcd(a,q)=1$, so $a\,s_0 \equiv 1 \pmod q$}
+\end{algorithmic}
+\end{algorithm}
+
+\section{Linear algebra over a finite field}
+Finite-field linear algebra is the starting point for many lattice-based constructions.
+
+\begin{lstlisting}[language=Python]
+F = GF(7)
+A = Matrix(F, [[1, 2], [3, 4]])
+A
+\end{lstlisting}
+
+The inverse can be computed as:
+
+\begin{lstlisting}[language=Python]
+A.inverse()
+\end{lstlisting}
+
+and one can verify the identity matrix:
+
+\begin{lstlisting}[language=Python]
+A * A.inverse()
+\end{lstlisting}
+
+This is the algebraic setting behind equations such as $A s + e = b$, which will appear later in the study of LWE.
+
+\section{Vectors and matrices}
+Vectors are convenient for representing secret values and noise terms.
+
+\begin{lstlisting}[language=Python]
+v = vector(GF(7), [1, 2, 3])
+v
+\end{lstlisting}
+
+Matrix-vector multiplication is then straightforward:
+
+\begin{lstlisting}[language=Python]
+A * v
+\end{lstlisting}
+
+\section{Polynomial rings}
+Polynomial rings are essential for the ring-based versions of lattice problems, especially RLWE and related constructions.
+
+\subsection{Building a polynomial ring}
+
+\begin{lstlisting}[language=Python]
+F = GF(7)
+R.<x> = PolynomialRing(F)
+\end{lstlisting}
+
+Now $x$ is a formal variable in the ring.
+
+\begin{lstlisting}[language=Python]
+f = x^3 + 2*x + 1
+f
+\end{lstlisting}
+
+Addition and multiplication are performed in the usual algebraic way:
+
+\begin{lstlisting}[language=Python]
+f + f
+f * f
+\end{lstlisting}
+
+\subsection{Quotient rings}
+A quotient ring is created by imposing a polynomial relation. For example:
+
+\begin{lstlisting}[language=Python]
+S.<x> = QuotientRing(R, R.ideal(x^3 + 1))
+\end{lstlisting}
+
+In this quotient, the relation $x^3 = -1$ holds. This idea is closely related to the ring structure used in Kyber, where one often works in a ring of the form
+
+\[
+R_q = \mathbb{Z}_q[x]/(x^{256}+1).
+\]
+
+\section{A first cryptographic experiment}
+As a first experiment, we can verify the behavior of modular inverses.
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+for i in range(1, 17):
+    a = F(i)
+    print(i, a.inverse() * a)
+\end{lstlisting}
+
+Every value should evaluate to $1$ in the field.
+
+\section{A first LWE-style example}
+To foreshadow later chapters, we can create a simple linear system over a finite field:
+
+\begin{lstlisting}[language=Python]
+q = 17
+F = GF(q)
+A = random_matrix(F, 3, 3)
+s = random_vector(F, 3)
+b = A * s
+A
+s
+b
+\end{lstlisting}
+
+This is the basic algebraic shape behind LWE before noise is introduced.
+
+\section{Exercises}
+Try to solve the following exercises on your own.
+
+\begin{enumerate}
+  \item Create $\mathrm{GF}(13)$ and compute the inverse of every nonzero element.
+  \item Create $R = \mathrm{GF}(17)[x]$ and compute $(x^2 + 3x + 1)^2$.
+  \item Create $\mathrm{GF}(17)[x]/(x^4 + 1)$ and verify that $x^4 = -1$.
+  \item Randomly generate $A \in \mathrm{GF}(17)^{4 \times 4}$ and verify that $A^{-1}A = I$.
+\end{enumerate}
+
+\section{Connection to the next chapters}
+The next chapter, \emph{Linear Algebra Foundations}, will deepen the linear-algebra viewpoint needed for lattice problems. After that, the polynomial viewpoint will be developed more fully in \emph{Polynomial Rings}. These two chapters prepare the ground for LWE, RLWE, and ultimately Kyber and Dilithium.

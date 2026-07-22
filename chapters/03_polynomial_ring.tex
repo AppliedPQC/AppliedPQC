@@ -1,0 +1,270 @@
+\chapter{Polynomial Rings}
+
+\section{Why this chapter matters}
+This chapter marks the transition from ordinary linear algebra to the algebraic structures used in modern post-quantum cryptography. If the previous chapter explained why LWE can be written as $As+e=b$, then this chapter explains why the same idea can be moved into polynomial rings and why that is useful for RLWE, Kyber, and Dilithium.
+
+\section{Learning goals}
+After reading this chapter, you should be able to:
+
+\begin{itemize}
+  \item understand why polynomials are useful for representing structured vectors;
+  \item perform addition and multiplication of polynomials in SageMath;
+  \item build polynomial rings and quotient rings;
+  \item understand why the ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$ is central to RLWE and Kyber.
+\end{itemize}
+
+\section{Why we need polynomials}
+A basic reason is efficiency. In LWE, a public matrix $A \in \mathbb{Z}_q^{n \times n}$ can be large. For example, if $n=512$, then the matrix has $512 \times 512 = 262144$ entries. Even with small coefficients, storing and manipulating such a matrix is expensive.
+
+The key insight behind RLWE is that some matrices are highly structured. A circulant matrix can be represented by a short list of coefficients, and that list is exactly what a polynomial encodes. In this way, a large structured matrix can be replaced by a much smaller algebraic object.
+
+\section{What is a polynomial?}
+A polynomial such as
+
+\[
+f(x)=3x^4+2x^2+5
+\]
+
+can be viewed as a list of coefficients:
+
+\[
+(5,0,2,0,3).
+\]
+
+That is, the polynomial is really a compact way to represent a vector of coefficients.
+
+\subsection{Sage experiment: creating a polynomial}
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+R.<x> = PolynomialRing(F)
+f = 3*x^4 + 2*x^2 + 5
+f
+\end{lstlisting}
+
+The output is
+
+\begin{lstlisting}[language=Python]
+3*x^4 + 2*x^2 + 5
+\end{lstlisting}
+
+Its degree is:
+
+\begin{lstlisting}[language=Python]
+f.degree()
+\end{lstlisting}
+
+and the coefficients can be inspected with:
+
+\begin{lstlisting}[language=Python]
+f.coefficients()
+\end{lstlisting}
+
+If you want the full coefficient list including zeros, use:
+
+\begin{lstlisting}[language=Python]
+f.list()
+\end{lstlisting}
+
+This is a useful bridge between the language of vectors and the language of polynomials.
+
+\section{Polynomial addition}
+Polynomial addition is the same idea as vector addition, but expressed in algebraic form. For example,
+
+\[
+(x^2+3) + (2x^2+x+5) = 3x^2+x+8.
+\]
+
+\subsection{Sage experiment}
+
+\begin{lstlisting}[language=Python]
+a = x^2 + 3
+b = 2*x^2 + x + 5
+a + b
+\end{lstlisting}
+
+\section{Polynomial multiplication}
+Multiplication is where the algebra becomes richer. For example,
+
+\[
+(x+1)(x+2)=x^2+3x+2.
+\]
+
+\subsection{Sage experiment}
+
+\begin{lstlisting}[language=Python]
+(x + 1) * (x + 2)
+\end{lstlisting}
+
+This operation is central in cryptography because many schemes involve products of polynomials rather than ordinary scalar operations.
+
+\section{Polynomial rings}
+The set of all polynomials with coefficients in a field is itself a ring. For example,
+
+\[
+\mathrm{GF}(17)[x]
+\]
+
+is the ring of polynomials over the finite field $\mathrm{GF}(17)$.
+
+\subsection{Sage experiment}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+R
+\end{lstlisting}
+
+This creates a univariate polynomial ring over $\mathrm{GF}(17)$.
+
+\section{Why quotient rings are needed}
+If we allow polynomials of arbitrarily high degree, the ring becomes too large for convenient manipulation. To make the structure finite and more practical, we impose a relation such as
+
+\[
+x^4 = -1.
+\]
+
+Then higher powers can be reduced back to lower ones. This leads to a quotient ring:
+
+\[
+\mathrm{GF}(17)[x]/(x^4+1).
+\]
+
+\subsection{Sage experiment}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+S.<y> = R.quotient(x^4 + 1)
+\end{lstlisting}
+
+Now the relation $y^4 = -1$ holds. In the field $\mathrm{GF}(17)$, the value $-1$ is represented by $16$, so the relation is exactly $y^4 = -1$.
+
+Check this directly:
+
+\begin{lstlisting}[language=Python]
+y^4
+\end{lstlisting}
+
+and then:
+
+\begin{lstlisting}[language=Python]
+y^5
+\end{lstlisting}
+
+The second result is consistent with the relation $y^5 = -y$.
+
+\section{Why Kyber uses $x^{256}+1$}
+A central design choice in RLWE-based systems is the use of a special polynomial modulus. In many modern schemes one works in a ring of the form
+
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1).
+\]
+
+The choice $x^{256}+1$ is not arbitrary. It is attractive because the polynomial is a cyclotomic polynomial, which has strong algebraic properties and supports efficient arithmetic. This is one reason it appears in systems such as Kyber.
+
+The relation $x^n=-1$ has a very concrete effect on the coefficient vector of a polynomial: multiplying by $x$ shifts every coefficient one slot to the right, and the coefficient that would fall off the top does not vanish -- it wraps back into slot $0$ with its sign flipped. Figure~\ref{fig:negacyclic-wrap} shows this for the small case $n=4$ already used above.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1, every node/.style={font=\small}]
+  \node[flownode, minimum width=14mm] (a0) at (0,0) {$c_0$};
+  \node[flownode, minimum width=14mm] (a1) at (2,0) {$c_1$};
+  \node[flownode, minimum width=14mm] (a2) at (4,0) {$c_2$};
+  \node[flownode, minimum width=14mm] (a3) at (6,0) {$c_3$};
+  \node[pqcgray, font=\scriptsize] at (0,-0.65) {slot $0$};
+  \node[pqcgray, font=\scriptsize] at (2,-0.65) {slot $1$};
+  \node[pqcgray, font=\scriptsize] at (4,-0.65) {slot $2$};
+  \node[pqcgray, font=\scriptsize] at (6,-0.65) {slot $3$};
+  \draw[flowarrow] (a0.east) -- (a1.west);
+  \draw[flowarrow] (a1.east) -- (a2.west);
+  \draw[flowarrow] (a2.east) -- (a3.west);
+  \draw[flowarrow, pqcorange, thick] (a3.north) to[out=60,in=120,looseness=1.3] node[above, midway, font=\scriptsize, pqcorange] {$\times(-1)$} (a0.north);
+\end{tikzpicture}
+\caption{Multiplying $c(x)=c_0+c_1x+c_2x^2+c_3x^3$ by $x$ inside $R_q=\mathbb{Z}_q[x]/(x^n+1)$ shifts every coefficient one slot to the right, shown here for $n=4$ (blue arrows). The coefficient that falls off the top does not simply reappear: it comes back into slot $0$ \emph{negated} (orange arrow), because the defining relation of the ring is $x^n=-1$. Concretely, $x\cdot c(x) = -c_3 + c_0x + c_1x^2 + c_2x^3$. This negacyclic wrap-around, rather than a plain cyclic shift, is the single most important structural fact about ring-based lattice cryptography, and it is exactly the sign flip implemented in Algorithm~\ref{alg:polymul-negacyclic}.}
+\label{fig:negacyclic-wrap}
+\end{figure}
+
+\section{Polynomials as cyclic convolution}
+A very important observation is that multiplication in a quotient ring often behaves like cyclic convolution. This means that the product of two polynomials can be seen as a wrapped version of ordinary convolution. This is precisely the phenomenon that makes fast transforms such as the FFT and NTT effective.
+
+Algorithm~\ref{alg:polymul-negacyclic} makes this precise: it is the direct schoolbook counterpart of Figure~\ref{fig:negacyclic-wrap}, where every product term that would land at degree $n$ or higher gets folded back into the result with the sign flip forced by $x^n=-1$.
+
+\begin{algorithm}[H]
+\caption{Polynomial Multiplication modulo $x^n+1$}
+\label{alg:polymul-negacyclic}
+\begin{algorithmic}[1]
+\Require Coefficient arrays $a_0,\dots,a_{n-1}$ and $b_0,\dots,b_{n-1}$ of $a(x),b(x)\in R_q=\mathbb{Z}_q[x]/(x^n+1)$
+\Ensure Coefficients $c_0,\dots,c_{n-1}$ of $c(x)=a(x)b(x)\bmod(x^n+1)$
+\State $c_0,\dots,c_{n-1} \gets 0,\dots,0$
+\For{$i = 0,\dots,n-1$}
+    \For{$j = 0,\dots,n-1$}
+        \State $k \gets i+j$
+        \If{$k < n$}
+            \State $c_k \gets c_k + a_i b_j$ \Comment{ordinary term, degree stays below $n$}
+        \Else
+            \State $c_{k-n} \gets c_{k-n} - a_i b_j$ \Comment{wraps past degree $n-1$: negated, since $x^n=-1$}
+        \EndIf
+    \EndFor
+\EndFor
+\State \Return $(c_0,\dots,c_{n-1}) \bmod q$
+\end{algorithmic}
+\end{algorithm}
+
+\section{RLWE and the relation to LWE}
+We can now see the transition clearly:
+
+\[
+\text{LWE: } As + e = b
+\]
+
+becomes
+
+\[
+\text{RLWE: } a(x)s(x) + e(x) = b(x).
+\]
+
+In this view, the matrix $A$ is replaced by a polynomial $a(x)$, the secret vector is replaced by a polynomial $s(x)$, and the error is also represented as a polynomial. This is the key reason RLWE can be seen as a structured version of LWE.
+
+\section{Experiments}
+
+\subsection{Experiment 1: random polynomials}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+R.random_element(degree=5)
+\end{lstlisting}
+
+\subsection{Experiment 2: verify the quotient relation}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+S.<y> = R.quotient(x^4 + 1)
+print(y^4)
+print(y^5)
+print(y^8)
+\end{lstlisting}
+
+\subsection{Experiment 3: observe the wrap-around effect}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+S.<y> = R.quotient(x^4 + 1)
+print((y^7 + y^6 + y^5 + y^4).lift())
+\end{lstlisting}
+
+\subsection{Experiment 4: polynomials as vectors}
+
+\begin{lstlisting}[language=Python]
+f = 3*x^4 + x^2 + 2
+f.list()
+\end{lstlisting}
+
+This shows that a polynomial can be interpreted as a coefficient vector, which is a very useful perspective for later implementation work.
+
+\section{Summary}
+This chapter introduced the central algebraic object behind RLWE and the ring-based view of modern post-quantum cryptography. The ring
+
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1)
+\]
+
+combines the ideas of finite fields, linear algebra, and polynomial arithmetic into a single framework. The next chapter, \emph{Lattices}, will explain why these algebraic structures are tied to hard geometric problems and why lattices are the natural next object to study.

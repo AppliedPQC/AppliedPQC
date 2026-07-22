@@ -1,0 +1,238 @@
+\chapter{Probability and Error Distribution}
+
+\section{What is a distribution?}
+
+Many textbooks write expressions such as
+\[
+e \leftarrow \chi,
+\]
+where the symbol $\chi$ is a probability distribution. In plain language, this means that the value $e$ is sampled randomly from a certain distribution.
+
+For example, when you roll a die, the outcome is one of
+\[
+\{1,2,3,4,5,6\},
+\]
+with each value appearing with a certain probability. This is a distribution.
+
+Formally, a distribution describes the probability of each possible outcome:
+\[
+\Pr(X=x).
+\]
+
+\section{Uniform distribution}
+
+The simplest distribution is the uniform distribution. For example, suppose the value is chosen uniformly from
+\[
+\{0,1,2,3\}.
+\]
+Then each element occurs with probability $1/4$.
+
+In a histogram, all bars have the same height. This is the easiest notion of randomness, but it is usually not suitable for LWE noise.
+
+If the noise were uniform over a very wide range, such as from $-100$ to $100$, then the resulting error would be too large for decryption to work reliably. In short, uniform noise is too wild.
+
+\section{Gaussian distribution}
+
+Many natural phenomena are approximately Gaussian. Examples include human height, measurement error, and random fluctuations around a mean. A Gaussian distribution is centered at zero and has a bell shape. The standard notation is
+\[
+N(0,\sigma^2),
+\]
+meaning that the mean is $0$ and the variance is $\sigma^2$.
+
+The parameter $\sigma$ controls the spread of the noise. A small $\sigma$ means that most samples are close to zero; a large $\sigma$ means that samples are more spread out.
+
+\section{Why the mean is often zero}
+
+In cryptographic noise models, the Gaussian is usually centered at zero. The reason is simple: noise should not systematically bias the system in one direction. If the error were biased, then the secret or the decrypted value might leak information.
+
+\section{Why we cannot use continuous Gaussian directly in LWE}
+
+The Gaussian distribution is a continuous distribution. It can produce real numbers such as
+\[
+0.1352,
+\quad -1.2398,
+\quad 2.8888.
+\]
+However, LWE is defined over a finite ring or finite field, typically modulo $q$. The coordinates of the error must be represented as integers modulo $q$.
+
+Therefore, we use a discrete version of the Gaussian distribution.
+
+\section{Discrete Gaussian}
+
+A discrete Gaussian assigns probabilities to a discrete set of integers, such as
+\[
+-3,-2,-1,0,1,2,3.
+\]
+The probabilities are larger near zero and smaller away from zero. A typical definition is
+\[
+\Pr(e=x) = \frac{e^{-x^2/(2\sigma^2)}}{Z},
+\]
+where $Z$ is a normalization constant ensuring that the total probability is $1$.
+
+This kind of distribution is important because it matches the mathematical structure of lattice-based cryptography and appears in many security proofs.
+
+\section{Why discrete Gaussian is so important}
+
+Discrete Gaussian sampling is central in Regev-style reductions and in the theoretical analysis of lattice problems. In many proofs, the Gaussian distribution is not just convenient; it is essential. If we replace it with something else, the reduction arguments may fail.
+
+\section{Why Kyber does not use Gaussian}
+
+A very common question is: why does Kyber not use Gaussian noise? The short answer is engineering.
+
+Discrete Gaussian sampling is expensive. In practice, implementations require methods such as:
+
+\begin{itemize}
+    \item cumulative distribution tables (CDT),
+    \item Knuth--Yao sampling,
+    \item Bernoulli sampling,
+    \item rejection sampling.
+\end{itemize}
+
+These methods are mathematically elegant but costly in software and hardware. They may also introduce side-channel concerns. As a result, practical schemes such as Kyber prefer a simpler distribution.
+
+\section{What is CBD?}
+
+Kyber uses a centered binomial distribution (CBD). The main idea is very simple.
+
+Take a small number of independent bits, for example $\eta$ bits. Count the number of ones in the first half and second half, then subtract them. The result is a small integer centered around zero. For example, if we sample $8$ bits and split them into two groups of $4$, then the difference of the two sums produces an integer in a small range. Repeating this many times gives a distribution that looks very much like a Gaussian.
+
+This is why CBD is practical: it is easy to implement, fast to sample, and sufficient for the security and correctness goals of the scheme.
+
+\section{Sage experiment: simulate CBD}
+
+A toy implementation is easy:
+
+\begin{lstlisting}[language=Python]
+import random
+
+
+def cbd(eta):
+    a = sum(random.randint(0, 1) for _ in range(eta))
+    b = sum(random.randint(0, 1) for _ in range(eta))
+    return a - b
+
+samples = [cbd(3) for _ in range(10000)]
+print(samples[:20])
+\end{lstlisting}
+
+If we plot the histogram, we observe that values near zero appear most often, while larger absolute values are rarer. This already resembles a bell-shaped distribution.
+
+Algorithm~\ref{alg:cbd-sample} states this simulation formally, for a general parameter $\eta$; it is exactly what the Sage code above computes for $\eta=3$. A later chapter revisits CBD sampling in the precise form used by FIPS 203.
+
+\begin{algorithm}[H]
+\caption{Sample from CBD($\eta$)}
+\label{alg:cbd-sample}
+\begin{algorithmic}[1]
+\Require Parameter $\eta \in \mathbb{Z}_{>0}$
+\Ensure A sample $e \in \{-\eta,\dots,\eta\}$ drawn from the centered binomial distribution
+\State Draw $2\eta$ independent uniform random bits $b_1,\dots,b_{2\eta} \in \{0,1\}$
+\State $a \gets \sum_{i=1}^{\eta} b_i$ \Comment{sum of the first half of the bits}
+\State $b \gets \sum_{i=\eta+1}^{2\eta} b_i$ \Comment{sum of the second half of the bits}
+\State \Return $a - b$
+\end{algorithmic}
+\end{algorithm}
+
+\section{What does $\sigma$ mean?}
+
+In the Gaussian model, the parameter $\sigma$ controls the magnitude of the error. If $\sigma=0.5$, then most errors are very small. If $\sigma=100$, then the noise is huge and the system becomes unstable. In practice, the design goal is to choose $\sigma$ large enough to hide the secret, but small enough that decryption still succeeds with high probability.
+
+\section{Tail bound}
+
+Gaussian distributions are theoretically unbounded, but in practice the probability of very large errors is tiny. When cryptographers talk about the tail of a distribution, they mean the probability of values far away from the center. A short tail is useful because it means that extreme errors are rare, which helps with correctness.
+
+\section{Noise growth}
+
+In later chapters, especially in RLWE and FHE, we will encounter the phrase \emph{noise growth}. This is because the error term grows when we add ciphertexts, multiply them, or perform more operations. Eventually, if the noise becomes too large, decryption fails. This is why noise management is one of the central practical challenges in modern cryptography.
+
+\section{Why cryptography likes Gaussian noise}
+
+Cryptography likes Gaussian noise for three main reasons.
+
+\begin{enumerate}
+    \item It is mathematically elegant and easy to reason about.
+    \item It fits naturally with lattice-based proofs and reductions.
+    \item It provides a strong theoretical connection to worst-case lattice hardness.
+\end{enumerate}
+
+In short, noise is not there just to make things random. It is used to create a balance between correctness and security.
+
+\begin{itemize}
+    \item If the noise is too small, the secret can be recovered more easily.
+    \item If the noise is too large, legitimate users cannot decrypt correctly.
+    \item The parameter choices in schemes such as $q$, $n$, $\eta$, and $\sigma$ are designed to balance these trade-offs.
+\end{itemize}
+
+\section{Summary}
+
+The chain of ideas in this chapter runs from the simplest possible randomness to the distribution that ML-KEM actually uses:
+\[
+\text{Uniform} \;\longrightarrow\; \text{Gaussian} \;\longrightarrow\; \text{Discrete Gaussian} \;\longrightarrow\; \text{Centered Binomial Distribution (CBD)}.
+\]
+Uniform noise is easy to sample but too wild for correct decryption; the (discrete) Gaussian is the theoretically convenient choice behind most security proofs; CBD is the practical compromise that Kyber ships, built from nothing more than sums of coin flips. Figure~\ref{fig:noise-shapes} compares the three shapes directly: the uniform histogram is flat, while both the discrete Gaussian and CBD($\eta=2$) already show the familiar bell shape, concentrated near zero.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar, bar width=5pt,
+    width=\linewidth, height=3.6cm,
+    ymin=0, ymax=0.42,
+    xtick={-3,-2,-1,0,1,2,3},
+    xlabel={$x$}, ylabel={probability},
+    label style={font=\scriptsize}, tick label style={font=\scriptsize},
+    axis lines=left, enlarge x limits=0.12,
+]
+\addplot[fill=pqcblue, draw=pqcblue] coordinates {
+  (-3,0.143) (-2,0.143) (-1,0.143) (0,0.143) (1,0.143) (2,0.143) (3,0.143)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Uniform}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar, bar width=5pt,
+    width=\linewidth, height=3.6cm,
+    ymin=0, ymax=0.42,
+    xtick={-3,-2,-1,0,1,2,3},
+    xlabel={$x$}, ylabel={probability},
+    label style={font=\scriptsize}, tick label style={font=\scriptsize},
+    axis lines=left, enlarge x limits=0.12,
+]
+\addplot[fill=pqcteal, draw=pqcteal] coordinates {
+  (-3,0.004) (-2,0.054) (-1,0.242) (0,0.399) (1,0.242) (2,0.054) (3,0.004)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Discrete Gaussian}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar, bar width=5pt,
+    width=\linewidth, height=3.6cm,
+    ymin=0, ymax=0.42,
+    xtick={-3,-2,-1,0,1,2,3},
+    xlabel={$x$}, ylabel={probability},
+    label style={font=\scriptsize}, tick label style={font=\scriptsize},
+    axis lines=left, enlarge x limits=0.12,
+]
+\addplot[fill=pqcorange, draw=pqcorange] coordinates {
+  (-2,0.0625) (-1,0.25) (0,0.375) (1,0.25) (2,0.0625)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{CBD($\eta=2$)}
+\end{subfigure}
+\caption{Three noise shapes over the same range $\{-3,\dots,3\}$. Uniform (left, blue) is flat: every value is equally likely, which is too wild for reliable decryption. Discrete Gaussian (middle, teal) is the theoretically convenient bell curve. CBD with $\eta=2$ (right, orange) is produced only by summing and subtracting a handful of random bits (Algorithm~\ref{alg:cbd-sample}), yet its shape already approximates the same bell curve.}
+\label{fig:noise-shapes}
+\end{figure}
+
+The central idea is that noise is not merely a random artifact. It is one of the main mechanisms that makes LWE and related systems both secure and decryptable.

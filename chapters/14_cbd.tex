@@ -1,0 +1,474 @@
+\chapter{Centered Binomial Distribution (CBD) -- Why Kyber does not use Gaussian}
+\chaptermark{Centered Binomial Distribution (CBD)}
+
+\section{A very important chapter}
+
+This chapter is one of the most underestimated chapters in the whole Kyber story.
+Many introductions to Kyber say only that\textit{ CBD is just counting a few bits}. That is true, but it misses the deeper point.
+The real story is that CBD is not merely a convenient trick. It is a design choice that connects lattice cryptography, implementation security, hardware efficiency, and standardization history.
+
+The central question is simple:
+
+\begin{quote}
+Why did NIST ultimately choose CBD instead of the more traditional discrete Gaussian for ML-KEM?
+\end{quote}
+
+By the end of this chapter, you should be able to explain what CBD is, why it is close to a Gaussian, what the parameter \(\eta\) means, how FIPS 203 Algorithm 2 works, and why CBD is so attractive for constant-time implementations.
+
+\section{Recall the LWE viewpoint}
+
+In LWE, the core object is noise:
+
+\[
+\mathbf{b}=A\mathbf{s}+\mathbf{e}.
+\]
+
+The security does not come from the matrix \(A\) alone, nor from the secret \(\mathbf{s}\) alone. The crucial ingredient is the noise vector \(\mathbf{e}\).
+
+In other words, the whole cryptographic hardness is tied to the fact that the error term hides the secret in a way that is hard to recover. A good sampling distribution for that error is therefore essential.
+
+\section{The main problem with Gaussian sampling}
+
+In the original theoretical LWE constructions, one often uses a discrete Gaussian distribution. A sample is drawn from a distribution of the form
+
+\[
+\Pr[X=x] \propto e^{-x^2/(2\sigma^2)}.
+\]
+
+This is mathematically elegant, but from an engineering point of view it is painful.
+
+The practical issue is that Gaussian sampling usually requires expensive operations:
+
+\begin{itemize}
+  \item computing exponentials;
+  \item comparing floating-point values;
+  \item rejection sampling;
+  \item repeated loops until a sample is accepted.
+\end{itemize}
+
+This is slow, especially in software. It is also more difficult to make constant-time.
+
+A very important side effect appears in implementation security. If a sampler uses rejection loops and branching, the running time may depend on the sampled value. This opens the door to timing attacks, where an attacker observes the timing pattern and tries to infer information about the hidden noise.
+
+For a cryptosystem designed for real-world deployment, this is a serious drawback.
+
+\section{Kyber's key idea}
+
+Kyber does not try to use the idealized Gaussian in the naive way.
+Instead, it asks a more practical question:
+
+\begin{quote}
+Can we construct a distribution that looks like a Gaussian, but is made only from small integers, bits, and simple arithmetic?
+\end{quote}
+
+The answer is yes, and that answer is CBD.
+
+CBD is simple, integer-only, and very friendly to constant-time implementation. It is much easier to deploy on hardware and software than a Gaussian sampler.
+
+\section{The simplest example}
+
+Let us begin with the smallest nontrivial case: \(\eta=2\).
+
+Suppose we sample four random bits:
+
+\begin{verbatim}
+1010
+\end{verbatim}
+
+Split them into two groups of two bits:
+
+\begin{verbatim}
+10 10
+\end{verbatim}
+
+Count the number of ones in each half:
+
+\begin{itemize}
+  \item first half: \(10 \Rightarrow 1\)
+  \item second half: \(10 \Rightarrow 1\)
+\end{itemize}
+
+Now subtract:
+
+\[
+1-1 = 0.
+\]
+
+This gives one sampled value.
+
+Now consider another example:
+
+\begin{verbatim}
+1110
+\end{verbatim}
+
+Then
+
+\begin{itemize}
+  \item first half: \(11 \Rightarrow 2\)
+  \item second half: \(10 \Rightarrow 1\)
+\end{itemize}
+
+and therefore
+
+\[
+2-1 = 1.
+\]
+
+Finally, take
+
+\begin{verbatim}
+0011
+\end{verbatim}
+
+Then
+
+\begin{itemize}
+  \item first half: \(00 \Rightarrow 0\)
+  \item second half: \(11 \Rightarrow 2\)
+\end{itemize}
+
+so
+
+\[
+0-2 = -2.
+\]
+
+Thus the possible values are
+
+\[
+-2,-1,0,1,2.
+\]
+
+\section{Why it is called centered}
+
+The key word in the name is \textit{centered}.
+
+In a large number of samples, the positive outcomes and negative outcomes balance out. For example, values such as \(-2\) and \(2\) are rare, while \(0\) is the most common. The distribution is centered around zero.
+
+In fact, the mean is exactly zero because the two halves contribute equally in expectation.
+
+So the distribution is centered around zero, and that is exactly what we need for LWE noise.
+
+\section{Why it becomes increasingly Gaussian-like}
+
+The beautiful mathematical reason is that each bit behaves like a Bernoulli random variable:
+
+\[
+B_i \in \{0,1\}, \qquad \Pr(B_i=0)=\Pr(B_i=1)=\frac{1}{2}.
+\]
+
+Now consider the sum of many such Bernoulli variables. By the central limit theorem, the sum of many independent Bernoulli variables becomes approximately Gaussian.
+
+CBD is built from exactly this phenomenon. It is not a crude heuristic. It is a discrete distribution that is mathematically close to a Gaussian because it is formed from the difference of two binomial counts.
+
+So the real logic is:
+
+\begin{quote}
+CBD is not merely \textit{trying} to look like Gaussian. It is a discrete construction whose shape naturally approaches a Gaussian-like bell curve.
+\end{quote}
+
+\section{What does \(\eta\) mean?}
+
+The parameter \(\eta\) controls the size of the sample.
+
+If \(\eta=2\), we use two bits in the first half and two bits in the second half.
+
+If \(\eta=3\), we use three bits in each half.
+
+In general, we define
+
+\[
+X = \sum_{i=1}^{\eta} B_i - \sum_{i=\eta+1}^{2\eta} B_i,
+\]
+
+where each \(B_i\) is a random bit.
+
+The resulting range is
+
+\[
+-\eta, -\eta+1, \dots, \eta.
+\]
+
+So larger \(\eta\) means larger noise magnitude and therefore a broader distribution.
+
+\section{Real ML-KEM parameter choices}
+
+In the actual ML-KEM parameter sets, the values of \(\eta_1\) and \(\eta_2\) are not arbitrary. They are chosen according to security and decryption failure requirements.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Parameter set & \(\eta_1\) & \(\eta_2\) \\
+\midrule
+ML-KEM-512  & 3 & 2 \\
+ML-KEM-768  & 2 & 2 \\
+ML-KEM-1024 & 2 & 2 \\
+\bottomrule
+\end{tabular}
+\caption{Typical CBD parameters used in ML-KEM.}
+\end{table}
+
+Here \(\eta_1\) is typically used for the secret distribution, while \(\eta_2\) is used for the encryption noise.
+
+The important point is that these choices are not simply \textit{make it larger for more security}. They are carefully tuned to balance security, correctness, and implementation efficiency.
+
+Figure~\ref{fig:cbd-pmf} plots the exact probability mass function for both values of $\eta$ that actually appear above, computed directly from $\Pr[\mathrm{CBD}(\eta)=k]=\binom{2\eta}{\eta+k}/4^{\eta}$.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=\textwidth, height=4cm,
+  ybar, bar width=10pt,
+  ymin=0, ymax=0.44,
+  xtick=data,
+  xlabel={$k$}, ylabel={$\Pr[X=k]$},
+  symbolic x coords={-2,-1,0,1,2},
+  label style={font=\scriptsize}, tick label style={font=\scriptsize},
+  ymajorgrids=true, major grid style={pqcgray!25},
+  axis lines*=left, enlarge x limits=0.15,
+]
+\addplot[fill=pqcblue, draw=pqcblue!70!black] coordinates {
+  (-2,0.0625) (-1,0.25) (0,0.375) (1,0.25) (2,0.0625)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{$\mathrm{CBD}(\eta=2)$}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=\textwidth, height=4cm,
+  ybar, bar width=7pt,
+  ymin=0, ymax=0.35,
+  xtick=data,
+  xlabel={$k$}, ylabel={$\Pr[X=k]$},
+  symbolic x coords={-3,-2,-1,0,1,2,3},
+  label style={font=\scriptsize}, tick label style={font=\scriptsize},
+  ymajorgrids=true, major grid style={pqcgray!25},
+  axis lines*=left, enlarge x limits=0.1,
+]
+\addplot[fill=pqcteal, draw=pqcteal!70!black] coordinates {
+  (-3,0.015625) (-2,0.09375) (-1,0.234375) (0,0.3125) (1,0.234375) (2,0.09375) (3,0.015625)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{$\mathrm{CBD}(\eta=3)$}
+\end{subfigure}
+\caption{Exact probability mass functions of the centered binomial distribution for the two $\eta$ values that appear in ML-KEM-512/768/1024 (table above), computed from $\Pr[\mathrm{CBD}(\eta)=k]=\binom{2\eta}{\eta+k}/4^{\eta}$: $\frac{1}{16},\frac{4}{16},\frac{6}{16},\frac{4}{16},\frac{1}{16}$ for $\eta=2$, and $\frac{1}{64},\frac{6}{64},\frac{15}{64},\frac{20}{64},\frac{15}{64},\frac{6}{64},\frac{1}{64}$ for $\eta=3$. Increasing $\eta$ from $2$ to $3$ widens and flattens the bell shape -- more of the probability mass moves away from $0$ -- at the cost of drawing twice as many random bits per coefficient.}
+\label{fig:cbd-pmf}
+\end{figure}
+
+\section{FIPS 203 Algorithm 2: what is happening?}
+
+In FIPS 203, the standard describes a sampling procedure that is essentially the CBD sampling operation.
+
+The high-level story is very simple:
+
+\begin{itemize}
+  \item input a bit string of length \(2\eta\);
+  \item split it into two groups of length \(\eta\);
+  \item count the number of ones in each group;
+  \item subtract the two counts.
+\end{itemize}
+
+So the procedure really is:
+
+\[
+\text{CBD}_{\eta}(x) = \sum_{i=0}^{\eta-1} x_i - \sum_{i=\eta}^{2\eta-1} x_i.
+\]
+
+In plain words: a short input bit string is converted into a small signed integer noise sample.
+
+That is exactly the operation that Kyber relies on in its practical implementation.
+
+Written out precisely, with exact bit indices instead of the informal ``split it into two groups'' description above, this is FIPS 203's Algorithm 2, \textsc{SamplePolyCBD}$_\eta$. It does not sample one coefficient at a time from a fresh bit string; it consumes one long byte array $B$ of $64\eta$ bytes and slices it into $256$ non-overlapping windows of $2\eta$ bits each, one window per output coefficient.
+
+\begin{algorithm}[H]
+\caption{SamplePolyCBD$_\eta$ (FIPS 203, Algorithm 2)}
+\label{alg:samplepolycbd}
+\begin{algorithmic}[1]
+\Require Byte array $B \in \{0,\dots,255\}^{64\eta}$
+\Ensure Polynomial $f \in \mathbb{Z}_q^{256}$ with coefficients $f_0,\dots,f_{255}$
+\State $b \gets \textsc{BytesToBits}(B)$ \Comment{$b[0],\dots,b[8\cdot 64\eta-1]$; only the first $2\eta\cdot 256$ bits are used}
+\For{$i = 0$ \textbf{to} $255$}
+    \State $x \gets \sum_{j=0}^{\eta-1} b[2i\eta + j]$ \Comment{ones in the first $\eta$-bit half of window $i$}
+    \State $y \gets \sum_{j=0}^{\eta-1} b[2i\eta + \eta + j]$ \Comment{ones in the second $\eta$-bit half of window $i$}
+    \State $f_i \gets (x - y) \bmod q$
+\EndFor
+\State \Return $f = (f_0,\dots,f_{255})$
+\end{algorithmic}
+\end{algorithm}
+
+Every coefficient $f_i$ therefore reads its own private $2\eta$-bit slice of $b$, starting at bit offset $2i\eta$: the first $\eta$ bits of the slice are counted into $x$, the next $\eta$ bits into $y$, and $f_i=x-y \bmod q$. For $i=0$ this is exactly the ``first half, second half, subtract'' recipe worked out by hand above; the only new content is the explicit offset $2i\eta$ that tells you, for every one of the $256$ coefficients, precisely which bits of the $64\eta$-byte array belong to it.
+
+\section{A simple Sage implementation}
+
+Here is a very small version in Python.
+
+\begin{lstlisting}[language=Python]
+from random import randint
+
+
+def cbd(eta):
+    a = 0
+    b = 0
+
+    for _ in range(eta):
+        a += randint(0, 1)
+
+    for _ in range(eta):
+        b += randint(0, 1)
+
+    return a - b
+\end{lstlisting}
+
+A quick test is:
+
+\begin{lstlisting}[language=Python]
+for _ in range(20):
+    print(cbd(2))
+\end{lstlisting}
+
+Typical output might be
+
+\begin{verbatim}
+0
+1
+-1
+0
+2
+-2
+\end{verbatim}
+
+\section{Histogram view}
+
+To understand CBD properly, one should look at the histogram.
+
+\begin{lstlisting}[language=Python]
+samples = [cbd(2) for _ in range(100000)]
+\end{lstlisting}
+
+The distribution tends to concentrate around zero and becomes increasingly bell-shaped. This is exactly why the distribution is often described as a discrete approximation to a Gaussian.
+
+A very simple visualization can be done with \texttt{matplotlib}:
+
+\begin{lstlisting}[language=Python]
+from collections import Counter
+import matplotlib.pyplot as plt
+
+samples = [cbd(2) for _ in range(100000)]
+cnt = Counter(samples)
+
+plt.bar(cnt.keys(), cnt.values())
+plt.show()
+\end{lstlisting}
+
+If we try \(\eta=2\), \(\eta=3\), and \(\eta=4\), we can see the shape become smoother and more symmetric.
+
+\section{Why the standard does not use \texttt{randint}}
+
+A subtle but important point is that the real FIPS implementations do not literally use Python's \texttt{randint(0, 1)} style calls.
+
+Instead, the standard uses a deterministic expansion from a seed through an extendable-output function such as SHAKE.
+
+In other words, the flow is more like:
+
+\begin{verbatim}
+seed
+    -> SHAKE
+    -> bit stream
+    -> CBD
+    -> noise sample
+\end{verbatim}
+
+This design enables reproducibility and makes it easier to integrate into cryptographic protocols.
+
+\section{Why CBD is constant-time friendly}
+
+One of the largest practical advantages of CBD is that it is easy to implement in constant time.
+
+The operations are only:
+
+\begin{itemize}
+  \item bit counts;
+  \item additions;
+  \item subtractions.
+\end{itemize}
+
+There is no expensive rejection loop and no data-dependent \texttt{if} branching in the basic procedure.
+
+This makes CBD much easier to protect against timing attacks than a Gaussian sampler with rejection steps.
+
+\section{A small upgrade to the toy Kyber code}
+
+If we had earlier written a toy sampler that generated small values from a simple routine, then we can now replace it with CBD-style sampling.
+
+For example, we might write something like:
+
+\begin{lstlisting}[language=Python]
+def small_poly(n):
+    coeff = []
+    for _ in range(n):
+        coeff.append(cbd(2))
+    return coeff
+\end{lstlisting}
+
+In this way, the toy Kyber code becomes much closer to the actual ML-KEM design.
+
+\section{Connecting the story to FIPS 203}
+
+At this point, the whole picture becomes much clearer.
+
+The real workflow looks like this:
+
+\begin{verbatim}
+Seed
+   |
+   v
+SHAKE / XOF
+   |
+   v
+Random Bits
+   |
+   v
+CBD
+   |
+   v
+Small Integer Noise
+   |
+   v
+Module-LWE
+\end{verbatim}
+
+So the noise is no longer a mysterious floating-point object. It is a small integer derived deterministically from a seed through a secure expansion procedure.
+
+\section{Summary}
+
+The important lesson of this chapter is that CBD is not just a convenience trick.
+It is a highly practical sampling method that combines four useful properties:
+
+\begin{enumerate}
+  \item It is approximately Gaussian-shaped.
+  \item It is simple to implement.
+  \item It is easy to make constant-time.
+  \item It is well suited to software and hardware deployment.
+\end{enumerate}
+
+This is why CBD became the standard choice in ML-KEM rather than the more theoretically traditional Gaussian sampler.
+
+In one sentence:
+
+\begin{quote}
+CBD delivers a noise distribution that is good enough for lattice-based security, easy to implement, and much easier to protect against side-channel attacks than Gaussian sampling.
+\end{quote}
+
+\section{Suggested next step}
+
+The next natural topic is the internal hash and expansion layer: why SHAKE and Keccak are so powerful, and how a short seed can generate a huge amount of pseudorandom material. That is the bridge from CBD to the actual FIPS 203 and FIPS 204 implementations.

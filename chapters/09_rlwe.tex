@@ -1,0 +1,256 @@
+\chapter{Ring-LWE (RLWE)}
+
+\section{The fatal problem of LWE}
+
+LWE is elegant in theory, but it is not practical in the naive form. Recall the basic equation
+\[
+b = A s + e.
+\]
+If the dimension is $n=1024$, then the matrix $A$ has roughly $1024\times 1024$ entries, which is more than one million coefficients. If each coefficient is stored in a few bytes, then the public key already becomes large. In practice, a straightforward LWE public key is far too costly for real deployment.
+
+This is why LWE is beautiful theoretically but unattractive in engineering. The algebra is simple, but the representation is bulky.
+
+\section{Observe the matrix structure}
+
+Consider a matrix of the form
+\[
+A =
+\begin{bmatrix}
+1 & 2 & 3 \\
+3 & 1 & 2 \\
+2 & 3 & 1
+\end{bmatrix}.
+\]
+
+This is not an arbitrary matrix. The second row is a cyclic shift of the first row, and the third row is again a cyclic shift. Such a matrix is called a circulant matrix. Once we know the first row, the rest of the matrix is determined.
+
+Therefore, instead of storing all $9$ entries, we only need to store $3$ values. The representation is compressed by a large factor.
+
+\section{Why circulant structure appears}
+
+Now let us move to polynomials. Suppose we have
+\[
+a(x)=1+2x+3x^2,
+\qquad
+s(x)=4+5x+6x^2.
+\]
+When we multiply $a(x)$ and $s(x)$, the coefficients naturally arrange themselves in a cyclic way. After we represent the multiplication in a matrix form, the matrix turns out to be circulant. This is the key insight behind RLWE.
+
+\section{Polynomial rings}
+
+The relevant algebraic object is not an ordinary polynomial ring, but a quotient ring
+\[
+R_q = \mathbb{Z}_q[x]/(f(x)).
+\]
+
+In Kyber, the choice is typically
+\[
+R_q = \mathbb{Z}_{3329}[x]/(x^{256}+1).
+\]
+
+This notation appears everywhere in the literature. The important point is that we do not work with arbitrary vectors only; we work with polynomials modulo a fixed polynomial.
+
+\section{Why do we reduce modulo $x^n+1$?}
+
+When we multiply polynomials, the degree may grow. But in the ring, we define the relation
+\[
+x^n \equiv -1.
+\]
+Therefore,
+\[
+x^{n+1} \equiv -x,
+\quad
+x^{n+2} \equiv -x^2,
+\quad \text{and so on.}
+\]
+As a result, every polynomial is reduced back to degree less than $n$. This keeps the representation compact and structured.
+
+\section{Sage experiment}
+
+We can define a simple quotient ring in Sage.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+
+a = S(x^3 + 2*x + 1)
+b = S(x^2 + 3)
+print(a*b)
+\end{lstlisting}
+
+The multiplication is automatically reduced modulo $x^8+1$.
+
+\section{From LWE to RLWE}
+
+In standard LWE, the secret is a vector
+\[
+s=(s_1,\dots,s_n).
+\]
+In RLWE, the secret becomes a polynomial
+\[
+s(x)=s_0+s_1x+\cdots+s_{255}x^{255}.
+\]
+Likewise, the public value $a$ becomes a polynomial. The noisy equation becomes
+\[
+b(x)=a(x)s(x)+e(x).
+\]
+
+The mathematics is not fundamentally different, but the representation changes. Instead of storing and multiplying large random matrices, we work with structured polynomials. The picture below makes this compression concrete.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.75]
+  % Left: a small grid schematically representing the many independent
+  % entries of a general LWE matrix A (a real matrix would be n x n,
+  % e.g. 1024 x 1024, not 5 x 5 -- this is a schematic, not to scale)
+  \foreach \i in {0,...,4} {
+    \foreach \j in {0,...,4} {
+      \draw[pqcgray, fill=pqclight] (\i*0.8,\j*0.8) rectangle ++(0.7,0.7);
+    }
+  }
+  \node[pqcgray, font=\small] at (1.95,-0.7) {matrix $A$};
+  \node[pqcgray, font=\scriptsize] at (1.95,-1.15) {many independent entries};
+
+  \draw[flowarrow] (4.3,1.95) -- (6.1,1.95);
+  \node[pqcgray, font=\scriptsize, align=center] at (5.2,2.45) {same storage as\\one row};
+
+  \node[flownode, minimum width=1.6cm, minimum height=1.6cm, font=\normalsize] (poly) at (7.3,1.95) {$a(x)$};
+  \node[pqcgray, font=\small] at (7.3,-0.7) {$a(x)\in R_q$};
+  \node[pqcgray, font=\scriptsize] at (7.3,-1.15) {one polynomial, $n$ coefficients};
+\end{tikzpicture}
+\caption{RLWE's storage saving in one picture. A general LWE matrix $A\in\mathbb{Z}_q^{n\times n}$ (schematically drawn here as a small $5\times5$ grid of independent entries) is replaced by a single polynomial $a(x)\in R_q$. Because of the circulant structure described above, the $n$ coefficients of $a(x)$ already determine what would otherwise be an entire $n\times n$ matrix -- the same storage cost as just one row of $A$. This compression is exactly why RLWE public keys are so much smaller than plain LWE public keys.}
+\label{fig:rlwe-compression}
+\end{figure}
+
+\section{Why RLWE is faster}
+
+In ordinary LWE, multiplication is matrix multiplication, which costs roughly $O(n^2)$ operations. For a dimension around $256$, this means tens of thousands of operations.
+
+In RLWE, the multiplication is polynomial multiplication. With FFT-like methods, this becomes roughly $O(n\log n)$. The speedup is substantial. In practice, the ring structure allows the system to run far faster.
+
+This is one of the central reasons RLWE became attractive for real-world deployments.
+
+\section{What is an NTT?}
+
+An NTT is the finite-field analogue of the FFT. The FFT works over the complex numbers; the NTT works over $
+\mathbb{Z}_q$. The purpose is the same: to turn convolution into pointwise multiplication. This transforms polynomial multiplication into a much more efficient operation.
+
+\section{Sage experiment: polynomial multiplication}
+
+We can see the basic idea without writing a full NTT implementation.
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+f = 1 + 2*x + x^2
+g = 3 + x
+print(f*g)
+\end{lstlisting}
+
+In a full implementation, NTT is the technique used to compute this multiplication much faster than naive schoolbook multiplication.
+
+\section{Is RLWE secure?}
+
+At first glance, the additional algebraic structure might look dangerous. Maybe it makes the problem easier for an attacker. The security story is more subtle. RLWE is based on hardness in ideal lattices, not just general lattices. This makes the security analysis more involved, but it is still believed to be strong enough for practical use.
+
+\section{Why Module-LWE appears later}
+
+The history is roughly:
+
+\begin{itemize}
+    \item 2005: LWE
+    \item 2010s: RLWE
+    \item 2016 onward: Module-LWE
+    \item 2022: ML-KEM (Kyber)
+\end{itemize}
+
+Why did Module-LWE appear? Because RLWE is too structured, while plain LWE is too large. Module-LWE is a compromise. It keeps the efficiency benefits of algebraic structure but avoids the strongest structural weaknesses of pure RLWE.
+
+\section{Sage experiment: a toy RLWE-style setup}
+
+We can create a small ring and form the analog of an LWE sample.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+
+a = S.random_element()
+s = S.random_element()
+e = S.random_element()
+
+b = a*s + e
+print("a =", a)
+print("s =", s)
+print("e =", e)
+print("b =", b)
+\end{lstlisting}
+
+This already resembles the RLWE equation in a compact form. Written independently of any particular computer-algebra system, and using the same names $a$, $s$, $e$, $b$ as the Sage code above, the same construction is Algorithm~\ref{alg:rlwe-sample}. (The proper definition keeps $s$ and $e$ small, unlike the fully random $s$, $e$ used above for simplicity; a later chapter shows how to sample small noise correctly.)
+
+\begin{algorithm}[H]
+\caption{Generate an RLWE Sample}
+\label{alg:rlwe-sample}
+\begin{algorithmic}[1]
+\Require Ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$
+\Ensure RLWE sample $(a,b)$; secret $s$
+\State $a(x) \gets$ uniformly random element of $R_q$
+\State $s(x) \gets$ small (noise-sized) element of $R_q$ \Comment{the secret}
+\State $e(x) \gets$ small (noise-sized) element of $R_q$ \Comment{the error}
+\State $b(x) \gets a(x)\,s(x) + e(x) \pmod{x^n+1}$
+\State \Return $(a,b)$ as the sample, $s$ as the secret
+\end{algorithmic}
+\end{algorithm}
+
+\section{Comparison: LWE vs RLWE}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Property & LWE & RLWE \\
+\hline
+Data structure & vector and matrix & polynomial \\
+\hline
+Space & $O(n^2)$ & $O(n)$ \\
+\hline
+Computation & matrix multiplication & polynomial multiplication \\
+\hline
+Acceleration & limited & NTT-friendly \\
+\hline
+Security foundation & general lattice & ideal lattice \\
+\hline
+Practical deployment & uncommon & widespread \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Why Kyber is not pure RLWE}
+
+A classic interview question is: why is Kyber not pure RLWE? The answer is that Kyber uses a vector of polynomials rather than a single polynomial. In other words, the secret is not just one ring element but a module element over the ring. That is the origin of Module-LWE, which we will study next.
+
+\section{Summary}
+
+The central idea is simple:
+
+\begin{quote}
+RLWE replaces big random matrices by structured polynomials, which dramatically improves storage and speed while preserving the core noisy linear structure of LWE.
+\end{quote}
+
+The evolution is:
+
+\begin{verbatim}
+Linear algebra
+    |
+    v
+LWE
+    |
+    v
+RLWE via polynomial ring and cyclic structure
+    |
+    v
+NTT acceleration
+    |
+    v
+Practical post-quantum cryptography
+\end{verbatim}

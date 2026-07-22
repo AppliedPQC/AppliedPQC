@@ -1,0 +1,224 @@
+\chapter{From Circulant Matrices to Convolution Algebra}
+
+\section{Revisiting matrix multiplication}
+
+Consider a vector
+\[
+s =
+\begin{bmatrix}
+s_0\\ s_1\\ s_2\\ s_3
+\end{bmatrix}
+\]
+and a matrix
+\[
+A=
+\begin{bmatrix}
+1&2&3&4\\
+4&1&2&3\\
+3&4&1&2\\
+2&3&4&1
+\end{bmatrix}.
+\]
+
+The product $As$ is a standard linear-algebra computation. But if we look carefully, we notice a striking pattern: every row is a cyclic shift of the previous row. Such a matrix is called a circulant matrix.
+
+Figure~\ref{fig:circulant-grid} makes this pattern visible instead of just stated: coloring every entry of $A$ by its value shows that each color forms a complete wrapped diagonal.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.05, every node/.style={font=\small}]
+  \foreach \i/\j/\v/\clr in {
+    0/0/1/pqcblue, 1/0/2/pqcteal, 2/0/3/pqcorange, 3/0/4/pqcgray,
+    0/1/4/pqcgray, 1/1/1/pqcblue, 2/1/2/pqcteal, 3/1/3/pqcorange,
+    0/2/3/pqcorange, 1/2/4/pqcgray, 2/2/1/pqcblue, 3/2/2/pqcteal,
+    0/3/2/pqcteal, 1/3/3/pqcorange, 2/3/4/pqcgray, 3/3/1/pqcblue} {
+    \draw[fill=\clr!22, draw=\clr, thick] (\i,-\j) rectangle ++(1,-1);
+    \node at (\i+0.5,-\j-0.5) {\v};
+  }
+  \foreach \i in {0,...,3} {
+    \node[pqcgray, font=\scriptsize] at (\i+0.5,0.4) {col $\i$};
+  }
+  \foreach \j in {0,...,3} {
+    \node[pqcgray, font=\scriptsize, anchor=east] at (-0.15,-\j-0.5) {row $\j$};
+  }
+\end{tikzpicture}
+
+\vspace{4pt}
+{\small\centering
+\textcolor{pqcblue}{$\blacksquare$}~$=1$ \quad
+\textcolor{pqcteal}{$\blacksquare$}~$=2$ \quad
+\textcolor{pqcorange}{$\blacksquare$}~$=3$ \quad
+\textcolor{pqcgray}{$\blacksquare$}~$=4$ \par}
+
+\caption{The circulant matrix $A=\left(\begin{smallmatrix}1&2&3&4\\4&1&2&3\\3&4&1&2\\2&3&4&1\end{smallmatrix}\right)$ redrawn as a color-coded grid. Every cell on the same wrapped diagonal (constant $(\text{col}-\text{row})\bmod 4$) carries the same value and the same color, so the cyclic-shift structure that defines a circulant matrix is visible at a glance instead of having to be read off row by row.}
+\label{fig:circulant-grid}
+\end{figure}
+
+\section{Why circulant matrices matter}
+
+A general $4\times 4$ matrix needs $16$ numbers to describe it. A circulant matrix, however, is determined entirely by its first row:
+\[
+(1,2,3,4).
+\]
+Once the first row is known, the remaining rows are generated automatically by cyclic shifts. So the storage cost drops from $16$ values to only $4$ values. In higher dimensions, the savings become dramatic. This is the first compression mechanism behind RLWE.
+
+\section{From the first row to a polynomial}
+
+The first row
+\[
+(1,2,3,4)
+\]
+can be written as a polynomial
+\[
+a(x)=1+2x+3x^2+4x^3.
+\]
+Now the entire circulant matrix is no longer stored explicitly. Instead, we represent it by the single polynomial $a(x)$.
+
+This is the most important conceptual step behind RLWE: a structured matrix can be encoded by a polynomial.
+
+\section{Why a polynomial naturally produces cyclicity}
+
+Suppose we multiply two polynomials, for example
+\[
+a(x)=1+2x+3x^2,
+\qquad
+s(x)=5+6x+7x^2.
+\]
+The product is computed by combining coefficients in a way that is not ordinary scalar multiplication but rather a convolution of coefficients. If we reduce modulo a polynomial such as
+\[
+x^4+1,
+\]
+then powers above degree $3$ wrap around. In other words, the multiplication becomes cyclic. The resulting algebraic structure is exactly the same as the circulant matrix structure we saw above.
+
+\section{Sage experiment}
+
+We can test this directly in Sage.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^4 + 1)
+
+a = Rq(1 + 2*x + 3*x^2 + 4*x^3)
+s = Rq(5 + 6*x + 7*x^2)
+print(a*s)
+\end{lstlisting}
+
+The multiplication is carried out modulo $x^4+1$, so higher powers wrap back into lower ones. This is exactly the cyclic behavior that mirrors circulant matrices.
+
+\section{The real secret: convolution}
+
+Polynomial multiplication is not just ordinary multiplication of two expressions. It is a convolution. For example, if we multiply
+\[
+(1+2x+3x^2)(4+5x),
+\]
+we obtain
+\[
+4+13x+22x^2+15x^3.
+\]
+The coefficient $22$ comes from combining multiple overlaps of coefficients, such as
+\[
+1\cdot 5 + 2\cdot 4 + 3\cdot 3.
+\]
+This is the convolution operation.
+
+The same process appears in circulant matrix multiplication. Multiplying a circulant matrix by a vector is essentially convolution in disguise.
+
+\section{The key equivalence}
+
+The central equivalence is:
+
+\begin{verbatim}
+Polynomial multiplication
+    = circulant matrix multiplication
+    = circular convolution
+\end{verbatim}
+
+This is the mathematical bridge between linear algebra and RLWE.
+
+Algorithm~\ref{alg:circulant-mult} makes the equivalence completely explicit: it builds the circulant matrix $C$ from the coefficients of $a(x)$ and shows that the matrix--vector product $Cs$ reproduces exactly the coefficients of the polynomial product $a(x)s(x)$.
+
+\begin{algorithm}[H]
+\caption{Polynomial Multiplication as Circulant Matrix--Vector Product}
+\label{alg:circulant-mult}
+\begin{algorithmic}[1]
+\Require Coefficients $a_0,\dots,a_{n-1}$ of $a(x)$; coefficients $s_0,\dots,s_{n-1}$ of $s(x)$
+\Ensure Coefficients $c_0,\dots,c_{n-1}$ of $c(x) = a(x)\,s(x) \bmod (x^n-1)$
+\Statex \textit{Step 1: build the circulant matrix $C$ from $a$}
+\For{$i = 0$ \textbf{to} $n-1$}
+    \For{$j = 0$ \textbf{to} $n-1$}
+        \State $C_{i,j} \gets a_{(i-j) \bmod n}$ \Comment{row $i$ is row $i-1$ cyclically shifted by one place}
+    \EndFor
+\EndFor
+\Statex \textit{Step 2: multiply $C$ by the coefficient vector of $s$}
+\For{$i = 0$ \textbf{to} $n-1$}
+    \State $c_i \gets \displaystyle\sum_{j=0}^{n-1} C_{i,j}\, s_j$ \Comment{this sum is exactly the circular convolution of $a$ and $s$}
+\EndFor
+\State \Return $(c_0,\dots,c_{n-1})$ \Comment{identical to the coefficients of $a(x)s(x)$ reduced mod $x^n-1$}
+\end{algorithmic}
+\end{algorithm}
+
+\section{Why NTT accelerates this}
+
+The convolution theorem states that convolution becomes pointwise multiplication under the right transform. In other words,
+\[
+\mathcal{F}(f*g)=\mathcal{F}(f)\cdot\mathcal{F}(g).
+\]
+
+In the complex setting this is the FFT. In finite fields it becomes the NTT. Therefore, once we recognize that RLWE multiplication is just convolution, we can use NTT to accelerate it dramatically.
+
+\section{Toeplitz matrices and the circulant special case}
+
+There is a broader class of matrices called Toeplitz matrices, where entries are constant along diagonals. A circulant matrix is a special case of a Toeplitz matrix with cyclic wrap-around. The special cyclic structure is what makes the polynomial representation so elegant and what makes NTT possible in practice.
+
+\section{What changes in Module-LWE?}
+
+In Module-LWE, we do not work with a single polynomial. Instead, we work with vectors of polynomials, and the corresponding matrix is a block-circulant structure, where each block is itself a circulant object. This is why Module-LWE is a natural generalization of RLWE. The same underlying convolutional algebra remains in place, just at a larger block level.
+
+\section{Sage experiment: circulant matrix versus polynomial multiplication}
+
+We can verify the equivalence directly in Sage. First define a circulant matrix.
+
+\begin{lstlisting}[language=Python]
+from sage.matrix.special import circulant
+
+c = circulant([1,2,3,4])
+print(c)
+\end{lstlisting}
+
+Then define a vector and multiply.
+
+\begin{lstlisting}[language=Python]
+v = vector([5,6,7,8])
+print(c * v)
+\end{lstlisting}
+
+Now compare the same computation with polynomial multiplication in the quotient ring.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^4 + 1)
+a = Rq(1 + 2*x + 3*x^2 + 4*x^3)
+s = Rq(5 + 6*x + 7*x^2)
+print(a*s)
+\end{lstlisting}
+
+The same cyclic structure appears in both viewpoints.
+
+\section{Why this chapter is so important for FHE and ZK}
+
+This chapter is foundational for many later topics. In FHE, the central operations are polynomial multiplications, and those are accelerated by NTT-style techniques. In ZK systems based on lattices, the same algebraic structure appears again. If one does not understand the transition from a matrix to a polynomial and from multiplication to convolution, the later constructions look mysterious.
+
+\section{Summary}
+
+The four key ideas to keep in mind are:
+
+\begin{verbatim}
+Polynomial
+    -> circulant matrix
+    -> circular convolution
+    -> NTT pointwise multiplication
+\end{verbatim}
+
+This is the hidden bridge that makes RLWE and Module-LWE practical. It is also the deep reason why the same algebra appears throughout post-quantum cryptography, from Kyber to FHE and beyond.

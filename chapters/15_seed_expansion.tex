@@ -1,0 +1,330 @@
+\chapter{Complete Implementation of ML-KEM Key Generation (FIPS 203)}
+\chaptermark{Complete ML-KEM Key Generation (FIPS 203)}
+
+\section{Learning Objectives}
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item understand the full ML-KEM KeyGen workflow;
+  \item know the input and output data types at every stage;
+  \item implement a teaching version of KeyGen in SageMath;
+  \item map the teaching implementation to the FIPS 203 reference algorithm line by line;
+  \item understand why a real implementation is almost entirely deterministic once the initial seed is fixed.
+\end{enumerate}
+
+\section{Review: Toy Kyber versus real ML-KEM}
+
+In the previous toy implementation, we used the following informal key-generation pattern:
+
+\[
+A \xleftarrow{\$} R_q^{k\times k}, \qquad s,e \xleftarrow{\$} \chi, \qquad t = A\cdot s + e.
+\]
+
+The output was then a key pair \((pk, sk)\).
+
+The most important difference is that all random objects were generated directly and independently.
+
+In real ML-KEM, this is not the case. The algorithm starts from a short random seed and then deterministically expands the rest of the randomness from it.
+
+\section{The real input in FIPS 203}
+
+The standard key generation procedure does not begin by generating a matrix at random.
+It begins by generating a short random seed:
+
+\[
+d \in \{0,1\}^{256}.
+\]
+
+In other words, the input to the standard algorithm is a 256-bit seed. We can think of the whole key generation algorithm as a deterministic function
+
+\[
+\mathrm{KeyGen}(d)
+\]
+
+rather than as a random process that samples all objects independently.
+
+This is the first major conceptual shift from toy Kyber to the real standard.
+
+\section{Phase 1: expand the seed}
+
+The first step in the standard is to compute
+
+\[
+(\rho, \sigma) = G(d),
+\]
+
+where:
+
+\begin{itemize}
+  \item $\rho$ is used to generate the matrix $A$;
+  \item $\sigma$ is used to generate the secret and error polynomials.
+\end{itemize}
+
+In the standard, $G$ is built from SHA3-512. In a teaching implementation, we can first abstract it as a black box:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm and 16mm]
+  \node[flownode] (d) {$d$};
+  \node[flownode, right=of d] (g) {$G(d)$};
+  \node[flownode, above right=6mm and 16mm of g] (rho) {$\rho$};
+  \node[flownode, below right=6mm and 16mm of g] (sigma) {$\sigma$};
+  \draw[flowarrow] (d) -- (g);
+  \draw[flowarrow] (g) -- (rho);
+  \draw[flowarrow] (g) -- (sigma);
+\end{tikzpicture}
+\caption{$G$ expands the single seed $d$ into two independent-looking seeds: $\rho$ drives the matrix, $\sigma$ drives the noise.}
+\label{fig:seed-expand-g}
+\end{figure}
+
+The pedagogical point is that the entire randomness of the later steps is derived from the initial seed $d$.
+
+\section{Phase 2: generate the matrix}
+
+The matrix is not stored as a random object in the public key. Instead, it is reconstructed from a seed:
+
+\[
+A = \mathrm{ExpandA}(\rho).
+\]
+
+This is a deterministic map:
+
+\[
+\mathrm{ExpandA}: \{0,1\}^{256} \to R_q^{k\times k}.
+\]
+
+The same seed always yields the same matrix. This is a crucial compression trick in the standard.
+
+\paragraph{SageMath experiment}
+
+For a teaching implementation, we can first simulate the expansion by using a simple deterministic pseudo-random generator.
+
+\begin{lstlisting}[language=Python]
+import random
+
+
+def expand_A(seed):
+    random.seed(seed)
+    return Matrix(
+        Rq,
+        k,
+        k,
+        [Rq.random_element() for _ in range(k * k)]
+    )
+\end{lstlisting}
+
+The important thing is not the exact random source at this stage. The important thing is the interface:
+
+\begin{itemize}
+  \item same seed $\Rightarrow$ same matrix;
+  \item different seed $\Rightarrow$ different matrix.
+\end{itemize}
+
+\section{Phase 3: generate the secret vector}
+
+The secret vector is derived from the CBD distribution. In other words,
+
+\[
+s \leftarrow \mathrm{CBD}(\sigma).
+\]
+
+This is not uniform sampling. The coefficients are small integers sampled from a centered binomial distribution. Each coefficient of the secret polynomial is therefore a small signed value rather than an arbitrary element of the ring.
+
+The secret vector is therefore a vector of small polynomials:
+
+\[
+s = (s_0, \dots, s_{k-1}).
+\]
+
+\section{Phase 4: generate the error vector}
+
+The error vector is generated in a very similar way, again using CBD-based sampling:
+
+\[
+e \leftarrow \mathrm{CBD}(\sigma).
+\]
+
+The exact detail depends on the parameter set, but the conceptual point is the same: the noise is derived from a short seed through a deterministic sampling procedure.
+
+\section{Phase 5: compute the public key}
+
+The next step is the familiar LWE-style computation:
+
+\[
+t = A\cdot s + e.
+\]
+
+This step is conceptually the same as in the toy construction. The difference is that the inputs are now produced by deterministic expansion from the initial seed rather than by direct sampling from a random source.
+
+\section{Phase 6: move into the NTT domain}
+
+The next important difference from the toy version is that the real ML-KEM implementation does not operate only in the ordinary coefficient domain. In the real standard, the relevant objects are transformed into the NTT domain before the main arithmetic begins.
+
+Thus we may write schematically:
+
+\[
+\hat{s} = \mathrm{NTT}(s), \qquad \hat{e} = \mathrm{NTT}(e), \qquad \hat{A} = \mathrm{NTT}(A).
+\]
+
+Then the computation is conceptually expressed as
+
+\[
+\hat{t} = \hat{A}\cdot \hat{s} + \hat{e}.
+\]
+
+In the full standard, this is implemented with careful attention to the ring representation and to the specific NTT parameters. The key point here is that the algebraic structure is much richer than the toy version and is designed for efficient implementation.
+
+\section{Phase 7: encode the public key}
+
+The real public key is not the pair \((A,t)\). Instead, it is essentially the pair
+
+\[
+(\rho, t).
+\]
+
+The reason is that the matrix $A$ can be regenerated from the seed $\rho$. Therefore the public key stores only what is truly necessary:
+
+\begin{itemize}
+  \item the seed $\rho$;
+  \item the vector $t$.
+\end{itemize}
+
+\section{KeyGen data flow}
+
+The whole process can be summarized as follows:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node[flownode] (d) at (5,9.6) {Random seed $d$};
+  \node[flownode] (g) at (5,8.2) {$G(d) = \mathrm{SHA3\text{-}512}(d)$};
+  \node[flownode] (rho) at (2.3,6.8) {$\rho$};
+  \node[flownode] (sigma) at (7.7,6.8) {$\sigma$};
+  \node[flownode] (expandA) at (2.3,5.4) {ExpandA$(\rho)=A$};
+  \node[flownode] (cbd) at (7.7,5.4) {CBD$(\sigma)$};
+  \node[flownode] (s) at (6.4,4.0) {$s$};
+  \node[flownode] (e) at (9.0,4.0) {$e$};
+  \node[flownode] (mult) at (5,2.6) {$t = A\,s + e$};
+  \node[keynode] (pk) at (5,1.1) {Public key $(\rho,t)$};
+
+  \draw[flowarrow] (d) -- (g);
+  \draw[flowarrow] (g) -- (rho);
+  \draw[flowarrow] (g) -- (sigma);
+  \draw[flowarrow] (rho) -- (expandA);
+  \draw[flowarrow] (sigma) -- (cbd);
+  \draw[flowarrow] (cbd) -- (s);
+  \draw[flowarrow] (cbd) -- (e);
+  \draw[flowarrow] (expandA) -- (mult);
+  \draw[flowarrow] (s) -- (mult);
+  \draw[flowarrow] (e) -- (mult);
+  \draw[flowarrow] (mult) -- (pk);
+  \draw[flowarrow] (rho.west) -- ++(-1.3,0) |- (pk.west);
+\end{tikzpicture}
+\caption{The complete KeyGen data flow. A single random seed $d$ deterministically expands into everything else; the public key stores only $\rho$ (from which $A$ can always be regenerated) and $t$, never $A$ itself.}
+\label{fig:keygen-flow}
+\end{figure}
+
+This flow should be remembered because it will be revisited later when we study encapsulation and decapsulation. Written as pseudocode, the seven phases above collapse into a single short algorithm:
+
+\begin{algorithm}[H]
+\caption{K-PKE.KeyGen (FIPS 203, teaching form)}
+\label{alg:kpke-keygen}
+\begin{algorithmic}[1]
+\Require Random seed $d \in \{0,1\}^{256}$
+\Ensure Public key $(\rho, t)$; secret key $s$
+\State $(\rho,\sigma) \gets G(d)$ \Comment{Phase 1: seed expansion, $G=\mathrm{SHA3\text{-}512}$}
+\State $A \gets \textsc{ExpandA}(\rho)$ \Comment{Phase 2: deterministic matrix, $A \in R_q^{k\times k}$}
+\State $s \gets \textsc{CBD}_{\eta_1}(\sigma)$ \Comment{Phase 3: secret vector}
+\State $e \gets \textsc{CBD}_{\eta_1}(\sigma)$ \Comment{Phase 4: error vector}
+\State $t \gets A \cdot s + e$ \Comment{Phase 5: public value}
+\State $\hat s,\hat e,\hat A \gets \mathrm{NTT}(s),\mathrm{NTT}(e),\mathrm{NTT}(A)$ \Comment{Phase 6: NTT domain (implementation only)}
+\State \Return $\big((\rho,t),\ s\big)$ \Comment{Phase 7: encode public key as $(\rho,t)$, not $(A,t)$}
+\end{algorithmic}
+\end{algorithm}
+
+Every line here is deterministic given $d$; the only place fresh randomness enters the entire computation is the sampling of $d$ itself.
+
+\section{SageMath experiments}
+
+The most useful way to study this chapter is through three short experiments.
+
+\paragraph{Experiment 1: verify ExpandA}
+
+Use the same seed twice:
+
+\begin{lstlisting}[language=Python]
+A1 = expand_A(1234)
+A2 = expand_A(1234)
+\end{lstlisting}
+
+Then verify that \(A_1 = A_2\). Now change the seed and observe that the matrix changes as well.
+
+\paragraph{Experiment 2: inspect CBD statistics}
+
+Generate many samples from the CBD distribution and check that the average is close to zero.
+
+\begin{lstlisting}[language=Python]
+# toy example
+samples = [cbd(2) for _ in range(10000)]
+print(sum(samples) / len(samples))
+\end{lstlisting}
+
+Observe how the variance changes when \(\eta\) changes.
+
+\paragraph{Experiment 3: implement a teaching version of key generation}
+
+Finally, write a function
+
+\begin{lstlisting}[language=Python]
+pk, sk = keygen(seed)
+\end{lstlisting}
+
+and test the following properties:
+
+\begin{itemize}
+  \item same seed gives the same key pair;
+  \item different seeds give different key pairs.
+\end{itemize}
+
+This gives a first impression of how modern public-key cryptography is built from deterministic pseudo-random procedures.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: thinking that the matrix $A$ is stored explicitly}
+
+This is not true in the standard. The matrix is derived from $\rho$ and therefore regenerated when needed.
+
+\paragraph{Pitfall 2: thinking that CBD is truly random sampling}
+
+CBD is not random sampling in the naive sense. It is a deterministic sampling procedure driven by a seed and an expansion function.
+
+\paragraph{Pitfall 3: thinking that KeyGen calls the random generator at every step}
+
+In the real algorithm, the initial seed $d$ is the only place where fresh randomness is introduced. Everything after that is a deterministic transform.
+
+\section{Summary}
+
+The key message of this chapter is the following:
+
+\begin{quote}
+ML-KEM KeyGen is not a process of repeatedly generating random objects. It is a process of starting from one random seed and applying a series of deterministic transformations to produce the key material.
+\end{quote}
+
+A compact summary is:
+
+\[
+d \longrightarrow (\rho,\sigma) \longrightarrow (A,s,e) \longrightarrow t \longrightarrow (\rho,t).
+\]
+
+This is the main conceptual thread that will guide the later chapters on encapsulation, decapsulation, and the full FIPS 203 reference implementation.
+
+\section{Suggested next chapter}
+
+The next chapter will introduce encapsulation. The central question will be:
+
+\begin{quote}
+Why does Kyber encapsulate a shared secret instead of directly encrypting a message?
+\end{quote}
+
+That is the natural bridge from traditional public-key encryption to the KEM view used in ML-KEM.

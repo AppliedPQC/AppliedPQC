@@ -1,0 +1,340 @@
+\chapter{From Zero to a Toy ML-KEM}
+
+\section{The goal of this chapter}
+
+From this point onward, the course enters the most practical part. The earlier chapters built the theoretical foundation. Now we build a toy version of Kyber-style encryption using only the mathematics that we have already studied, and obtain a complete working pipeline:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=16mm and 16mm]
+  \node[flownode] (kg) {KeyGen};
+  \node[flownode, right=of kg] (enc) {Encrypt};
+  \node[flownode, right=of enc] (dec) {Decrypt};
+  \node[keynode, right=of dec] (out) {Recovered\\[-2pt]\scriptsize message};
+  \draw[flowarrow] (kg) -- (enc) node[midway, above, font=\scriptsize] {$(A,t),\,s$};
+  \draw[flowarrow] (enc) -- (dec) node[midway, above, font=\scriptsize] {$(u,v)$};
+  \draw[flowarrow] (dec) -- (out);
+\end{tikzpicture}
+\caption{The full pipeline built in this chapter: key generation produces a public key $(A,t)$ and secret key $s$; encryption turns a message bit into a ciphertext $(u,v)$; decryption recovers the bit using $s$.}
+\label{fig:toy-mlkem-pipeline}
+\end{figure}
+
+The goal is not to implement the full FIPS 203 standard immediately. Instead, we build an educational version of ML-KEM that can generate a public key, encrypt a message, decrypt it, and run completely inside SageMath in around one hundred lines, so that the structure remains clear.
+
+\section{Simplifications used in the toy version}
+
+The real ML-KEM standard uses many sophisticated mechanisms. In the toy version, we keep only the core idea:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+Real ML-KEM & Toy Kyber \\
+\hline
+$q=3329$ & $q=17$ \\
+\hline
+$n=256$ & $n=8$ \\
+\hline
+CBD noise & $\text{randint}(-1,1)$ \\
+\hline
+SHAKE/XOF & simple random generation \\
+\hline
+Compression & omitted \\
+\hline
+NTT & ordinary polynomial multiplication \\
+\hline
+FO transform & omitted \\
+\hline
+Byte encoding & omitted \\
+\hline
+\end{tabular}
+\end{table}
+
+Although these simplifications are significant, the mathematical skeleton remains the same. For the module dimension we also shrink $k$ from $2,3,4$ down to $k=2$, so that the objects are easy to inspect by hand.
+
+\begin{lstlisting}[language=Python]
+from random import randint
+
+q = 17
+n = 8
+k = 2
+\end{lstlisting}
+
+\section{Set up the ring}
+
+We define a polynomial ring modulo $x^8+1$. Every object we build from here on lives in this quotient ring $R_q$.
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^n + 1)
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python]
+a = Rq.random_element()
+b = Rq.random_element()
+print(a)
+print(b)
+print(a*b)
+\end{lstlisting}
+
+The highest degree should remain below $8$ because of the quotient relation.
+
+\section{Build the module: vectors and matrices of polynomials}
+
+For Kyber512, the module dimension is $k=2$. That means the secret is not one polynomial but a vector of $k$ polynomials, and the public matrix $A$ is a $k \times k$ matrix of polynomials.
+
+\begin{lstlisting}[language=Python]
+def rand_poly():
+    return Rq.random_element()
+
+def rand_vector():
+    return vector(Rq, [rand_poly() for _ in range(k)])
+
+def rand_matrix():
+    return Matrix(Rq, k, k, [rand_poly() for _ in range(k*k)])
+\end{lstlisting}
+
+A vector of polynomials is already the first step toward the module viewpoint, and the matrix is the object that appears inside Kyber-like constructions.
+
+\section{Create small noise}
+
+In real Kyber, the noise is sampled from a centered binomial distribution (CBD), which is the subject of a later chapter. For the toy version, we simply use small coefficients in the range $\{-1,0,1\}$.
+
+\begin{lstlisting}[language=Python]
+def small_poly():
+    coeffs = []
+    for _ in range(n):
+        c = randint(-1, 1)
+        coeffs.append(c % q)
+    return Rq(coeffs)
+
+def small_vector():
+    return vector(Rq, [small_poly() for _ in range(k)])
+\end{lstlisting}
+
+The polynomial entries are therefore small values such as $0$, $1$, or $16$ (which represents $-1$ in $\mathbb{F}_{17}$). This produces small errors, which are suitable for teaching.
+
+\section{Key generation}
+
+The module-LWE form is very close to the standard LWE form:
+\[
+\mathbf{t}=A\mathbf{s}+\mathbf{e}.
+\]
+
+We implement it as follows.
+
+\begin{lstlisting}[language=Python]
+def keygen():
+    A = rand_matrix()
+    s = small_vector()
+    e = small_vector()
+    t = A * s + e
+    return (A, t), s
+\end{lstlisting}
+
+The public key is $(A,t)$ and the secret key is $s$.
+
+\begin{algorithm}[H]
+\caption{Toy KeyGen}
+\label{alg:toy-keygen}
+\begin{algorithmic}[1]
+\Require Public parameters $q,n,k,R_q$
+\Ensure Public key $(A,t)$, secret key $s$
+\State $A \gets$ uniformly random $k\times k$ matrix over $R_q$
+\State $s \gets$ small\_vector() \Comment{coefficients in $\{-1,0,1\}$}
+\State $e \gets$ small\_vector()
+\State $t \gets A s + e$
+\State \Return $\big((A,t),\, s\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Verify the key generation process}
+
+We can print the matrix and the resulting public value to check that the shapes and types match expectations.
+
+\begin{lstlisting}[language=Python]
+(pk, sk) = keygen()
+A, t = pk
+print("A =")
+print(A)
+print("\nSecret:")
+print(sk)
+print("\nPublic:")
+print(t)
+\end{lstlisting}
+
+This already looks very close to the mathematical object used in Kyber.
+
+\section{Encoding a message bit}
+
+For the toy version, the message is reduced to a single bit. In the real scheme, message encoding is far more subtle; here we simply map a bit to either zero or a value near the middle of the modulus range.
+
+\begin{lstlisting}[language=Python]
+def encode_bit(bit):
+    if bit == 0:
+        return Rq(0)
+    else:
+        return Rq(q // 2)
+\end{lstlisting}
+
+This is enough to demonstrate the basic idea of hiding a bit inside the noisy linear equation.
+
+\section{Encryption}
+
+To encrypt a message bit, we sample a random vector $r$ and two noise terms $e_1,e_2$. The core equations are
+\[
+u = A^T r + e_1,
+\]
+\[
+v = t^T r + e_2 + m.
+\]
+
+\begin{lstlisting}[language=Python]
+def encrypt(pk, bit):
+    A, t = pk
+    r = small_vector()
+    e1 = small_vector()
+    e2 = small_poly()
+    u = A.transpose() * r + e1
+    m = encode_bit(bit)
+    v = t.dot_product(r) + e2 + m
+    return (u, v)
+\end{lstlisting}
+
+The ciphertext is the pair $(u,v)$.
+
+\begin{algorithm}[H]
+\caption{Toy Encrypt}
+\label{alg:toy-encrypt}
+\begin{algorithmic}[1]
+\Require Public key $(A,t)$; message bit $m\in\{0,1\}$
+\Ensure Ciphertext $(u,v)$
+\State $r \gets$ small\_vector(), \quad $e_1 \gets$ small\_vector(), \quad $e_2 \gets$ small\_poly()
+\State $u \gets A^{T} r + e_1$
+\State $v \gets t^{T} r + e_2 + \textsc{Encode}(m)$ \Comment{$\textsc{Encode}(0)=0,\ \textsc{Encode}(1)=\lfloor q/2\rfloor$}
+\State \Return $(u,v)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Decryption}
+
+The decryption step uses the secret key $s$. The main idea is that the terms involving $A$ and $s$ cancel out during the algebraic expansion, leaving only a small amount of noise and the encoded message.
+
+\begin{lstlisting}[language=Python]
+def decrypt(sk, cipher):
+    u, v = cipher
+    value = v - sk.dot_product(u)
+    return value
+\end{lstlisting}
+
+We recover the bit by comparing the decrypted value against a threshold.
+
+\begin{lstlisting}[language=Python]
+def recover_bit(value):
+    c = value.list()[0]
+    if c > q // 4:
+        return 1
+    return 0
+\end{lstlisting}
+
+\begin{algorithm}[H]
+\caption{Toy Decrypt}
+\label{alg:toy-decrypt}
+\begin{algorithmic}[1]
+\Require Secret key $s$; ciphertext $(u,v)$
+\Ensure Recovered bit $m' \in \{0,1\}$
+\State $w \gets v - s^{T} u$ \Comment{the $A,s$ terms cancel, leaving noise $+$ message}
+\State $c \gets$ constant coefficient of $w$
+\If{$c > q/4$}
+    \State \Return $1$
+\Else
+    \State \Return $0$
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\section{Putting everything together}
+
+A complete toy run looks like this.
+
+\begin{lstlisting}[language=Python]
+# Key generation
+(pk, sk) = keygen()
+
+# Encryption
+bit = 1
+cipher = encrypt(pk, bit)
+
+# Decryption
+value = decrypt(sk, cipher)
+print("decrypted value =", value)
+print("recovered bit =", recover_bit(value))
+\end{lstlisting}
+
+In many runs this returns the correct bit because the noise is deliberately kept small.
+
+\section{Why the cancellation works}
+
+The important algebraic idea is that the public key satisfies
+\[
+\mathbf{t} = A\mathbf{s}+\mathbf{e},
+\]
+so during decryption one computes
+\[
+\mathbf{v} - \mathbf{s}^T\mathbf{u}.
+\]
+After expansion, the terms involving $A$ and $s$ cancel, leaving only a small error term and the message. This is the core of the Kyber-like construction.
+
+\section{Why the scheme can fail sometimes}
+
+If we run the experiment many times, we may occasionally recover the wrong bit. This happens because the toy noise is too aggressive or too simplistic relative to the tiny toy modulus. In the real Kyber scheme, the parameters are tuned so that the decryption failure probability is extremely small.
+
+A simple experiment is to change the noise generator from
+
+\begin{lstlisting}[language=Python]
+randint(-1, 1)
+\end{lstlisting}
+
+to something larger, such as
+
+\begin{lstlisting}[language=Python]
+randint(-2, 2)
+\end{lstlisting}
+
+or even
+
+\begin{lstlisting}[language=Python]
+randint(-5, 5)
+\end{lstlisting}
+
+and observe that decryption errors become much more frequent. This directly illustrates the role of the noise parameter, and foreshadows why real ML-KEM controls its noise distribution so carefully.
+
+\section{What is still missing compared with real Kyber?}
+
+This toy implementation already captures the mathematical skeleton of ML-KEM. However, it is still far from the full standard. The following components are not yet present:
+
+\begin{itemize}
+    \item CBD sampling,
+    \item SHAKE128 / SHAKE256 and XOF-based expansion,
+    \item NTT-based polynomial multiplication,
+    \item compression and encoding,
+    \item Fujisaki--Okamoto transformation,
+    \item CCA security behavior,
+    \item constant-time implementation details.
+\end{itemize}
+
+These will be introduced gradually in later chapters.
+
+\section{Summary}
+
+This toy implementation captures the core idea of Kyber in a compact form:
+
+\begin{verbatim}
+Module-LWE
+    -> KeyGen: t = As + e
+    -> Encrypt: u = A^T r + e1, v = t^T r + e2 + m
+    -> Decrypt: v - s^T u
+    -> Recover the message from a small noisy value
+\end{verbatim}
+
+The most important lesson is that Kyber is not a completely new primitive. It is a carefully engineered version of the same noisy linear structure that we have been studying throughout the book. The next two chapters replace the remaining shortcuts, starting with real CBD noise sampling and finishing with the real FIPS 203 key-generation pipeline.

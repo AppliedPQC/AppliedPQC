@@ -1,0 +1,75 @@
+name: Deploy LaTeX book to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install TeX Live
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended
+
+      - name: Build PDF
+        run: |
+          make
+
+      - name: Prepare Pages site
+        run: |
+          mkdir -p site
+          cp main.pdf site/main.pdf
+          cat > site/index.html <<'EOF'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>PQC-101 Book</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.6; }
+                a { color: #0b57d0; }
+              </style>
+            </head>
+            <body>
+              <h1>PQC-101 Book</h1>
+              <p>The latest compiled PDF is available below.</p>
+              <p><a href="main.pdf">Open the book PDF</a></p>
+            </body>
+          </html>
+          EOF
+          touch site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

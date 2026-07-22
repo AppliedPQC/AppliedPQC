@@ -1,0 +1,51 @@
+% Shared visual style for diagrams and algorithms.
+% Included once from main.tex; not a chapter, contains no \chapter command.
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing,patterns,matrix,fit,backgrounds,shapes.geometric}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% ---- Palette: restrained, print-friendly, colorblind-conscious ----
+\definecolor{pqcblue}{HTML}{1F4E79}   % primary structure, arrows, key vectors
+\definecolor{pqcteal}{HTML}{2E7D6B}   % secondary structure
+\definecolor{pqcorange}{HTML}{C1601B} % emphasis / the "answer" or highlighted object
+\definecolor{pqcgray}{HTML}{6B6B6B}   % grid lines, muted context
+\definecolor{pqclight}{HTML}{EDEDED}  % fills / backgrounds
+
+% ---- Reusable TikZ styles ----
+\tikzset{
+  latticept/.style={circle, fill=pqcgray, inner sep=0pt, minimum size=3pt},
+  latticeptbold/.style={circle, fill=pqcblue, inner sep=0pt, minimum size=4pt},
+  basisvec/.style={-{Latex[length=2.5mm]}, pqcblue, thick},
+  altvec/.style={-{Latex[length=2.5mm]}, pqcteal, thick},
+  shortvec/.style={-{Latex[length=2.5mm]}, pqcorange, thick, line width=1pt},
+  flownode/.style={draw=pqcblue, thick, rounded corners=2pt, fill=pqclight,
+                    minimum height=7mm, inner sep=3pt, align=center, font=\small},
+  flowarrow/.style={-{Latex[length=2.5mm]}, pqcgray, thick},
+  keynode/.style={draw=pqcorange, thick, rounded corners=2pt, fill=white,
+                   minimum height=7mm, inner sep=3pt, align=center, font=\small},
+}
+
+% ---- Algorithm captions read "Algorithm N: Name" consistently ----
+\floatname{algorithm}{Algorithm}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+
+% ---- Running headers show "Chapter N. Title" on every page, not section
+% titles. Long \section{} titles otherwise collide with the page number
+% when they land on a recto page; showing chapter context on both sides
+% is standard for a book this size and sidesteps that failure mode
+% entirely. Individual chapters can still shorten their own header with
+% \chaptermark{...} right after \chapter{...} (see e.g. 14_cbd.tex).
+\makeatletter
+\renewcommand{\sectionmark}[1]{}
+\renewcommand{\chaptermark}[1]{%
+  \markboth{\MakeUppercase{\ifnum \c@secnumdepth >\m@ne \@chapapp\ \thechapter.\ \fi #1}}%
+           {\MakeUppercase{\ifnum \c@secnumdepth >\m@ne \@chapapp\ \thechapter.\ \fi #1}}%
+}
+\makeatother

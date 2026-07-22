@@ -1,0 +1,223 @@
+\chapter{Learning With Errors (LWE)}
+
+\section{From a simple linear equation to a hard problem}
+
+At first sight, a linear system such as
+\[
+3x=9
+\]
+looks trivial. The solution is immediately $x=3$. If we move to a matrix equation
+\[
+Ax=b,
+\]
+then Gaussian elimination solves it in polynomial time. In fact, for the standard linear system problem, the mathematics is fully understood and the computational cost is manageable.
+
+This is why ordinary linear equations have no cryptographic value by themselves. They are easy to solve.
+
+\section{Add a small error}
+
+Now suppose the system is not exact. We observe
+\[
+Ax + e = b,
+\]
+where $e$ is a small error vector. In a toy example, the true system might be solved by $x$, but the observed value is perturbed by a small amount. The equation is no longer exact. The system becomes noisy and the exact solution is no longer directly recoverable.
+
+This is the basic intuition behind LWE.
+
+\section{Why is it called learning?}
+
+Many people first ask: what is being learned? The answer is not machine learning. The goal is to recover a hidden secret from many noisy samples.
+
+Suppose a secret vector $s$ exists. An adversary is given many pairs $(a_i,b_i)$ such that
+\[
+b_i = \langle a_i,s \rangle + e_i.
+\]
+The task is to recover the secret $s$ from many such observations. This is the sense in which the problem is a learning problem: one learns the hidden secret from noisy data.
+
+\section{Formal definition of an LWE sample}
+
+Let $q$ be a modulus and let $n$ be the dimension. Choose a random vector
+\[
+a \leftarrow \mathbb{Z}_q^n,
+\]
+a secret vector
+\[
+s \leftarrow \mathbb{Z}_q^n,
+\]
+and a noise term
+\[
+e \leftarrow \chi,
+\]
+where $\chi$ is a distribution over small integers or small residues. Output the sample
+\[
+(a,b),
+\qquad\text{where } b=\langle a,s \rangle + e \pmod q.
+\]
+
+This is the fundamental form of an LWE sample. The only complexity here is the presence of the error term $e$.
+
+Figure~\ref{fig:lwe-equation-boxes} redraws this equation as a small computation graph, which is a useful mental picture to keep for the rest of the chapter.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 16mm]
+  \node[flownode] (A) {$A$};
+  \node[flownode, below=8mm of A] (s) {$s$};
+  \node[flownode, right=16mm of A, yshift=-4mm] (mul) {$\times$};
+  \node[flownode, right=16mm of mul] (As) {$As$};
+  \node[flownode, below=8mm of As] (e) {$e$};
+  \node[flownode, right=16mm of As, yshift=-4mm] (add) {$+$};
+  \node[keynode, right=16mm of add] (b) {$b=As+e$};
+  \draw[flowarrow] (A) -- (mul);
+  \draw[flowarrow] (s) -- (mul);
+  \draw[flowarrow] (mul) -- (As);
+  \draw[flowarrow] (As) -- (add);
+  \draw[flowarrow] (e) -- (add);
+  \draw[flowarrow] (add) -- (b);
+\end{tikzpicture}
+\caption{The LWE sample equation as a small computation graph: the matrix $A$ and the secret $s$ feed a multiply node, and the noise $e$ is combined with the result $As$ at an add node to produce the public value $b$. All arithmetic is carried out modulo $q$.}
+\label{fig:lwe-equation-boxes}
+\end{figure}
+
+\section{Why many samples are needed}
+
+With only one sample, the system is underdetermined. For example, if the secret has two entries and only one equation is given, then many possibilities remain. The problem becomes solvable only when many samples are collected. With enough observations, one can try to infer the same hidden vector $s$ from a large family of noisy equations.
+
+\section{Sage experiment: a toy LWE setup}
+
+We can build a very small toy instance. First, fix a modulus and a dimension.
+
+\begin{lstlisting}[language=Python]
+q = 17
+n = 3
+F = GF(q)
+\end{lstlisting}
+
+Choose a secret vector.
+
+\begin{lstlisting}[language=Python]
+from sage.all import *
+s = random_vector(F, n)
+print("secret =", s)
+\end{lstlisting}
+
+Generate several random vectors $a_i$ and form the matrix $A$.
+
+\begin{lstlisting}[language=Python]
+A = random_matrix(F, 8, n)
+\end{lstlisting}
+
+If there is no noise, then we can compute
+\[
+b = A s.
+\]
+
+\begin{lstlisting}[language=Python]
+b = A * s
+print(b)
+\end{lstlisting}
+
+In this case, the secret vector can be recovered by solving the linear system.
+
+\section{Add noise}
+
+Now add a small error vector. In the finite field $\mathbb{F}_{17}$, the value $16$ represents $-1$.
+
+\begin{lstlisting}[language=Python]
+noise = vector(F, [1, 0, 16, 1, 0, 0, 16, 1])
+b_noisy = A * s + noise
+print(b_noisy)
+\end{lstlisting}
+
+Now the equations are no longer exact. The ordinary linear system no longer has a perfect solution. This is exactly the phenomenon that makes LWE hard.
+
+\section{Why error is magical}
+
+A small error changes the value by only a tiny amount. In a low-dimensional picture, the noise moves the point slightly away from the lattice point. But in high dimension, the error moves the point in a direction that is not easily determined. The attacker sees a perturbed point but does not know the exact offset.
+
+This is the key: the error hides the secret without making the equations completely useless.
+
+\section{LWE and CVP}
+
+The LWE equation can be viewed geometrically as a lattice point plus a small perturbation. The task is to recover the nearest lattice point to the observed vector. That is precisely the flavor of the closest vector problem (CVP), which is why the lattice viewpoint is so important.
+
+\section{Search LWE and decision LWE}
+
+There are two common forms of the problem.
+
+\begin{itemize}
+    \item Search LWE: recover the secret $s$.
+    \item Decision LWE: distinguish whether a sample is drawn from an LWE distribution or from a truly random distribution.
+\end{itemize}
+
+In many theoretical papers, these two versions are shown to be essentially equivalent.
+
+\section{Why worst-case reduction matters}
+
+The deepest theoretical contribution of Regev's work is the reduction from LWE to worst-case lattice problems such as GapSVP and SIVP. In particular, if one could solve average-case LWE efficiently, then one could solve hard lattice problems in the worst case. This is the major reason why LWE is regarded as a strong security foundation.
+
+It is important to note that this is a quantum reduction. That means the proof uses quantum computation as a theoretical tool, but the scheme itself does not require a quantum computer to run.
+
+\section{A complete Sage experiment}
+
+A practical way to understand LWE is to implement the whole process by hand.
+
+\begin{enumerate}
+    \item Generate a random matrix $A$.
+    \item Choose a random secret vector $s$.
+    \item Sample a small noise vector $e$.
+    \item Compute $b = A s + e$.
+    \item Try to solve the system and observe when it fails.
+    \item Vary the amount of error and observe when recovery becomes impossible.
+\end{enumerate}
+
+This experiment gives a direct feeling for why a small error can make a simple linear system look hard.
+
+Algorithm~\ref{alg:lwe-sample} states steps 1--4 above formally, using the same variable names as the Sage code earlier in this chapter.
+
+\begin{algorithm}[H]
+\caption{Generate an LWE Sample}
+\label{alg:lwe-sample}
+\begin{algorithmic}[1]
+\Require Modulus $q$; dimension $n$; number of rows $m$; noise distribution $\chi$ over $\mathbb{Z}_q$
+\Ensure Public sample $(A,b)$ and secret $s$
+\State $s \gets$ uniformly random vector in $\mathbb{Z}_q^{n}$ \Comment{\texttt{s = random\_vector(F, n)}}
+\State $A \gets$ uniformly random matrix in $\mathbb{Z}_q^{m \times n}$ \Comment{\texttt{A = random\_matrix(F, m, n)}}
+\State $e \gets (e_1,\dots,e_m)$ with each $e_i \gets \chi$ \Comment{\texttt{noise = vector(F, [...])}}
+\State $b \gets A s + e \pmod q$ \Comment{\texttt{b\_noisy = A * s + noise}}
+\State \Return public sample $(A,b)$, secret $s$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Why the modulus $q$ matters}
+
+The modulus $q$ must be chosen carefully. It must be large enough to avoid too much wrap-around, but small enough to keep the system efficient. In practical systems, $q$ is also chosen to support efficient polynomial arithmetic and NTT operations. This is one of the first places where cryptographic parameter design becomes central.
+
+\section{Summary}
+
+The essence of LWE can be summarized in one sentence:
+
+\begin{quote}
+A simple linear system is turned into a hard problem by adding carefully chosen noise, so that the system remains approximately solvable for legitimate users but becomes difficult for an attacker to invert exactly.
+\end{quote}
+
+The conceptual chain is now complete:
+
+\begin{verbatim}
+Finite field
+    |
+    v
+Linear algebra
+    |
+    v
+Lattice
+    |
+    v
+SVP / CVP
+    |
+    v
+Noise distribution
+    |
+    v
+LWE
+\end{verbatim}

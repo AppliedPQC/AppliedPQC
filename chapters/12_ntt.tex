@@ -1,0 +1,270 @@
+\chapter{Number Theoretic Transform (NTT)}
+
+\section{Why do we need NTT?}
+
+We already know that in RLWE and MLWE, the central operation is the polynomial product
+\[
+b(x)=a(x)s(x)+e(x).
+\]
+The expensive part is the multiplication of two polynomials. If each polynomial has about $256$ coefficients, ordinary multiplication costs roughly
+\[
+256^2 = 65536
+\]
+scalar multiplications in the straightforward schoolbook method. In a real cryptosystem, this operation is repeated many times, so the cost becomes very large.
+
+This is why NTT is essential. It accelerates polynomial multiplication dramatically.
+
+\section{A schoolbook multiplication example}
+
+Before discussing polynomials, it is useful to remember that ordinary integer multiplication also has a similar cost. Multiplying two numbers such as
+\[
+1234 \times 5678
+\]
+by the schoolbook algorithm requires many intermediate steps. The same phenomenon appears in polynomial multiplication: the full coefficient convolution is expensive.
+
+\section{What is convolution?}
+
+Suppose
+\[
+f(x)=1+2x+3x^2,
+\qquad
+g(x)=4+5x.
+\]
+Their product is
+\[
+f(x)g(x)=4+13x+22x^2+15x^3.
+\]
+The intermediate coefficient $22$ comes from combining many terms such as
+\[
+1\cdot 5 + 2\cdot 4 + 3\cdot 3.
+\]
+This combining of all coefficient pairs is exactly what is called convolution.
+
+\section{Why convolution is slow}
+
+When the degree is large, the number of coefficient pairs grows quadratically. If we have two polynomials with $256$ coefficients, then we need to combine roughly $256^2$ pairs. That is too slow for real cryptographic workloads.
+
+\section{The great idea of FFT}
+
+The FFT does not invent a new multiplication algorithm. Instead, it changes the representation of the polynomial. A polynomial can be represented in coefficient form, but it can also be represented by its values at many points. Once the polynomial is known at sufficiently many points, multiplication becomes easy.
+
+If we know the values of $f(x)$ and $g(x)$ at a point $a$, then
+\[
+(fg)(a)=f(a)g(a).
+\]
+In other words, multiplication becomes pointwise multiplication. That is the main conceptual trick behind FFT and NTT.
+
+\section{Why the point-value representation helps}
+
+The coefficient form presents the polynomial as a list of coefficients. The point-value form presents it as a list of values at chosen evaluation points. Under point-value representation, polynomial multiplication becomes much cheaper: we simply multiply the values pointwise and then recover the coefficients again.
+
+\section{Why we cannot use ordinary FFT directly}
+
+The classic FFT works over the complex numbers using roots of unity such as
+\[
+e^{2\pi i/n}.
+\]
+However, cryptographic schemes such as Kyber operate over finite fields, not over the complex numbers. For example,
+\[
+\mathbb{Z}_{3329}
+\]
+contains only finitely many elements. We therefore need a finite-field version of FFT, which is exactly the NTT.
+
+\section{What is a primitive root?}
+
+The FFT uses roots of unity. The NTT uses roots of unity in a finite field. We need an element $\omega$ such that
+\[
+\omega^n = 1,
+\]
+and smaller powers do not collapse to $1$. Such an element is called a primitive root. The existence of such an element is crucial for the transform to work.
+
+For Kyber, the modulus $q=3329$ is chosen so that the finite field contains suitable roots of unity for the length used by the transform. The fact that
+\[
+3329-1=3328=2^8\times 13
+\]
+allows a $256$-th root of unity to exist in the field, which is a key design condition.
+
+\section{Sage experiment: primitive roots}
+
+We can test this in Sage. Start with a finite field.
+
+\begin{lstlisting}[language=Python]
+q = 17
+F = GF(q)
+print(F.multiplicative_generator())
+\end{lstlisting}
+
+This returns a generator of the multiplicative group. We can then test whether a certain element has the required multiplicative order.
+
+\begin{lstlisting}[language=Python]
+g = F.multiplicative_generator()
+omega = g^2
+print(omega.multiplicative_order())
+\end{lstlisting}
+
+If the order is $8$, then this element behaves like an $8$-th root of unity for an $8$-point transform.
+
+\section{The three stages of NTT}
+
+In practical usage, an NTT-based multiplication proceeds in three stages:
+
+\begin{enumerate}
+    \item \textbf{Forward NTT}: convert the polynomial from coefficient form to evaluation form.
+    \item \textbf{Pointwise multiplication}: multiply the transformed values pointwise.
+    \item \textbf{Inverse NTT}: convert the result back to coefficient form.
+\end{enumerate}
+
+This is the high-level shape of the algorithm.
+
+\section{Why the butterfly structure appears}
+\label{sec:butterfly}
+
+If you open a reference implementation of NTT, you will see many repeated patterns such as
+\[
+a \leftarrow a+\omega^k b,
+\qquad
+b \leftarrow a-\omega^k b.
+\]
+These are the butterfly operations. They are the basic computational building blocks of the transform. They are analogous to the butterfly structure of the Cooley--Tukey FFT, except that all arithmetic happens in the finite field.
+
+Each butterfly takes two values and produces two values, so the whole transform can be drawn as a network of butterflies. Figure~\ref{fig:ntt-butterfly} shows the network for a $4$-point transform; the $256$-point transform used in Kyber has the same structure with $\log_2 256 = 8$ stages instead of $2$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.95, every node/.style={font=\scriptsize}]
+  \def\cA{0}\def\cB{2.4}\def\cC{4.8}
+  \node[pqcgray, left] at (\cA,0)  {$a_0$};
+  \node[pqcgray, left] at (\cA,-1) {$a_2$};
+  \node[pqcgray, left] at (\cA,-2) {$a_1$};
+  \node[pqcgray, left] at (\cA,-3) {$a_3$};
+  \node[pqcblue, right] at (\cC,0)  {$X_0$};
+  \node[pqcblue, right] at (\cC,-1) {$X_1$};
+  \node[pqcblue, right] at (\cC,-2) {$X_2$};
+  \node[pqcblue, right] at (\cC,-3) {$X_3$};
+  \foreach \p/\q in {0/1,2/3} {
+    \draw[pqcteal, thin] (\cA,-\p) -- (\cB,-\p);
+    \draw[pqcteal, thin] (\cA,-\p) -- (\cB,-\q);
+    \draw[pqcteal, thin] (\cA,-\q) -- (\cB,-\p);
+    \draw[pqcteal, thin] (\cA,-\q) -- (\cB,-\q);
+  }
+  \foreach \p/\q in {0/2,1/3} {
+    \draw[pqcblue, thin] (\cB,-\p) -- (\cC,-\p);
+    \draw[pqcblue, thin] (\cB,-\p) -- (\cC,-\q);
+    \draw[pqcblue, thin] (\cB,-\q) -- (\cC,-\p);
+    \draw[pqcblue, thin] (\cB,-\q) -- (\cC,-\q);
+  }
+  \foreach \r in {0,...,3} {
+    \node[latticeptbold] at (\cA,-\r) {};
+    \node[latticeptbold] at (\cB,-\r) {};
+    \node[latticeptbold] at (\cC,-\r) {};
+  }
+  \node[pqcteal, font=\scriptsize\itshape] at (\cA*0.5+\cB*0.5,0.6) {stage 1};
+  \node[pqcblue, font=\scriptsize\itshape] at (\cB*0.5+\cC*0.5,0.6) {stage 2};
+\end{tikzpicture}
+\caption{The butterfly network for a $4$-point NTT. Inputs enter in bit-reversed order $a_0,a_2,a_1,a_3$; stage~1 combines adjacent pairs (distance $1$), stage~2 combines pairs at distance $2$, and the outputs $X_0,\dots,X_3$ emerge in natural order. Every crossing is the two-line update $a\leftarrow a+\omega^k b,\ b\leftarrow a-\omega^k b$. Kyber's $256$-point transform is the same picture with $8$ stages instead of $2$.}
+\label{fig:ntt-butterfly}
+\end{figure}
+
+\section{A toy NTT experiment}
+
+We do not need to start with degree $256$. A toy experiment with length $8$ is enough to understand the idea.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+\end{lstlisting}
+
+Choose a primitive root and evaluate the polynomial at powers of that root. This is the first step of the transform.
+
+\begin{lstlisting}[language=Python]
+# A simple toy example: evaluate a polynomial at powers of a root
+f = 1 + 2*x + 3*x^2
+for i in range(8):
+    print(f(i))
+\end{lstlisting}
+
+This gives the point-value representation, which is the conceptual starting point of NTT.
+
+\section{Why NTT gives $O(n\log n)$ complexity}
+
+The reason NTT is so fast is that it uses divide-and-conquer. A transform of size $256$ is split recursively into smaller transforms of size $128$, then $64$, then $32$, and so on. The butterfly operations are applied at each stage. Written out, the recursion is Algorithm~\ref{alg:ntt}.
+
+\begin{algorithm}[H]
+\caption{Forward NTT (recursive, radix-2)}
+\label{alg:ntt}
+\begin{algorithmic}[1]
+\Function{NTT}{$(a_0,\dots,a_{n-1})$, $\omega$} \Comment{$\omega$ is a primitive $n$-th root of unity}
+  \If{$n = 1$}
+    \State \Return $(a_0)$
+  \EndIf
+  \State $(u_0,\dots,u_{n/2-1}) \gets \Call{NTT}{(a_0,a_2,a_4,\dots,a_{n-2}),\ \omega^2}$ \Comment{even-indexed coefficients}
+  \State $(v_0,\dots,v_{n/2-1}) \gets \Call{NTT}{(a_1,a_3,a_5,\dots,a_{n-1}),\ \omega^2}$ \Comment{odd-indexed coefficients}
+  \For{$k = 0,\dots,n/2-1$}
+    \State $t \gets \omega^{k} \cdot v_k$
+    \State $X_k \gets u_k + t$
+    \State $X_{k+n/2} \gets u_k - t$ \Comment{the butterfly}
+  \EndFor
+  \State \Return $(X_0,\dots,X_{n-1})$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+Each recursive call halves $n$, so there are $\log_2 n$ levels of recursion; each level does $O(n)$ work across all of its butterflies. That gives the total
+\[
+O(n\log n),
+\]
+which is far better than the $O(n^2)$ schoolbook method. The inverse NTT runs the same algorithm with $\omega^{-1}$ in place of $\omega$, followed by dividing every output by $n$.
+
+\section{How NTT fits into Kyber}
+
+In Kyber, polynomial multiplications appear everywhere in the arithmetic of the ring. Instead of doing them directly with schoolbook methods, the implementation converts the polynomial to NTT form, performs pointwise multiplication, and then converts back. That is why the implementation speed is high.
+
+The overall flow is:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 8mm]
+  \node[flownode] (a) {Polynomial\\[-2pt]\scriptsize (coefficient form)};
+  \node[flownode, right=of a] (b) {Forward NTT};
+  \node[flownode, right=of b] (c) {Pointwise\\[-2pt]\scriptsize multiply};
+  \node[flownode, right=of c] (d) {Inverse NTT};
+  \node[flownode, right=of d] (e) {Polynomial\\[-2pt]\scriptsize (coefficient form)};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+  \draw[flowarrow] (d) -- (e);
+\end{tikzpicture}
+\caption{NTT-based polynomial multiplication in Kyber: both factors are moved into evaluation form, multiplied one coefficient at a time, and the product is moved back.}
+\label{fig:ntt-flow}
+\end{figure}
+
+\section{Why the parameters $(q=3329, n=256)$ matter}
+
+The modulus and ring dimension are not arbitrary. They are chosen so that the finite field contains suitable roots of unity, making the NTT efficient. In particular, the ring dimension $256$ is chosen to line up with NTT-friendly transform lengths and with practical Kyber parameters.
+
+\section{Suggested experiments}
+
+A few hands-on experiments are highly recommended.
+
+\begin{enumerate}
+    \item Multiply two polynomials directly and record the cost.
+    \item Implement a naive NTT by evaluating at powers of a primitive root.
+    \item Check that inverse NTT reconstructs the original polynomial.
+    \item Compare the direct multiply and NTT-based multiply on a small example.
+\end{enumerate}
+
+\section{Summary}
+
+The important conceptual picture is:
+
+\begin{verbatim}
+Coefficient form
+    -> Forward NTT
+    -> Value form
+    -> Pointwise multiplication
+    -> Inverse NTT
+    -> Coefficient form
+\end{verbatim}
+
+The central intuition is that polynomial multiplication, which looks expensive in coefficient form, becomes cheap in evaluation form. NTT makes this transformation possible inside a finite field, and this is exactly why Kyber can be implemented efficiently in software and hardware.

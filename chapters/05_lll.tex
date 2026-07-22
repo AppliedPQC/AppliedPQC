@@ -1,0 +1,239 @@
+\chapter{Gram--Schmidt Orthogonalization and the LLL Algorithm}
+
+\section{Why this chapter matters}
+This chapter is often described as the heart of lattice reduction. The reason is simple: once we understand what a lattice is and why some bases are better than others, we need a way to measure and improve that quality. Gram--Schmidt orthogonalization provides exactly that tool. It is the conceptual foundation for LLL, BKZ, Babai's nearest plane algorithm, and many other lattice techniques.
+
+\section{Learning goals}
+After reading this chapter, you should be able to:
+
+\begin{itemize}
+  \item explain why some lattice bases are good and others are bad;
+  \item understand the meaning of orthogonality;
+  \item describe what Gram--Schmidt orthogonalization does conceptually;
+  \item understand why LLL repeatedly uses Gram--Schmidt information;
+  \item connect basis quality to later algorithms such as LLL and BKZ.
+\end{itemize}
+
+\section{What makes a basis good?}
+We begin with intuition rather than formulas. Consider two bases in the plane. In one case, the vectors are short and nearly perpendicular. In the other case, the vectors are long and nearly parallel. Both may generate the same lattice, but the second is much harder to work with.
+
+A good basis is one that makes the lattice easy to navigate. A bad basis is one that hides the short vectors and makes the lattice look much more complicated than it really is.
+
+\section{Why nearly parallel vectors are bad}
+Suppose we have a bad basis consisting of two vectors that are almost aligned. To express a simple vector such as $(1,0)$, we may need to use very large integer combinations of the basis vectors. This means that the coordinate representation becomes unstable and large. In cryptography, this is exactly what we want to avoid.
+
+This is why lattice reduction aims to find a better basis.
+
+\section{What does orthogonal mean?}
+Two vectors $u$ and $v$ are orthogonal if
+
+\[
+u \cdot v = 0.
+\]
+
+For example, $(1,0)$ and $(0,1)$ are orthogonal. In contrast, $(2,1)$ and $(3,2)$ are not.
+
+\subsection{Sage experiment: dot product}
+
+\begin{lstlisting}[language=Python]
+u = vector(QQ, [1, 0])
+v = vector(QQ, [0, 1])
+u.dot_product(v)
+\end{lstlisting}
+
+The result is $0$, showing that the vectors are orthogonal.
+
+\section{What Gram--Schmidt does}
+The Gram--Schmidt process does not change the lattice. It does not even change the basis in a fundamental sense. Instead, it analyzes a basis by splitting each vector into two parts:
+
+\begin{itemize}
+  \item a component along the previous directions;
+  \item a new component that points in a genuinely new direction.
+\end{itemize}
+
+In this way, the process isolates the part of each vector that contributes new geometric information. The resulting vectors are orthogonal, and they reveal the true directions present in the basis.
+
+This is why Gram--Schmidt is often described as a way of peeling off old directions and keeping only the new ones.
+
+\section{The projection formula}
+If $u$ and $v$ are vectors, then the projection of $v$ onto $u$ is
+
+\[
+\operatorname{proj}_u(v)=\frac{u\cdot v}{u\cdot u}u.
+\]
+
+The Gram--Schmidt process subtracts this projection from $v$, leaving the part of $v$ that is orthogonal to $u$.
+
+\section{The Gram--Schmidt construction}
+The first vector is kept unchanged:
+
+\[
+b_1^* = b_1.
+\]
+
+Then each subsequent vector is adjusted by subtracting its projection onto earlier directions:
+
+\[
+b_i^* = b_i - \sum_{j<i} \mu_{i,j} b_j^*,
+\]
+
+where the coefficients $\mu_{i,j}$ are chosen so that the new vector is orthogonal to the previous ones.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.15]
+  \draw[pqcgray!30, thin] (-1,0) -- (3.5,0);
+  \draw[pqcgray!30, thin] (0,-0.5) -- (0,2.5);
+  \draw[basisvec] (0,0) -- (3,1);
+  \node[pqcblue, font=\small] at (3.2,0.85) {$b_1$};
+  \draw[altvec] (0,0) -- (1,2);
+  \node[pqcteal, font=\small] at (0.75,2.2) {$b_2$};
+  \node[circle, fill=pqcgray, inner sep=0pt, minimum size=2.5pt] at (1.5,0.5) {};
+  \node[pqcgray, font=\scriptsize] at (2.15,0.28) {$\mathrm{proj}_{b_1}(b_2)$};
+  \draw[shortvec] (1.5,0.5) -- (1,2);
+  \node[pqcorange, font=\small] at (0.5,1.4) {$b_2^{*}$};
+\end{tikzpicture}
+\caption{Gram--Schmidt decomposition of $b_2$ relative to $b_1$, for $b_1=(3,1)$ and $b_2=(1,2)$. The dot marks $\mathrm{proj}_{b_1}(b_2)=(1.5,0.5)$, the component of $b_2$ along $b_1$. The orange vector $b_2^{*}=b_2-\mathrm{proj}_{b_1}(b_2)$ is orthogonal to $b_1$: it is the genuinely new geometric information that $b_2$ contributes beyond $b_1$.}
+\label{fig:gram-schmidt}
+\end{figure}
+
+This formula generalizes directly to an algorithm: process the basis vectors one at a time, and for each one subtract off its projection onto every previously orthogonalized direction.
+
+\begin{algorithm}[H]
+\caption{Gram--Schmidt Orthogonalization}
+\label{alg:gram-schmidt}
+\begin{algorithmic}[1]
+\Require Basis $b_1,\dots,b_n$
+\Ensure Orthogonal vectors $b_1^*,\dots,b_n^*$ and coefficients $\mu_{i,j}$
+\State $b_1^* \gets b_1$
+\For{$i = 2,\dots,n$}
+    \State $b_i^* \gets b_i$
+    \For{$j = 1,\dots,i-1$}
+        \State $\mu_{i,j} \gets \dfrac{b_i \cdot b_j^*}{b_j^* \cdot b_j^*}$
+        \State $b_i^* \gets b_i^* - \mu_{i,j}\, b_j^*$
+    \EndFor
+\EndFor
+\State \Return $(b_1^*,\dots,b_n^*)$ and $(\mu_{i,j})$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Sage experiment: Gram--Schmidt}
+
+\begin{lstlisting}[language=Python]
+B = matrix(QQ, [[2, 1], [1, 3]])
+B.gram_schmidt()
+\end{lstlisting}
+
+The output is a set of orthogonal vectors derived from the original basis. These are not necessarily lattice vectors themselves, but they are extremely useful for analysis.
+
+\subsection{Verification}
+
+\begin{lstlisting}[language=Python]
+u = vector(QQ, [2, 1])
+v = vector(QQ, [-1, 2])
+u.dot_product(v)
+\end{lstlisting}
+
+The dot product should be $0$, showing that the two vectors are orthogonal.
+
+\section{Why Gram--Schmidt does not change the lattice}
+This is a subtle but important point. The Gram--Schmidt vectors are not usually integer vectors, and they may not lie in the lattice at all. They are analysis tools, not new lattice generators. Their role is to reveal the geometry of the lattice basis rather than to replace it.
+
+\section{Gram--Schmidt lengths}
+The lengths of the Gram--Schmidt vectors,
+
+\[
+\|b_i^*\|,
+\]
+
+are a key measure of basis quality. If the lengths decrease smoothly and remain reasonably balanced, then the basis is good. If one vector becomes extremely short and another extremely long, the basis is poor.
+
+\section{Orthogonality defect}
+A useful measure of quality is the orthogonality defect. One version is
+
+\[
+\mathrm{OD}(B)=\frac{\prod_i \|b_i\|}{\det(B)}.
+\]
+
+If the basis vectors are perfectly orthogonal, the defect is $1$. The larger the defect, the worse the basis.
+
+\section{Hadamard ratio}
+Another standard quantity is the Hadamard ratio:
+
+\[
+\mathrm{HR}(B)=\left(\frac{\det(B)}{\prod_i \|b_i\|}\right)^{1/n}.
+\]
+
+It ranges between $0$ and $1$, and values closer to $1$ indicate better basis quality.
+
+\section{Why LLL uses Gram--Schmidt repeatedly}
+The LLL algorithm is built around the idea that a basis can be improved by repeatedly examining the Gram--Schmidt information. If the current basis is not sufficiently reduced, LLL swaps vectors, rescales, and recomputes the orthogonalized directions until the basis quality is acceptable.
+
+This is why Gram--Schmidt is not just a side concept: it is the engine behind one of the most important lattice reduction algorithms. The algorithm alternates between two operations: \emph{size reduction}, which uses the $\mu_{i,j}$ coefficients to make each $b_i$ as close as possible to the span of the earlier vectors without changing the lattice, and the \emph{Lov\'asz condition}, a test on consecutive Gram--Schmidt lengths that decides whether two neighboring vectors should be swapped.
+
+\begin{algorithm}[H]
+\caption{LLL Lattice Basis Reduction}
+\label{alg:lll}
+\begin{algorithmic}[1]
+\Require Basis $b_1,\dots,b_n$; reduction parameter $\delta \in (1/4,1)$, typically $\delta = 3/4$
+\Ensure An LLL-reduced basis generating the same lattice as $b_1,\dots,b_n$
+\State Compute $b_1^*,\dots,b_n^*$ and $\mu_{i,j}$ via Gram--Schmidt (Algorithm~\ref{alg:gram-schmidt})
+\State $k \gets 2$
+\While{$k \le n$}
+    \For{$j = k-1$ down to $1$} \Comment{size-reduce $b_k$ against every earlier vector}
+        \If{$|\mu_{k,j}| > 1/2$}
+            \State $b_k \gets b_k - \mathrm{round}(\mu_{k,j})\, b_j$
+            \State recompute $b_k^*$ and $\mu_{k,\cdot}$
+        \EndIf
+    \EndFor
+    \If{$\|b_k^*\|^2 \ge (\delta - \mu_{k,k-1}^2)\, \|b_{k-1}^*\|^2$} \Comment{Lov\'asz condition holds}
+        \State $k \gets k+1$
+    \Else
+        \State swap $b_k \leftrightarrow b_{k-1}$
+        \State recompute $b_1^*,\dots,b_n^*$ and $\mu_{i,j}$
+        \State $k \gets \max(k-1,\,2)$
+    \EndIf
+\EndWhile
+\State \Return $(b_1,\dots,b_n)$
+\end{algorithmic}
+\end{algorithm}
+
+Every swap strictly decreases a potential function built from the Gram--Schmidt lengths, so the loop terminates; in practice it converges in a small number of passes even in the hundreds of dimensions used by lattice-based cryptosystems. The output is not the shortest possible basis, but it is provably short enough -- each $\|b_i\|$ is bounded in terms of the true shortest vector -- to make LLL the workhorse preprocessing step before any serious lattice attack.
+
+\section{Connection to LWE}
+This chapter also helps explain why lattice problems are hard. In LWE, the secret and error are hidden in a high-dimensional structure. If an attacker could obtain a good basis for the associated lattice, many related tasks would become much easier. The security of lattice-based cryptography rests on the assumption that such a basis is not easily obtainable.
+
+\section{Experiments}
+
+\subsection{Experiment 1: orthogonality}
+
+\begin{lstlisting}[language=Python]
+u = vector(QQ, [1, 0])
+v = vector(QQ, [0, 1])
+u.dot_product(v)
+\end{lstlisting}
+
+\subsection{Experiment 2: compare two vector pairs}
+
+\begin{lstlisting}[language=Python]
+u = vector(QQ, [100, 99])
+v = vector(QQ, [101, 100])
+u.dot_product(v)
+\end{lstlisting}
+
+Compare the result with the previous experiment.
+
+\subsection{Experiment 3: Gram--Schmidt in Sage}
+
+\begin{lstlisting}[language=Python]
+B = random_matrix(QQ, 3)
+B.gram_schmidt()
+\end{lstlisting}
+
+\subsection{Experiment 4: orthogonality defect}
+Generate several random bases and compare their orthogonality defect values.
+
+\section{Summary}
+This chapter introduced the geometric notion of basis quality. Gram--Schmidt orthogonalization is not a new lattice construction; it is a way of analyzing a basis by separating old directions from genuinely new ones. A good basis is short and nearly orthogonal, while a bad basis is long and nearly parallel. These ideas are the direct precursor to LLL and other reduction algorithms.
+
+The next chapter, \emph{Shortest Vector Problem (SVP)}, will connect these geometric ideas to a concrete hard problem. From there, the book turns to noise distributions and the learning with errors problem, explaining why lattice problems are so closely tied to the security of modern post-quantum cryptography.

@@ -1,0 +1,257 @@
+\chapter{Module-LWE (MLWE)}
+
+\section{The three generations of lattice-based cryptography}
+
+We have already seen three major stages in the development of lattice-based cryptography.
+
+\begin{itemize}
+    \item \textbf{First generation: LWE}. The equation is
+    \[
+    b = A s + e,
+    \]
+    where $A$ is a random matrix. The security proof is elegant, but the representation is large and the computation is costly.
+
+    \item \textbf{Second generation: RLWE}. The matrix is replaced by a polynomial ring structure. Computation becomes much faster, but the algebraic structure becomes stronger and more specialized.
+
+    \item \textbf{Third generation: Module-LWE}. This is a compromise between the large but simple LWE construction and the compact but highly structured RLWE construction.
+\end{itemize}
+
+The historical path is therefore:
+
+\begin{verbatim}
+LWE
+  -> RLWE
+  -> Module-LWE
+\end{verbatim}
+
+\section{What is a module?}
+
+In algebra, a module is a generalization of a vector space where the scalars come from a ring rather than a field. In a simple language, a module is a vector-like object whose entries are taken from a ring.
+
+For LWE, the secret is a vector over the finite field:
+\[
+s = (s_1,s_2,s_3).
+\]
+
+For RLWE, the secret becomes a single polynomial:
+\[
+s(x).
+\]
+
+For Module-LWE, the secret becomes a vector of polynomials:
+\[
+\mathbf{s} = (s_1(x), s_2(x), s_3(x)).
+\]
+
+So in this sense, Module-LWE is really a polynomial vector over a ring.
+
+\section{Kyber's secret}
+
+In ML-KEM (Kyber), the secret is not a single polynomial but a vector of polynomials. The security level determines the dimension of that vector.
+
+\begin{itemize}
+    \item Kyber512 uses $k=2$.
+    \item Kyber768 uses $k=3$.
+    \item Kyber1024 uses $k=4$.
+\end{itemize}
+
+Thus, the security level is tied to the size of the module.
+
+\section{Why does the matrix come back?}
+
+At first glance, people are surprised to see matrices again in Kyber. But the matrix is not a large random matrix over integers. Instead, its entries are polynomials.
+
+For example, for $k=2$, we may have
+\[
+A =
+\begin{bmatrix}
+ a_{11}(x) & a_{12}(x) \\
+ a_{21}(x) & a_{22}(x)
+\end{bmatrix}.
+\]
+
+Each entry is a polynomial in the ring $R_q$. The object is still a matrix, but the matrix entries are now ring elements rather than ordinary numbers.
+
+\section{Kyber public key generation}
+
+The public key generation is very similar to LWE in spirit. We choose a secret vector $\mathbf{s}$, a noise vector $\mathbf{e}$, and a polynomial matrix $A$, and then compute
+\[
+\mathbf{t} = A\mathbf{s} + \mathbf{e}.
+\]
+
+This is exactly the same governing idea as LWE, except that the scalars are now ring elements. The figure below makes the shapes of $A$ and $\mathbf{s}$ concrete for the smallest case $k=2$ (indices run from $0$ to $k-1$, matching the Sage code below).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\small}]
+  % A 2x2 matrix of ring elements: each entry a_{ij}(x) is itself a
+  % polynomial in R_q, not a single scalar as it would be for plain LWE
+  \node[draw=pqcblue, thick, fill=pqclight, minimum width=2.0cm, minimum height=1.0cm] (a00) at (0,1.1) {$a_{00}(x)$};
+  \node[draw=pqcblue, thick, fill=pqclight, minimum width=2.0cm, minimum height=1.0cm] (a01) at (2.2,1.1) {$a_{01}(x)$};
+  \node[draw=pqcblue, thick, fill=pqclight, minimum width=2.0cm, minimum height=1.0cm] (a10) at (0,-0.1) {$a_{10}(x)$};
+  \node[draw=pqcblue, thick, fill=pqclight, minimum width=2.0cm, minimum height=1.0cm] (a11) at (2.2,-0.1) {$a_{11}(x)$};
+  \node[fit=(a00)(a01)(a10)(a11), inner sep=6pt, draw=pqcgray, thick] (Abox) {};
+  \node[pqcblue, font=\small] at ($(Abox.south)+(0,-0.5)$) {$A \in R_q^{2\times 2}$};
+
+  % A length-2 vector of ring elements: the secret s, one entry per row of A
+  \node[draw=pqcorange, thick, fill=white, minimum width=2.0cm, minimum height=1.0cm] (s0) at (5.6,1.1) {$s_0(x)$};
+  \node[draw=pqcorange, thick, fill=white, minimum width=2.0cm, minimum height=1.0cm] (s1) at (5.6,-0.1) {$s_1(x)$};
+  \node[fit=(s0)(s1), inner sep=6pt, draw=pqcgray, thick] (sbox) {};
+  \node[pqcorange, font=\small] at ($(sbox.south)+(0,-0.5)$) {$\mathbf{s} \in R_q^{2}$};
+\end{tikzpicture}
+\caption{The module structure made concrete for $k=2$: the public matrix $A \in R_q^{2\times2}$ (blue, left) has four entries $a_{00}(x),a_{01}(x),a_{10}(x),a_{11}(x)$, each a full polynomial in $R_q$, and the secret $\mathbf{s}=(s_0(x),s_1(x))$ (orange, right) is a length-$2$ vector of such polynomials. Comparing this against the earlier ``Secret object'' column: plain LWE would put a single scalar in each box, and RLWE would collapse the whole picture to just one box.}
+\label{fig:mlwe-module-structure}
+\end{figure}
+
+\section{Why is this better than plain LWE?}
+
+We can compare the three designs.
+
+\begin{itemize}
+    \item \textbf{LWE}: the matrix is huge and the public key is large.
+    \item \textbf{RLWE}: the representation is compact, but the algebraic structure is very strong.
+    \item \textbf{Module-LWE}: the matrix is small and the elements are polynomials, giving a very good compromise between compactness and flexibility.
+\end{itemize}
+
+In other words, Module-LWE uses a small matrix of polynomials instead of a huge matrix of integers or a single large polynomial.
+
+\section{Sage construction of a toy module}
+
+We can create a very small toy example in Sage. First define the ring.
+
+\begin{lstlisting}[language=Python]
+q = 17
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+\end{lstlisting}
+
+Now define a secret as a vector of two polynomials.
+
+\begin{lstlisting}[language=Python]
+s = vector(S, [S.random_element(), S.random_element()])
+print(s)
+\end{lstlisting}
+
+Create a small polynomial matrix.
+
+\begin{lstlisting}[language=Python]
+A = Matrix(S, [[S.random_element(), S.random_element()],
+               [S.random_element(), S.random_element()]])
+print(A)
+\end{lstlisting}
+
+Create a noise vector.
+
+\begin{lstlisting}[language=Python]
+e = vector(S, [S.random_element(), S.random_element()])
+\end{lstlisting}
+
+Then compute the public-like value.
+
+\begin{lstlisting}[language=Python]
+t = A * s + e
+print(t)
+\end{lstlisting}
+
+This already looks very close to the structure used in Kyber.
+
+\section{Why is it called a module?}
+
+The name comes from algebra. A vector space is defined over a field. A module is defined over a ring. In this setting, the ring is $R_q$, and the secret is a vector over that ring. So a module is essentially a vector over a ring, rather than a vector over a field.
+
+\section{The mathematical definition of MLWE}
+
+Formally, one writes
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1),
+\]
+then chooses
+\[
+\mathbf{s} \in R_q^k,
+\qquad
+A \in R_q^{k\times k},
+\qquad
+\mathbf{e} \in R_q^k,
+\]
+and computes
+\[
+\mathbf{t} = A\mathbf{s} + \mathbf{e}.
+\]
+
+This is the Module-LWE equation in a compact form.
+
+\section{Why Module-LWE is considered a compromise}
+
+Many people wrongly think that Module-LWE is simply "better" because it uses more structure. That is not the correct understanding. The real point is that Module-LWE reduces the strongest algebraic structure of pure RLWE while retaining the efficiency advantages. In other words, it trades off between:
+
+\begin{itemize}
+    \item the huge size of plain LWE,
+    \item the strong structure of RLWE,
+    \item and the practical middle ground provided by MLWE.
+\end{itemize}
+
+This balance is central to Kyber's design.
+
+\section{Why the Kyber parameters are $k=2,3,4$}
+
+The values $k=2,3,4$ correspond to different dimensions of the module. In practice:
+
+\begin{itemize}
+    \item $k=2$ gives Kyber512,
+    \item $k=3$ gives Kyber768,
+    \item $k=4$ gives Kyber1024.
+\end{itemize}
+
+Increasing $k$ increases the size of the module and therefore increases the security level. The ring dimension and modulus stay fixed; the main change is the module dimension.
+
+\section{A complete toy MLWE experiment}
+
+A useful exercise is to implement a toy version of MLWE in full.
+
+\begin{enumerate}
+    \item Define a ring $R_q$.
+    \item Create a small polynomial matrix $A$.
+    \item Create a polynomial vector $\mathbf{s}$.
+    \item Create a noise vector $\mathbf{e}$.
+    \item Compute $\mathbf{t}=A\mathbf{s}+\mathbf{e}$.
+    \item Print the result and inspect its structure.
+\end{enumerate}
+
+This gives a practical understanding of why Kyber can be seen as a structured generalization of LWE. Written as pseudocode, using the same names $A$, $\mathbf{s}$, $\mathbf{e}$, $\mathbf{t}$ as the Sage code above, the same six steps are Algorithm~\ref{alg:mlwe-sample}.
+
+\begin{algorithm}[H]
+\caption{Module-LWE Sample Generation}
+\label{alg:mlwe-sample}
+\begin{algorithmic}[1]
+\Require Ring $R_q = \mathbb{Z}_q[x]/(x^n+1)$; module dimension $k$
+\Ensure MLWE sample $(A,\mathbf{t})$; secret $\mathbf{s}$
+\State $A \gets$ uniformly random $k\times k$ matrix over $R_q$
+\State $\mathbf{s} \gets$ length-$k$ vector of small (noise-sized) elements of $R_q$ \Comment{the secret}
+\State $\mathbf{e} \gets$ length-$k$ vector of small (noise-sized) elements of $R_q$ \Comment{the error}
+\State $\mathbf{t} \gets A\mathbf{s} + \mathbf{e}$ \Comment{a vector of $k$ ring elements, not one scalar}
+\State \Return $(A,\mathbf{t})$ as the sample, $\mathbf{s}$ as the secret
+\end{algorithmic}
+\end{algorithm}
+
+Real Kyber runs exactly this procedure with $n=256$ and $k=2,3,4$ for Kyber512, Kyber768, and Kyber1024 respectively; only the module dimension $k$ changes between the three security levels, while the same algorithm shape stays fixed.
+
+\section{Summary}
+
+The key lesson is that Module-LWE is not merely "LWE with more polynomials". It is the middle ground between the two extremes:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Scheme & Secret object & Main idea \\
+\hline
+LWE & vector over $\mathbb{Z}_q$ & simple and general, but large \\
+\hline
+RLWE & single polynomial over $R_q$ & compact and fast, but highly structured \\
+\hline
+Module-LWE & vector of polynomials over $R_q$ & balanced compromise, used by Kyber \\
+\hline
+\end{tabular}
+\end{table}
+
+The important insight is that Kyber is not simply RLWE with a different name. It is the module version of the same noisy linear structure, arranged in a way that gives practical efficiency while preserving strong security assumptions.
