@@ -3,7 +3,7 @@
 
 \section{Learning objectives}
 
-ML-DSA in the previous chapter rested on lattice problems. FIPS 205, \textbf{SLH-DSA} (from the submission SPHINCS\textsuperscript{+}), rests on nothing but hash functions. There is no number theory, no lattice, no algebraic structure an attacker could exploit -- if the hash function is secure, so is the signature. This makes it the most conservative post-quantum signature, chosen precisely as a hedge in case a structural weakness is ever found in lattices.
+ML-DSA in the previous chapter rested on lattice problems. FIPS 205, \textbf{SLH-DSA} (from the submission SPHINCS\textsuperscript{+})~\cite{fips205,sphincsplus2019}, rests on nothing but hash functions. There is no number theory, no lattice, no algebraic structure an attacker could exploit -- if the hash function is secure, so is the signature. This makes it the most conservative post-quantum signature, chosen precisely as a hedge in case a structural weakness is ever found in lattices.
 
 After finishing this chapter, you should be able to:
 
@@ -42,7 +42,7 @@ That is the entire assumption. There is no group, no lattice, no number-theoreti
 
 \section{Phase 1: the one-time core (WOTS\textsuperscript{+})}
 
-The atomic building block is a \emph{one-time} signature: a key pair that may safely sign exactly one message. WOTS\textsuperscript{+} (Winternitz) works by repeated hashing along chains.
+The atomic building block is a \emph{one-time} signature~\cite{lamport1979}: a key pair that may safely sign exactly one message. WOTS\textsuperscript{+} (Winternitz) works by repeated hashing along chains.
 
 To sign a value between $0$ and $w-1$, start from a secret value $sk$ and hash it forward that many times; the public value is the end of the chain, $pk = H^{w-1}(sk)$. The signature is the intermediate point $H^{m}(sk)$. A verifier hashes the signature the remaining $w-1-m$ times and checks it reaches $pk$.
 
@@ -69,7 +69,7 @@ A full message digest is chopped into several base-$w$ digits, each signed by it
 
 \section{Phase 2: from one-time to many-time (the Merkle tree)}
 
-A one-time key is nearly useless on its own. The Merkle tree fixes this: generate many WOTS\textsuperscript{+} key pairs, hash each public key into a leaf, and build a binary tree of hashes up to a single \emph{root}. That one root is the public key for \emph{all} the leaves at once.
+A one-time key is nearly useless on its own. The Merkle tree~\cite{merkle1987} fixes this: generate many WOTS\textsuperscript{+} key pairs, hash each public key into a leaf, and build a binary tree of hashes up to a single \emph{root}. That one root is the public key for \emph{all} the leaves at once.
 
 To use leaf $i$, the signer publishes the WOTS\textsuperscript{+} signature \emph{plus} the \emph{authentication path}: the sibling hash at each level from the leaf up to the root. The verifier recomputes the leaf, then folds it up the path and checks the final value equals the known root.
 

@@ -214,11 +214,16 @@ This chapter is foundational for many later topics. In FHE, the central operatio
 
 The four key ideas to keep in mind are:
 
-\begin{verbatim}
-Polynomial
-    -> circulant matrix
-    -> circular convolution
-    -> NTT pointwise multiplication
-\end{verbatim}
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 6mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {polynomial};
+  \node[flownode, right=of a] (b) {circulant\\[-2pt]matrix};
+  \node[flownode, right=of b] (c) {circular\\[-2pt]convolution};
+  \node[keynode, right=of c] (d) {NTT pointwise\\[-2pt]multiplication};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+\end{tikzpicture}
+\end{center}
 
 This is the hidden bridge that makes RLWE and Module-LWE practical. It is also the deep reason why the same algebra appears throughout post-quantum cryptography, from Kyber to FHE and beyond.

@@ -19,11 +19,15 @@ We have already seen three major stages in the development of lattice-based cryp
 
 The historical path is therefore:
 
-\begin{verbatim}
-LWE
-  -> RLWE
-  -> Module-LWE
-\end{verbatim}
+\begin{center}
+\begin{tikzpicture}[node distance=9mm, every node/.style={font=\small}]
+  \node[flownode] (a) {LWE};
+  \node[flownode, right=of a] (b) {RLWE};
+  \node[keynode, right=of b] (c) {Module-LWE};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+\end{tikzpicture}
+\end{center}
 
 \section{What is a module?}
 
@@ -195,7 +199,7 @@ This balance is central to Kyber's design.
 
 \section{Why the Kyber parameters are $k=2,3,4$}
 
-The values $k=2,3,4$ correspond to different dimensions of the module. In practice:
+The values $k=2,3,4$ correspond to different dimensions of the module, and are exactly the three security levels of Kyber~\cite{kyber2018,langlois2015}. In practice:
 
 \begin{itemize}
     \item $k=2$ gives Kyber512,

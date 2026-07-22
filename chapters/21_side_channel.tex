@@ -53,7 +53,7 @@ in one paragraph; the common thread is that all of them turn a physical measurem
 into information about the secret.
 
 \paragraph{Timing attacks.}
-The total time a computation takes depends on the data it processed. If that data
+The total time a computation takes depends on the data it processed~\cite{kocher1996}. If that data
 includes the secret, the running time leaks it. The textbook example is a
 comparison that returns as soon as it finds the first differing byte: an attacker
 who can vary an input and time the response learns the secret one byte at a time.
@@ -74,7 +74,7 @@ The instantaneous power a chip consumes correlates with the operations it perfor
 and the bits it moves. \emph{Simple power analysis} (SPA) reads a single trace to
 recognize the sequence of operations -- for instance, telling a multiply from a
 square in a modular exponentiation, which spells out exponent bits. \emph{Differential
-power analysis} (DPA) is stronger: it collects many traces and correlates them,
+power analysis} (DPA)~\cite{kjj1999} is stronger: it collects many traces and correlates them,
 sample by sample, against a hypothesis about a few key bits, pulling the secret out
 even when it sits far below the measurement noise.
 
@@ -274,7 +274,7 @@ attacker-chosen) ciphertext. If decapsulation ever behaved differently on succes
 versus failure -- returned an error, took longer, or drew different power -- the
 attacker would gain a \emph{decryption-failure} or \emph{plaintext-checking} oracle,
 querying malformed ciphertexts and using the yes/no answers to peel the secret apart.
-The Fujisaki--Okamoto (FO) transform closes this door with \textbf{implicit
+The Fujisaki--Okamoto (FO) transform~\cite{fo1999} closes this door with \textbf{implicit
 rejection}. Decapsulation re-encrypts the recovered message and compares the result to
 the received ciphertext in constant time. On a match it returns the real shared key;
 on a mismatch it returns a \emph{pseudorandom} key derived from a secret seed and the

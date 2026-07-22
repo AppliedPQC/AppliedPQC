@@ -2,7 +2,7 @@
 \label{ch:lll}
 
 \section{Why this chapter matters}
-This chapter is often described as the heart of lattice reduction. The reason is simple: once we understand what a lattice is and why some bases are better than others, we need a way to measure and improve that quality. Gram--Schmidt orthogonalization provides exactly that tool. It is the conceptual foundation for LLL, BKZ, Babai's nearest plane algorithm, and many other lattice techniques.
+This chapter is often described as the heart of lattice reduction. The reason is simple: once we understand what a lattice is and why some bases are better than others, we need a way to measure and improve that quality. Gram--Schmidt orthogonalization provides exactly that tool. It is the conceptual foundation for LLL, BKZ, Babai's nearest plane algorithm~\cite{babai1986}, and many other lattice techniques.
 
 \section{Learning goals}
 After reading this chapter, you should be able to:
@@ -168,7 +168,7 @@ Another standard quantity is the Hadamard ratio:
 It ranges between $0$ and $1$, and values closer to $1$ indicate better basis quality.
 
 \section{Why LLL uses Gram--Schmidt repeatedly}
-The LLL algorithm is built around the idea that a basis can be improved by repeatedly examining the Gram--Schmidt information. If the current basis is not sufficiently reduced, LLL swaps vectors, rescales, and recomputes the orthogonalized directions until the basis quality is acceptable.
+The LLL algorithm~\cite{lll1982} is built around the idea that a basis can be improved by repeatedly examining the Gram--Schmidt information. If the current basis is not sufficiently reduced, LLL swaps vectors, rescales, and recomputes the orthogonalized directions until the basis quality is acceptable.
 
 This is why Gram--Schmidt is not just a side concept: it is the engine behind one of the most important lattice reduction algorithms. The algorithm alternates between two operations: \emph{size reduction}, which uses the $\mu_{i,j}$ coefficients to make each $b_i$ as close as possible to the span of the earlier vectors without changing the lattice, and the \emph{Lov\'asz condition}, a test on consecutive Gram--Schmidt lengths that decides whether two neighboring vectors should be swapped.
 

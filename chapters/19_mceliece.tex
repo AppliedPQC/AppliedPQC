@@ -3,7 +3,7 @@
 
 \section{Learning objectives}
 
-The whole of Parts II--V rested on one hard problem family: lattices. This part opens a second, entirely independent foundation. Code-based cryptography does not ask you to find short vectors in a lattice; it asks you to \emph{decode} a random-looking linear code. It is the oldest post-quantum family of all -- Robert McEliece proposed his scheme in 1978, the same year RSA appeared -- and after more than forty years of attack it stands essentially unbroken. That track record is precisely why it is prized: where the lattice standards trade a little conservatism for small keys and speed, Classic McEliece makes the opposite bet.
+The whole of Parts II--V rested on one hard problem family: lattices. This part opens a second, entirely independent foundation. Code-based cryptography does not ask you to find short vectors in a lattice; it asks you to \emph{decode} a random-looking linear code. It is the oldest post-quantum family of all -- Robert McEliece proposed his scheme in 1978, the same year RSA appeared~\cite{mceliece1978} -- and after more than forty years of attack it stands essentially unbroken. That track record is precisely why it is prized: where the lattice standards trade a little conservatism for small keys and speed, Classic McEliece makes the opposite bet.
 
 After finishing this chapter, you should be able to:
 
@@ -61,7 +61,7 @@ For a code with helpful structure, decoding is easy -- that is the whole point o
 \textbf{Syndrome Decoding.} Given a \emph{random} parity-check matrix $H \in \mathbb{F}_2^{(n-k)\times n}$, a target syndrome $s \in \mathbb{F}_2^{\,n-k}$, and a weight $t$, find an error vector $e$ with $\mathrm{wt}(e) \le t$ and $H\,e^\top = s$.
 \end{quote}
 
-For a code with no exploitable structure, this is genuinely hard. It was proved \textbf{NP-complete} by Berlekamp, McEliece, and van Tilborg in 1978 -- the same year the encryption scheme was proposed. Intuitively, the linear system $He^\top = s$ has many solutions, but almost all of them have large weight; the constraint $\mathrm{wt}(e) \le t$ picks out an exponentially rare needle, and there is no linear-algebra shortcut to it.
+For a code with no exploitable structure, this is genuinely hard. It was proved \textbf{NP-complete} by Berlekamp, McEliece, and van Tilborg in 1978~\cite{bmvt1978} -- the same year the encryption scheme was proposed. Intuitively, the linear system $He^\top = s$ has many solutions, but almost all of them have large weight; the constraint $\mathrm{wt}(e) \le t$ picks out an exponentially rare needle, and there is no linear-algebra shortcut to it.
 
 The best known attacks are the family of \textbf{information-set decoding} (ISD) algorithms, refined steadily since the 1960s. They run in time exponential in the code parameters, and decades of optimization have improved only the constant in the exponent, never removed it. Crucially, quantum computers do not change this picture qualitatively: the strongest quantum variants apply Grover-style search inside ISD and gain at most a square-root speedup, exactly the mild erosion the Quantum Threat chapter described for all the post-quantum families. There is no Shor-like collapse. Doubling the parameters restores the lost margin, just as it does for a symmetric cipher.
 
@@ -114,7 +114,7 @@ The asymmetry in the caption is the whole scheme in one sentence. Encryption add
 
 \section{The scheme}
 
-We present two views of the same idea. The original 1978 form encrypts a message directly and is the clearest illustration of the trapdoor. The modern form -- the one the NIST ``Classic McEliece'' submission actually specifies -- is a key-encapsulation mechanism (KEM) built on the dual, parity-check description of the code. Both rely on the same secret decoder.
+We present two views of the same idea. The original 1978 form encrypts a message directly and is the clearest illustration of the trapdoor. The modern form -- the one the NIST ``Classic McEliece'' submission~\cite{classicmceliece} actually specifies -- is a key-encapsulation mechanism (KEM) built on the dual, parity-check description of the code. Both rely on the same secret decoder.
 
 \subsection{The original 1978 encryption}
 
@@ -154,7 +154,7 @@ Written out, decryption is: compute $cP^{-1} = mSG + eP^{-1}$, which is a Goppa 
 
 \subsection{The modern KEM: sending a syndrome}
 
-The NIST submission uses the \textbf{Niederreiter} presentation, which is the dual of the picture above. Instead of a scrambled generator matrix it publishes a scrambled parity-check matrix, and instead of encrypting a chosen message it encapsulates a random key. This form has smaller ciphertexts and is what you should think of as ``Classic McEliece'' today.
+The NIST submission uses the \textbf{Niederreiter} presentation~\cite{niederreiter1986}, which is the dual of the picture above. Instead of a scrambled generator matrix it publishes a scrambled parity-check matrix, and instead of encrypting a chosen message it encapsulates a random key. This form has smaller ciphertexts and is what you should think of as ``Classic McEliece'' today.
 
 The public key is now a disguised parity-check matrix
 \[

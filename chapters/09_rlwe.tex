@@ -151,7 +151,7 @@ In a full implementation, NTT is the technique used to compute this multiplicati
 
 \section{Is RLWE secure?}
 
-At first glance, the additional algebraic structure might look dangerous. Maybe it makes the problem easier for an attacker. The security story is more subtle. RLWE is based on hardness in ideal lattices, not just general lattices. This makes the security analysis more involved, but it is still believed to be strong enough for practical use.
+At first glance, the additional algebraic structure might look dangerous. Maybe it makes the problem easier for an attacker. The security story is more subtle. RLWE is based on hardness in ideal lattices, not just general lattices~\cite{lpr2010}. This makes the security analysis more involved, but it is still believed to be strong enough for practical use.
 
 \section{Why Module-LWE appears later}
 
@@ -232,7 +232,7 @@ A classic interview question is: why is Kyber not pure RLWE? The answer is that 
 \section{A sibling assumption: NTRU}
 \label{sec:ntru}
 
-RLWE is not the only way to build a hard problem inside the ring $R_q$. An older construction, \textbf{NTRU} (from 1996, predating LWE), lives in the same ring but hides its secret differently. Instead of the additive-noise equation $b = a s + e$, NTRU picks \emph{two} short secret polynomials $f, g \in R_q$ (with $f$ invertible) and publishes a single quotient:
+RLWE is not the only way to build a hard problem inside the ring $R_q$. An older construction, \textbf{NTRU}~\cite{ntru1998} (from 1996, predating LWE), lives in the same ring but hides its secret differently. Instead of the additive-noise equation $b = a s + e$, NTRU picks \emph{two} short secret polynomials $f, g \in R_q$ (with $f$ invertible) and publishes a single quotient:
 \[
 h = g \cdot f^{-1} \pmod q.
 \]
@@ -266,18 +266,18 @@ RLWE replaces big random matrices by structured polynomials, which dramatically 
 
 The evolution is:
 
-\begin{verbatim}
-Linear algebra
-    |
-    v
-LWE
-    |
-    v
-RLWE via polynomial ring and cyclic structure
-    |
-    v
-NTT acceleration
-    |
-    v
-Practical post-quantum cryptography
-\end{verbatim}
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 6mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {linear algebra};
+  \node[flownode, right=of a] (b) {LWE};
+  \node[flownode, right=of b] (c) {RLWE};
+  \node[flownode, right=of c] (d) {NTT\\[-2pt]acceleration};
+  \node[keynode, right=of d] (e) {practical PQC};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+  \draw[flowarrow] (d) -- (e);
+\end{tikzpicture}
+\end{center}
+
+\noindent where the RLWE step is precisely the move to a polynomial ring with cyclic (negacyclic) structure.

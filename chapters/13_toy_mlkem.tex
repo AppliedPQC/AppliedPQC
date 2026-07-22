@@ -327,14 +327,6 @@ These will be introduced gradually in later chapters.
 
 \section{Summary}
 
-This toy implementation captures the core idea of Kyber in a compact form:
-
-\begin{verbatim}
-Module-LWE
-    -> KeyGen: t = As + e
-    -> Encrypt: u = A^T r + e1, v = t^T r + e2 + m
-    -> Decrypt: v - s^T u
-    -> Recover the message from a small noisy value
-\end{verbatim}
+This toy implementation captures the core idea of Kyber in a compact form. Starting from the Module-LWE relation, key generation forms $\mathbf{t}=A\mathbf{s}+\mathbf{e}$; encryption forms $\mathbf{u}=A^{T}\mathbf{r}+\mathbf{e}_1$ and $v=\mathbf{t}^{T}\mathbf{r}+e_2+m$; and decryption computes $v-\mathbf{s}^{T}\mathbf{u}$, recovering the message from the resulting small, noisy value.
 
 The most important lesson is that Kyber is not a completely new primitive. It is a carefully engineered version of the same noisy linear structure that we have been studying throughout the book. The next two chapters replace the remaining shortcuts, starting with real CBD noise sampling and finishing with the real FIPS 203 key-generation pipeline.

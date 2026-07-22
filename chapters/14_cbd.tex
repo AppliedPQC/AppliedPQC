@@ -379,17 +379,7 @@ A subtle but important point is that the real FIPS implementations do not litera
 
 Instead, the standard uses a deterministic expansion from a seed through an extendable-output function such as SHAKE.
 
-In other words, the flow is more like:
-
-\begin{verbatim}
-seed
-    -> SHAKE
-    -> bit stream
-    -> CBD
-    -> noise sample
-\end{verbatim}
-
-This design enables reproducibility and makes it easier to integrate into cryptographic protocols.
+Instead, the seed is expanded deterministically: SHAKE turns it into a pseudorandom bit stream, and CBD turns those bits into the noise sample. The full pipeline is shown in Section~\ref{sec:cbd-pipeline}. This design makes the noise reproducible from the seed and straightforward to integrate into a larger protocol.
 
 \section{Why CBD is constant-time friendly}
 
@@ -423,32 +413,31 @@ def small_poly(n):
 
 In this way, the toy Kyber code becomes much closer to the actual ML-KEM design.
 
-\section{Connecting the story to FIPS 203}
+\section{The complete noise pipeline in FIPS 203}
+\label{sec:cbd-pipeline}
 
-At this point, the whole picture becomes much clearer.
+We can now assemble the full path that noise takes in FIPS 203, from the initial seed to a Module-LWE sample.
 
-The real workflow looks like this:
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=6mm and 6mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (seed) {seed};
+  \node[flownode, right=of seed] (shake) {SHAKE / XOF};
+  \node[flownode, right=of shake] (bits) {random\\[-2pt]bits};
+  \node[flownode, right=of bits] (cbd) {CBD};
+  \node[flownode, right=of cbd] (noise) {small-integer\\[-2pt]noise};
+  \node[keynode, right=of noise] (mlwe) {Module-LWE};
+  \draw[flowarrow] (seed) -- (shake);
+  \draw[flowarrow] (shake) -- (bits);
+  \draw[flowarrow] (bits) -- (cbd);
+  \draw[flowarrow] (cbd) -- (noise);
+  \draw[flowarrow] (noise) -- (mlwe);
+\end{tikzpicture}
+\caption{The full noise pipeline in FIPS 203. A short seed is expanded by SHAKE into a pseudorandom bit stream; CBD converts those bits into small signed integers; and those integers become the secret and error of a Module-LWE sample. Every step is deterministic and constant-time.}
+\label{fig:cbd-pipeline}
+\end{figure}
 
-\begin{verbatim}
-Seed
-   |
-   v
-SHAKE / XOF
-   |
-   v
-Random Bits
-   |
-   v
-CBD
-   |
-   v
-Small Integer Noise
-   |
-   v
-Module-LWE
-\end{verbatim}
-
-So the noise is no longer a mysterious floating-point object. It is a small integer derived deterministically from a seed through a secure expansion procedure.
+The noise is therefore not a mysterious floating-point object. It is a small integer, derived deterministically from a seed through a secure expansion procedure, and every step along the way is reproducible and constant-time -- exactly what a standard requires.
 
 \section{Summary}
 

@@ -30,13 +30,13 @@ For a classical computer, the best known algorithms for both problems run in sup
 
 \section{Shor's algorithm: the break}
 
-In 1994 Peter Shor showed that a quantum computer can factor integers and compute discrete logarithms in \emph{polynomial} time. The engine is \emph{period finding}: both problems can be recast as finding the period of a cleverly chosen function, and a quantum computer extracts that period efficiently using the quantum Fourier transform -- evaluating the function on a superposition of all inputs at once, then interfering the results so that the period stands out.
+In 1994 Peter Shor showed that a quantum computer can factor integers and compute discrete logarithms in \emph{polynomial} time~\cite{shor1997}. The engine is \emph{period finding}: both problems can be recast as finding the period of a cleverly chosen function, and a quantum computer extracts that period efficiently using the quantum Fourier transform -- evaluating the function on a superposition of all inputs at once, then interfering the results so that the period stands out.
 
 The consequence is stark: RSA, Diffie--Hellman, ECDSA, and ECDH are \emph{all} broken by a large enough quantum computer, no matter how big the keys are. Doubling an RSA key only adds polynomial work for Shor's algorithm -- it does not restore security. There is no parameter choice that saves them.
 
 \section{Grover's algorithm: the weakening}
 
-Symmetric cryptography (block ciphers like AES) and hash functions (like SHA-3) face a milder threat. Grover's algorithm speeds up \emph{generic search}: finding a marked item among $N$ possibilities takes about $\sqrt{N}$ steps instead of $N$. Against a symmetric key of $b$ bits, this cuts the effective security to roughly $b/2$ bits.
+Symmetric cryptography (block ciphers like AES) and hash functions (like SHA-3) face a milder threat. Grover's algorithm~\cite{grover1996} speeds up \emph{generic search}: finding a marked item among $N$ possibilities takes about $\sqrt{N}$ steps instead of $N$. Against a symmetric key of $b$ bits, this cuts the effective security to roughly $b/2$ bits.
 
 Crucially, this is a \emph{quadratic} speedup, not an exponential one, and it is defeated simply by doubling: AES-256 retains about $128$ bits of security against Grover, and a hash with a $2n$-bit output retains about $n$ bits of collision resistance. Symmetric primitives \emph{survive} -- they just need larger parameters. This distinction is the single most important idea in the chapter.
 
@@ -94,10 +94,10 @@ A natural objection is that large quantum computers do not yet exist, so why mig
 Because Shor's algorithm targets the specific structure of factoring and discrete logarithms, the defense is to build public-key cryptography on entirely different hard problems -- ones with no known efficient quantum algorithm. After a multi-year public competition, NIST standardized the first post-quantum schemes:
 
 \begin{itemize}
-  \item \textbf{FIPS 203 -- ML-KEM} (Kyber): key encapsulation, based on module lattices;
-  \item \textbf{FIPS 204 -- ML-DSA} (Dilithium): signatures, based on module lattices;
-  \item \textbf{FIPS 205 -- SLH-DSA} (SPHINCS\textsuperscript{+}): signatures, based only on hash functions;
-  \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices.
+  \item \textbf{FIPS 203 -- ML-KEM} (Kyber): key encapsulation, based on module lattices~\cite{fips203};
+  \item \textbf{FIPS 204 -- ML-DSA} (Dilithium): signatures, based on module lattices~\cite{fips204};
+  \item \textbf{FIPS 205 -- SLH-DSA} (SPHINCS\textsuperscript{+}): signatures, based only on hash functions~\cite{fips205};
+  \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices~\cite{fips206}.
 \end{itemize}
 
 These rest on three broad problem families, each a different bet against the quantum future:

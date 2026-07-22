@@ -125,7 +125,7 @@ a \leftarrow a+\omega^k b,
 \qquad
 b \leftarrow a-\omega^k b.
 \]
-These are the butterfly operations. They are the basic computational building blocks of the transform. They are analogous to the butterfly structure of the Cooley--Tukey FFT, except that all arithmetic happens in the finite field.
+These are the butterfly operations. They are the basic computational building blocks of the transform. They are analogous to the butterfly structure of the Cooley--Tukey FFT~\cite{cooleytukey1965}, except that all arithmetic happens in the finite field.
 
 Each butterfly takes two values and produces two values, so the whole transform can be drawn as a network of butterflies. Figure~\ref{fig:ntt-butterfly} shows the network for a $4$-point transform; the $256$-point transform used in Kyber has the same structure with $\log_2 256 = 8$ stages instead of $2$.
 
@@ -256,15 +256,6 @@ A few hands-on experiments are highly recommended.
 
 \section{Summary}
 
-The important conceptual picture is:
-
-\begin{verbatim}
-Coefficient form
-    -> Forward NTT
-    -> Value form
-    -> Pointwise multiplication
-    -> Inverse NTT
-    -> Coefficient form
-\end{verbatim}
+The important conceptual picture is the round trip already drawn in Figure~\ref{fig:ntt-flow}: a polynomial in \emph{coefficient} form is carried by the forward NTT into \emph{value} (evaluation) form, where multiplication is a cheap pointwise product, and the inverse NTT carries the result back to coefficient form.
 
 The central intuition is that polynomial multiplication, which looks expensive in coefficient form, becomes cheap in evaluation form. NTT makes this transformation possible inside a finite field, and this is exactly why Kyber can be implemented efficiently in software and hardware.

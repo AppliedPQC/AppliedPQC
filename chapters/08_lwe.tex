@@ -156,7 +156,7 @@ In many theoretical papers, these two versions are shown to be essentially equiv
 \section{The dual problem: Short Integer Solution (SIS)}
 \label{sec:sis}
 
-LWE has a close relative that will become important once we reach signatures. Where LWE \emph{hides} a secret inside noise and asks you to recover it, the \textbf{Short Integer Solution} (SIS) problem asks you to \emph{find} a short combination of public vectors. Given a random matrix
+LWE has a close relative that will become important once we reach signatures. Where LWE \emph{hides} a secret inside noise and asks you to recover it, the \textbf{Short Integer Solution} (SIS) problem~\cite{ajtai1996} asks you to \emph{find} a short combination of public vectors. Given a random matrix
 \[
 A \in \mathbb{Z}_q^{n \times m}, \qquad m > n,
 \]
@@ -170,7 +170,7 @@ The two problems are mirror images. LWE is a \emph{search among noisy points} (r
 
 \section{Why worst-case reduction matters}
 
-The deepest theoretical contribution of Regev's work is the reduction from LWE to worst-case lattice problems such as GapSVP and SIVP. In particular, if one could solve average-case LWE efficiently, then one could solve hard lattice problems in the worst case. This is the major reason why LWE is regarded as a strong security foundation.
+The deepest theoretical contribution of Regev's work~\cite{regev2009} is the reduction from LWE to worst-case lattice problems such as GapSVP and SIVP. In particular, if one could solve average-case LWE efficiently, then one could solve hard lattice problems in the worst case. This is the major reason why LWE is regarded as a strong security foundation.
 
 It is important to note that this is a quantum reduction. That means the proof uses quantum computation as a theoretical tool, but the scheme itself does not require a quantum computer to run.
 
@@ -217,23 +217,20 @@ The essence of LWE can be summarized in one sentence:
 A simple linear system is turned into a hard problem by adding carefully chosen noise, so that the system remains approximately solvable for legitimate users but becomes difficult for an attacker to invert exactly.
 \end{quote}
 
-The conceptual chain is now complete:
+The conceptual chain built up over the last several chapters is now complete:
 
-\begin{verbatim}
-Finite field
-    |
-    v
-Linear algebra
-    |
-    v
-Lattice
-    |
-    v
-SVP / CVP
-    |
-    v
-Noise distribution
-    |
-    v
-LWE
-\end{verbatim}
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 5mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {finite field};
+  \node[flownode, right=of a] (b) {linear\\[-2pt]algebra};
+  \node[flownode, right=of b] (c) {lattice};
+  \node[flownode, right=of c] (d) {SVP / CVP};
+  \node[flownode, right=of d] (e) {noise};
+  \node[keynode, right=of e] (f) {LWE};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+  \draw[flowarrow] (d) -- (e);
+  \draw[flowarrow] (e) -- (f);
+\end{tikzpicture}
+\end{center}
