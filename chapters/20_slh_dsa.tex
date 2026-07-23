@@ -1,13 +1,22 @@
-\chapter{Complete Implementation of SLH-DSA (FIPS 205)}
-\chaptermark{SLH-DSA (FIPS 205)}
+\chapter{Complete Implementation of SLH-DSA (SPHINCS\textsuperscript{+}, FIPS 205)}
+\chaptermark{SLH-DSA / SPHINCS\textsuperscript{+}}
 \label{ch:slhdsa}
 
-\section{Learning objectives}
-The two previous chapters built the pieces of hash-based signing from the ground up: one-time and few-time signatures (Chapter~\ref{ch:hashots}) and the Merkle-tree and hypertree machinery that makes them stateless and many-time (Chapter~\ref{ch:hashmerkle}). This chapter assembles those pieces exactly as the standard specifies them. FIPS 205, \textbf{SLH-DSA} (from the submission SPHINCS\textsuperscript{+})~\cite{fips205,sphincsplus2019}, is the stateless hash-based signature standard, chosen as the conservative hedge against any future structural weakness in lattices.
+\section{What is SPHINCS\textsuperscript{+}?}
 
-After finishing this chapter, you should be able to:
+\textbf{SPHINCS\textsuperscript{+}} is the hash-based signature scheme that NIST standardized as \textbf{SLH-DSA} in FIPS 205~\cite{fips205,sphincsplus2019}, and it is the most conservative of all the post-quantum standards. Where the lattice signatures of the previous part rest on the presumed hardness of lattice problems, SPHINCS\textsuperscript{+} rests on \emph{nothing but the security of a hash function} -- the single best-understood assumption in cryptography. If every lattice and code assumption fell tomorrow, a secure hash function would still yield a secure signature; that is exactly why the family is kept in the standard portfolio as a hedge.
+
+The scheme is the endpoint of a short lineage: the stateless design \emph{SPHINCS} appeared in 2015, was hardened into \emph{SPHINCS\textsuperscript{+}} for the NIST competition through 2017--2019~\cite{sphincsplus2019}, and was finalized as \emph{SLH-DSA} in FIPS 205 in 2024. The three names denote essentially the same construction; this book uses SLH-DSA for the standardized algorithm and SPHINCS\textsuperscript{+} for the scheme it came from. In one sentence, it is \emph{a giant hypertree of one-time and few-time hash-based signatures, arranged so that no signing state need ever be kept}.
+
+\paragraph{Why ``stateless'' is the hard part.}
+The ``SL'' in SLH-DSA stands for \emph{stateless}, and that is the property the design fights for. Earlier hash-based schemes such as XMSS and LMS are \emph{stateful}: each one-time key may be used exactly once, so the signer must remember which leaves are already spent, and a single slip -- a restored virtual-machine snapshot, a copied key file -- reuses a one-time key and can be catastrophic. SPHINCS\textsuperscript{+} removes the state entirely. It builds a hypertree so vast that a leaf can be chosen \emph{pseudorandomly} for each signature with negligible chance of collision, and it signs the message itself with FORS, a \emph{few}-time scheme that tolerates the rare repeat. The price of statelessness is size: SPHINCS\textsuperscript{+} signatures are the largest of the standards, several kilobytes each. The scheme is instantiated over either \textbf{SHA-2} or \textbf{SHAKE}, in a \emph{simple} or \emph{robust} mode, and in the size-versus-speed \textbf{s} and \textbf{f} families detailed in the parameter section below.
+
+\section{Learning objectives}
+
+The two previous chapters built the pieces of hash-based signing from the ground up: one-time and few-time signatures (Chapter~\ref{ch:hashots}) and the Merkle-tree and hypertree machinery that makes them stateless and many-time (Chapter~\ref{ch:hashmerkle}). This chapter assembles those pieces exactly as the standard specifies them. After finishing this chapter, you should be able to:
 
 \begin{itemize}
+  \item explain why SPHINCS\textsuperscript{+} is the most conservative standard and what ``stateless'' buys and costs;
   \item recall how WOTS\textsuperscript{+}, FORS, Merkle trees, and the hypertree fit together;
   \item explain how every secret is derived deterministically from a few seeds and an address;
   \item follow the SLH-DSA key generation, signing, and verification algorithms;
