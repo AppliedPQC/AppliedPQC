@@ -31,24 +31,36 @@ The historical path is therefore:
 
 \section{What is a module?}
 
-In algebra, a module is a generalization of a vector space where the scalars come from a ring rather than a field. In a simple language, a module is a vector-like object whose entries are taken from a ring.
+The word ``module'' is not informal jargon; it is a precise algebraic structure, and Kyber's secrets live in one. It generalizes the vector space of Chapter~\ref{ch:linalg} by letting the scalars come from a ring instead of a field.
 
-For LWE, the secret is a vector over the finite field:
+\begin{definition}[Module over a ring]
+Let $R$ be a commutative ring with identity $1$. A (left) \emph{$R$-module} is an abelian group $(M,+)$ together with a scalar multiplication $R\times M\to M$, written $(r,m)\mapsto rm$, such that for all $r,s\in R$ and $x,y\in M$:
+\begin{enumerate}
+  \item $r(x+y)=rx+ry$;
+  \item $(r+s)x=rx+sx$;
+  \item $(rs)x=r(sx)$;
+  \item $1\,x=x$.
+\end{enumerate}
+\end{definition}
+
+These are exactly the vector-space axioms with the field replaced by a ring. When $R$ is a field, an $R$-module \emph{is} a vector space; a module is the strictly more general object obtained by relaxing ``field'' to ``ring.'' Several properties carry over, and one convenience is lost.
+
+\begin{itemize}
+  \item \textbf{Free modules and rank.} The set $R^{k}=\{(m_1,\dots,m_k):m_i\in R\}$ with componentwise operations is an $R$-module, the \emph{free module of rank $k$}. Like a vector space it has a basis -- the standard unit vectors $e_1,\dots,e_k$ -- so every element is a unique $R$-combination of them. Kyber's secret space is exactly the free module $R_q^{k}$.
+  \item \textbf{Matrices act as homomorphisms.} A matrix $A\in R^{k\times k}$ defines an $R$-linear map $R^{k}\to R^{k}$, $\mathbf{x}\mapsto A\mathbf{x}$, called an \emph{$R$-module homomorphism}. The Module-LWE map $\mathbf{s}\mapsto A\mathbf{s}$ is one of these.
+  \item \textbf{Submodules and ideals.} A submodule is the analogue of a subspace; the submodules of $R$ regarded as a module over itself are precisely its \emph{ideals} (Chapter~\ref{ch:polyring}) -- which is why RLWE is said to rest on \emph{ideal} lattices.
+  \item \textbf{What is lost.} Over a general ring, not every module is free and not every submodule has a basis -- a real departure from vector spaces. Kyber avoids this entirely by working in the free module $R_q^{k}$.
+\end{itemize}
+
+With the structure named precisely, the three-generation progression is a statement about \emph{which module the secret lives in}:
 \[
-s = (s_1,s_2,s_3).
+\underbrace{s\in\mathbb{Z}_q^{n}}_{\text{LWE}}
+\qquad
+\underbrace{s(x)\in R_q}_{\text{RLWE}}
+\qquad
+\underbrace{\mathbf{s}\in R_q^{k}}_{\text{Module-LWE}}.
 \]
-
-For RLWE, the secret becomes a single polynomial:
-\[
-s(x).
-\]
-
-For Module-LWE, the secret becomes a vector of polynomials:
-\[
-\mathbf{s} = (s_1(x), s_2(x), s_3(x)).
-\]
-
-So in this sense, Module-LWE is really a polynomial vector over a ring.
+LWE uses a vector of field elements; RLWE uses a single ring element; Module-LWE uses a length-$k$ vector over the ring $R_q$ -- a free module of rank $k$.
 
 \section{Kyber's secret}
 
@@ -160,30 +172,22 @@ print(t)
 
 This already looks very close to the structure used in Kyber.
 
-\section{Why is it called a module?}
+\section{The Module-LWE problem}
 
-The name comes from algebra. A vector space is defined over a field. A module is defined over a ring. In this setting, the ring is $R_q$, and the secret is a vector over that ring. So a module is essentially a vector over a ring, rather than a vector over a field.
+With the module structure in place, Module-LWE is the LWE distribution of Chapter~\ref{ch:lwe} with the scalars promoted from $\mathbb{Z}_q$ to the ring $R_q$.
 
-\section{The mathematical definition of MLWE}
-
-Formally, one writes
+\begin{definition}[Module-LWE]
+Fix the ring $R_q=\mathbb{Z}_q[x]/(x^n+1)$, a module rank $k$, and an error distribution $\chi$ over $R_q$ concentrated on small elements. For a secret $\mathbf{s}\in R_q^{k}$, the \emph{Module-LWE distribution} outputs
 \[
-R_q = \mathbb{Z}_q[x]/(x^n+1),
+(\mathbf{a},\,b),\qquad \mathbf{a}\leftarrow R_q^{k}\ \text{uniform},\quad e\leftarrow\chi,\quad b=\langle \mathbf{a},\mathbf{s}\rangle + e\in R_q.
 \]
-then chooses
-\[
-\mathbf{s} \in R_q^k,
-\qquad
-A \in R_q^{k\times k},
-\qquad
-\mathbf{e} \in R_q^k,
-\]
-and computes
-\[
-\mathbf{t} = A\mathbf{s} + \mathbf{e}.
-\]
+Stacking $m$ samples as the rows of $A\in R_q^{m\times k}$ gives the matrix form $(A,\ \mathbf{t}=A\mathbf{s}+\mathbf{e})$. \emph{Search-MLWE} is to recover $\mathbf{s}$; \emph{Decision-MLWE} is to distinguish $(A,\,A\mathbf{s}+\mathbf{e})$ from a uniform pair $(A,\,\mathbf{u})$.
+\end{definition}
 
-This is the Module-LWE equation in a compact form.
+Two special cases bracket the definition: $k=1$ is RLWE (a single ring element), and $n=1$ with $R_q=\mathbb{Z}_q$ recovers plain LWE. Module-LWE interpolates between them, and it inherits a worst-case hardness guarantee of the same flavour as LWE: solving it on average is at least as hard as standard problems on \emph{module} lattices~\cite{langlois2015}. In Kyber the matrix is square ($m=k$), giving the compact form
+\[
+\mathbf{t} = A\mathbf{s} + \mathbf{e}, \qquad A\in R_q^{k\times k},\ \ \mathbf{s},\mathbf{e}\in R_q^{k}.
+\]
 
 \section{Why Module-LWE is considered a compromise}
 
