@@ -28,6 +28,21 @@
   belowskip=0.6em
 }
 
+% Sub-part divider: a lighter heading between \part and \chapter, used to
+% group thematic chapters within a single family part (e.g. the lattice family).
+\newcommand{\subpart}[1]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{chapter}{\protect\numberline{}\protect\normalfont\protect\itshape #1}%
+  \null\vspace{0.16\textheight}%
+  \begingroup\centering
+  {\color{pqcblue}\rule{0.42\textwidth}{0.6pt}}\\[1.0em]
+  {\LARGE\itshape #1\par}\vspace{0.9em}%
+  {\color{pqcblue}\rule{0.42\textwidth}{0.6pt}}\par
+  \endgroup
+  \clearpage
+}
+
 \title{Post-Quantum Cryptography 101}
 \author{Stephen Duan \and Lin Zhong \and Wei Li}
 \date{\today}
@@ -45,28 +60,30 @@
 \input{chapters/11_circulant_convolution}
 \input{chapters/12_ntt}
 
-\part{Lattices and Hard Problems}
+\part{Lattice-Based Cryptography}
 \label{part:lattices}
+
+\subpart{Lattices and Hard Problems}
 \input{chapters/04_lattice}
 \input{chapters/05_lll}
 \input{chapters/06_svp}
 
-\part{Learning With Errors and Its Variants}
+\subpart{Learning With Errors and Its Variants}
 \input{chapters/07_probability_error}
 \input{chapters/08_lwe}
 \input{chapters/09_rlwe}
 \input{chapters/10_module_lwe}
 
-\part{Building ML-KEM (FIPS 203)}
+\subpart{Building ML-KEM (FIPS 203)}
 \input{chapters/13_toy_mlkem}
 \input{chapters/14_cbd}
 \input{chapters/15_seed_expansion}
 
-\part{Lattice-Based Signatures}
+\subpart{Signatures: ML-DSA and FN-DSA}
 \input{chapters/16_ml_dsa}
 \input{chapters/17_fn_dsa}
 
-\part{Hash-Based Signatures}
+\part{Hash-Based Cryptography}
 \input{chapters/18_hash_ots}
 \input{chapters/19_hash_merkle}
 \input{chapters/20_slh_dsa}
