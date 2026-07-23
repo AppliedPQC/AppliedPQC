@@ -1,74 +1,43 @@
 \chapter{Learning With Errors (LWE)}
 \label{ch:lwe}
 
-\section{From a simple linear equation to a hard problem}
+\section{From exact linear algebra to a noisy problem}
 
-At first sight, a linear system such as
+Solving a system of linear equations over a field is one of the oldest solved problems in mathematics. Given a matrix $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$ and a vector $\mathbf{b}\in\mathbb{Z}_q^{m}$, Gaussian elimination recovers any $\mathbf{s}$ with $\mathbf{A}\mathbf{s}=\mathbf{b}$ in $O(n^3)$ field operations. Because the problem is this easy, an \emph{exact} linear system carries no cryptographic hardness whatsoever: whatever the secret $\mathbf{s}$ encodes, an adversary reads it off directly.
+
+The Learning With Errors (LWE) problem, introduced by Regev~\cite{regev2009}, makes a single, deliberate change to this picture: it perturbs each equation by a small additive error. The observed system is
 \[
-3x=9
+\mathbf{b} = \mathbf{A}\mathbf{s} + \mathbf{e} \pmod q,
 \]
-looks trivial. The solution is immediately $x=3$. If we move to a matrix equation
+where $\mathbf{e}$ is a short noise vector drawn from a prescribed distribution. Gaussian elimination is now useless -- it amplifies the noise catastrophically -- and the problem of recovering $\mathbf{s}$ becomes, as far as is known, exponentially hard. This chapter develops LWE as a formal object: its distribution, its two decision problems, the geometry that explains its hardness, and the worst-case reduction that makes it a trustworthy foundation. It is the assumption on which ML-KEM (Chapter~\ref{ch:fips203}) and ML-DSA (Chapter~\ref{ch:mldsa}) ultimately rest.
+
+\section{The LWE distribution}
+
+Throughout, fix a dimension $n$ (the security parameter), a modulus $q=q(n)$, and an \emph{error distribution} $\chi$ over $\mathbb{Z}_q$ concentrated on values of small absolute value. Vectors are column vectors, and $\langle\cdot,\cdot\rangle$ denotes the inner product modulo $q$.
+
+\begin{definition}[LWE distribution]
+For a fixed secret $\mathbf{s}\in\mathbb{Z}_q^{n}$, the \emph{LWE distribution} $A_{\mathbf{s},\chi}$ over $\mathbb{Z}_q^{n}\times\mathbb{Z}_q$ is sampled by drawing $\mathbf{a}\leftarrow\mathbb{Z}_q^{n}$ uniformly and $e\leftarrow\chi$, and outputting
 \[
-Ax=b,
+(\mathbf{a},\,b), \qquad b=\langle \mathbf{a},\mathbf{s}\rangle + e \pmod q.
 \]
-then Gaussian elimination solves it in polynomial time. In fact, for the standard linear system problem, the mathematics is fully understood and the computational cost is manageable.
+\end{definition}
 
-This is why ordinary linear equations have no cryptographic value by themselves. They are easy to solve.
-
-\section{Add a small error}
-
-Now suppose the system is not exact. We observe
+Collecting $m$ independent samples and stacking the vectors $\mathbf{a}_i$ as the rows of a matrix $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$ gives the compact matrix form
 \[
-Ax + e = b,
+(\mathbf{A},\,\mathbf{b}), \qquad \mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}\pmod q,\quad \mathbf{e}\leftarrow\chi^{m}.
 \]
-where $e$ is a small error vector. In a toy example, the true system might be solved by $x$, but the observed value is perturbed by a small amount. The equation is no longer exact. The system becomes noisy and the exact solution is no longer directly recoverable.
-
-This is the basic intuition behind LWE.
-
-\section{Why is it called learning?}
-
-Many people first ask: what is being learned? The answer is not machine learning. The goal is to recover a hidden secret from many noisy samples.
-
-Suppose a secret vector $s$ exists. An adversary is given many pairs $(a_i,b_i)$ such that
-\[
-b_i = \langle a_i,s \rangle + e_i.
-\]
-The task is to recover the secret $s$ from many such observations. This is the sense in which the problem is a learning problem: one learns the hidden secret from noisy data.
-
-\section{Formal definition of an LWE sample}
-
-Let $q$ be a modulus and let $n$ be the dimension. Choose a random vector
-\[
-a \leftarrow \mathbb{Z}_q^n,
-\]
-a secret vector
-\[
-s \leftarrow \mathbb{Z}_q^n,
-\]
-and a noise term
-\[
-e \leftarrow \chi,
-\]
-where $\chi$ is a distribution over small integers or small residues. Output the sample
-\[
-(a,b),
-\qquad\text{where } b=\langle a,s \rangle + e \pmod q.
-\]
-
-This is the fundamental form of an LWE sample. The only complexity here is the presence of the error term $e$.
-
-Figure~\ref{fig:lwe-equation-boxes} redraws this equation as a small computation graph, which is a useful mental picture to keep for the rest of the chapter.
+The name is now transparent: the adversary is asked to \emph{learn} the hidden $\mathbf{s}$ from many noisy linear measurements of it. The only obstruction is the error $\mathbf{e}$; without it the samples are an exactly solvable system.
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[node distance=8mm and 16mm]
-  \node[flownode] (A) {$A$};
-  \node[flownode, below=8mm of A] (s) {$s$};
+  \node[flownode] (A) {$\mathbf{A}$};
+  \node[flownode, below=8mm of A] (s) {$\mathbf{s}$};
   \node[flownode, right=16mm of A, yshift=-4mm] (mul) {$\times$};
-  \node[flownode, right=16mm of mul] (As) {$As$};
-  \node[flownode, below=8mm of As] (e) {$e$};
+  \node[flownode, right=16mm of mul] (As) {$\mathbf{A}\mathbf{s}$};
+  \node[flownode, below=8mm of As] (e) {$\mathbf{e}$};
   \node[flownode, right=16mm of As, yshift=-4mm] (add) {$+$};
-  \node[keynode, right=16mm of add] (b) {$b=As+e$};
+  \node[keynode, right=16mm of add] (b) {$\mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}$};
   \draw[flowarrow] (A) -- (mul);
   \draw[flowarrow] (s) -- (mul);
   \draw[flowarrow] (mul) -- (As);
@@ -76,17 +45,128 @@ Figure~\ref{fig:lwe-equation-boxes} redraws this equation as a small computation
   \draw[flowarrow] (e) -- (add);
   \draw[flowarrow] (add) -- (b);
 \end{tikzpicture}
-\caption{The LWE sample equation as a small computation graph: the matrix $A$ and the secret $s$ feed a multiply node, and the noise $e$ is combined with the result $As$ at an add node to produce the public value $b$. All arithmetic is carried out modulo $q$.}
+\caption{The LWE sample equation as a computation graph: the public matrix $\mathbf{A}$ and the secret $\mathbf{s}$ feed a multiply node, and the noise $\mathbf{e}$ is added to the product $\mathbf{A}\mathbf{s}$ to produce the public value $\mathbf{b}$. All arithmetic is modulo $q$. Recovering $\mathbf{s}$ from $(\mathbf{A},\mathbf{b})$ alone is the LWE problem; the entire difficulty is contributed by the otherwise-negligible term $\mathbf{e}$.}
 \label{fig:lwe-equation-boxes}
 \end{figure}
 
-\section{Why many samples are needed}
+\begin{remark}[On the secret distribution]
+The definition draws $\mathbf{s}$ uniformly from $\mathbb{Z}_q^{n}$, but a standard transformation puts LWE into \emph{normal form}, in which the secret is drawn from the error distribution $\chi$ and is therefore itself short, without loss of hardness. Deployed schemes exploit this: in ML-KEM the secret is a small vector sampled from a centered binomial distribution (Chapter~\ref{ch:cbd}), which shortens keys and speeds arithmetic while preserving security.
+\end{remark}
 
-With only one sample, the system is underdetermined. For example, if the secret has two entries and only one equation is given, then many possibilities remain. The problem becomes solvable only when many samples are collected. With enough observations, one can try to infer the same hidden vector $s$ from a large family of noisy equations.
+\section{The two LWE problems}
 
-\section{Sage experiment: a toy LWE setup}
+LWE gives rise to a search problem and a decision problem, and the distinction is central: encryption schemes are proved secure against the \emph{decision} version, while the \emph{search} version is the more intuitive statement of ``recover the key.''
 
-We can build a very small toy instance. First, fix a modulus and a dimension.
+\begin{definition}[Search-LWE]
+Given $m$ independent samples $(\mathbf{A},\mathbf{b})$ drawn from $A_{\mathbf{s},\chi}$ for a fixed but unknown $\mathbf{s}\in\mathbb{Z}_q^{n}$, recover $\mathbf{s}$.
+\end{definition}
+
+\begin{definition}[Decision-LWE]
+Distinguish, with non-negligible advantage, between the two distributions on $\mathbb{Z}_q^{m\times n}\times\mathbb{Z}_q^{m}$:
+\begin{itemize}
+  \item the LWE distribution: $(\mathbf{A},\mathbf{A}\mathbf{s}+\mathbf{e})$ with $\mathbf{s}\leftarrow\mathbb{Z}_q^{n}$ and $\mathbf{e}\leftarrow\chi^{m}$;
+  \item the uniform distribution: $(\mathbf{A},\mathbf{u})$ with $\mathbf{u}\leftarrow\mathbb{Z}_q^{m}$ uniform and independent of $\mathbf{A}$.
+\end{itemize}
+\end{definition}
+
+The decision formulation is what makes LWE a workhorse for cryptography: if LWE samples are computationally indistinguishable from uniform randomness, then a ciphertext that masks a message by adding it to an LWE sample is indistinguishable from a random string, which is exactly semantic security. Remarkably, the two problems are equivalent.
+
+\begin{proposition}[Search--decision equivalence]
+\label{prop:search-decision}
+For a prime modulus $q=\mathrm{poly}(n)$, Search-LWE and Decision-LWE are equivalent up to a polynomial factor in running time and sample complexity: an efficient algorithm for either yields an efficient algorithm for the other.
+\end{proposition}
+
+The forward direction (search solves decision) is immediate. The reverse -- bootstrapping a mere distinguisher into a full secret-recovery algorithm -- is the substantial part: one guesses each coordinate $s_j\in\mathbb{Z}_q$ in turn, uses the distinguisher to test the guess, and amplifies. Regev proved the equivalence for prime $q=\mathrm{poly}(n)$~\cite{regev2009}; later work extended it to composite and larger moduli. The practical consequence is that designers may reason about the clean search problem while security proofs consume the decision problem.
+
+\section{The error distribution and the modulus-to-noise ratio}
+
+The error distribution $\chi$ is the beating heart of LWE. In Regev's formulation it is a \emph{discrete Gaussian} $D_{\mathbb{Z},\sigma}$ of width $\sigma$: the probability of an integer $x$ is proportional to $\exp(-\pi x^2/\sigma^2)$, rounded to $\mathbb{Z}$. It is convenient to parameterize the width relative to the modulus by a factor $\alpha\in(0,1)$,
+\[
+\sigma \;=\; \alpha q,
+\]
+so that $\alpha$ measures the noise as a fraction of the modulus. Two competing constraints pin down the right regime.
+
+\begin{itemize}
+  \item \textbf{Correctness needs small noise.} A legitimate decryptor removes the error by rounding, which succeeds only while $|e|$ stays below roughly $q/4$. Too much noise and honest decryption fails.
+  \item \textbf{Security needs enough noise.} If $\alpha q$ is too small the error is negligible and the system is essentially exact, hence easy. The worst-case hardness theorem below requires $\alpha q \gtrsim \sqrt{n}$.
+\end{itemize}
+
+The single quantity that governs both is the \emph{modulus-to-noise ratio} $q/\sigma = 1/\alpha$. A larger ratio makes decryption more robust but the underlying problem easier (it corresponds to a larger lattice approximation factor); a smaller ratio does the reverse. Parameter selection for a real scheme is, at bottom, the art of choosing this ratio. In practice the exact discrete Gaussian is replaced by the centered binomial distribution (Chapter~\ref{ch:cbd}), which has essentially the same shape but is far easier to sample in constant time; the foundational analysis, however, is cleanest for the Gaussian~\cite{micciancioregev2007}.
+
+\section{A geometric view: bounded-distance decoding}
+
+LWE has a precise lattice interpretation, which is the source of both its hardness and its name-recognition among lattice problems. Given $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$, define the \emph{$q$-ary lattice}
+\[
+\Lambda_q(\mathbf{A}) \;=\; \{\, \mathbf{A}\mathbf{s} \bmod q : \mathbf{s}\in\mathbb{Z}_q^{n} \,\} + q\mathbb{Z}^{m} \;\subseteq\; \mathbb{Z}^{m}.
+\]
+The noiseless product $\mathbf{A}\mathbf{s}$ is exactly a point of this lattice, and the observed vector $\mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}$ is that lattice point displaced by the short offset $\mathbf{e}$. Recovering $\mathbf{s}$ is therefore the problem of finding the lattice point nearest to $\mathbf{b}$.
+
+This is the closest vector problem (CVP) of Chapter~\ref{ch:svp}, but with a crucial promise: the target $\mathbf{b}$ is guaranteed to lie \emph{within a small, known distance} of the lattice, since $\|\mathbf{e}\|$ is bounded by the error distribution. A CVP instance carrying this promise is called \emph{Bounded-Distance Decoding} (BDD).
+
+\begin{proposition}[LWE is bounded-distance decoding]
+Search-LWE with error norm bounded by $r$ is an instance of $\mathrm{BDD}$ on the lattice $\Lambda_q(\mathbf{A})$ with decoding radius $r$; the secret $\mathbf{s}$ is recovered from the closest lattice point $\mathbf{A}\mathbf{s}$.
+\end{proposition}
+
+The BDD promise is what an attacker tries to exploit and what the parameters are tuned to deny. When the decoding radius is a small fraction of the lattice's minimum distance, the nearest lattice point is unique but still hard to find in high dimension; this is the operating point of every deployed scheme.
+
+\section{Hardness: the worst-case to average-case reduction}
+
+The reason LWE is trusted is not merely that no efficient attack is known. It is that Regev proved a \emph{worst-case to average-case reduction}: breaking LWE on random instances is at least as hard as solving standard lattice problems on \emph{every} instance.
+
+\begin{theorem}[Worst-case hardness of LWE, informal~\cite{regev2009}]
+\label{thm:regev}
+Let $n$ be a security parameter, $q=q(n)\le\mathrm{poly}(n)$ a modulus, and $\alpha=\alpha(n)\in(0,1)$ with $\alpha q>2\sqrt{n}$. If there is an efficient (possibly randomized) algorithm that solves Decision-LWE$_{n,q,\alpha}$ on the average, then there is an efficient \emph{quantum} algorithm that approximates the decision shortest-vector problem $(\mathrm{GapSVP})$ and the shortest-independent-vectors problem $(\mathrm{SIVP})$ to within $\widetilde{O}(n/\alpha)$ factors, in the worst case, on every $n$-dimensional lattice.
+\end{theorem}
+
+Three points give this theorem its weight.
+
+\begin{itemize}
+  \item \textbf{Worst-case to average-case.} A scheme's keys are random (average-case) LWE instances. The reduction guarantees that breaking a random key is as hard as the worst conceivable lattice, so there are no ``weak keys'' to stumble into -- a guarantee that number-theoretic assumptions such as factoring do not provide.
+  \item \textbf{The role of quantumness.} The reduction uses a quantum algorithm as a proof device only. LWE-based schemes run on entirely classical hardware; the quantum step is in the security argument, not the cryptosystem. Peikert later gave a \emph{classical} reduction for exponential moduli~\cite{peikert2009}, and Brakerski, Langlois, Peikert, Regev, and Stehl\'{e} established classical hardness for polynomial moduli~\cite{blprs2013}, removing the quantum caveat.
+  \item \textbf{The approximation factor.} The reduction yields hardness for $\widetilde{O}(n/\alpha)$-approximate lattice problems, which are believed to require time $2^{\Theta(n)}$ for the parameters used in practice. The factor $n/\alpha$ makes precise the tension of the previous section: less noise (smaller $\alpha$) yields a weaker guarantee.
+\end{itemize}
+
+\section{The dual problem: Short Integer Solution (SIS)}
+\label{sec:sis}
+
+LWE has a close relative that becomes important once we reach signatures. Where LWE \emph{hides} a secret inside noise and asks you to recover it, the \textbf{Short Integer Solution} (SIS) problem~\cite{ajtai1996} asks you to \emph{find} a short combination of public vectors. Given a random matrix
+\[
+\mathbf{A} \in \mathbb{Z}_q^{n \times m}, \qquad m > n,
+\]
+the task is to find a short nonzero integer vector $\mathbf{z}$ with
+\[
+\mathbf{A}\mathbf{z} = \mathbf{0} \pmod q, \qquad 0 < \|\mathbf{z}\| \le \beta.
+\]
+Because there are more columns than rows, such vectors certainly exist; the difficulty is finding one that is \emph{short}. A random solution would have large entries, and shrinking it is exactly the kind of short-vector search that is hard in a high-dimensional lattice. Geometrically, SIS lives in the \emph{orthogonal} $q$-ary lattice
+\[
+\Lambda_q^{\perp}(\mathbf{A}) \;=\; \{\, \mathbf{z}\in\mathbb{Z}^{m} : \mathbf{A}\mathbf{z}=\mathbf{0}\bmod q \,\},
+\]
+and a solution is a short vector of $\Lambda_q^{\perp}(\mathbf{A})$ -- the SVP counterpart to the BDD instance $\Lambda_q(\mathbf{A})$ that defines LWE.
+
+The two problems are mirror images. LWE is a \emph{search among noisy points} (recover $\mathbf{s}$ from $\mathbf{A}\mathbf{s}+\mathbf{e}$); SIS is a \emph{search for a short null vector} (find $\mathbf{z}$ with $\mathbf{A}\mathbf{z}=\mathbf{0}$). Both are hard for the same underlying reason -- short vectors in the associated lattice are hard to find -- and both admit worst-case reductions (SIS to the worst case of SIVP~\cite{ajtai1996}). We will meet SIS again directly: in ML-DSA / Dilithium (Chapter~\ref{ch:mldsa}), forging a signature amounts to producing a short vector satisfying a public equation, which is precisely an SIS instance.
+
+\section{Concrete security and cryptanalysis}
+
+Theorem~\ref{thm:regev} is asymptotic; deploying LWE requires \emph{concrete} parameters $(n,q,\alpha,m)$ for which the best known attack costs more than $2^{128}$ (or $2^{192}$, $2^{256}$) operations. Concrete security is estimated against lattice-reduction attacks rather than the reduction itself, since the reduction is not tight.
+
+\begin{itemize}
+  \item \textbf{Primal attack.} Embed the BDD instance of $\S$5 as a unique-shortest-vector instance in a lattice of dimension $\approx m+n+1$ (Kannan's embedding) and run lattice reduction to find the short error vector, revealing $\mathbf{s}$.
+  \item \textbf{Dual attack.} Find short vectors in the orthogonal lattice $\Lambda_q^{\perp}(\mathbf{A})$ and use them to distinguish LWE samples from uniform, solving Decision-LWE directly.
+\end{itemize}
+
+Both are driven by the \textbf{Block-Korkine-Zolotarev} (BKZ) algorithm with block size $\beta$, whose cost grows as $2^{\Theta(\beta)}$; the attacker's task reduces to finding the smallest $\beta$ that achieves the root-Hermite factor needed to solve the instance. The community consolidates these estimates in the ``LWE estimator''~\cite{aps2015}, building on the concrete-attack analysis of Lindner and Peikert~\cite{lindnerpeikert2011}; ML-KEM's parameter sets are chosen to clear the target security levels under this estimator.
+
+\begin{remark}[The number of samples is part of the assumption]
+Attack cost depends on how many samples $m$ the adversary sees, not only on $(n,q,\alpha)$: more equations can make the underlying lattice easier to reduce. A well-designed scheme therefore \emph{bounds} the number of LWE samples an adversary can obtain from public data. This is one reason a KEM publishes a fixed-size key rather than an unbounded stream of samples.
+\end{remark}
+
+\section{Choosing the modulus $q$}
+
+The modulus ties the preceding threads together. It must be large enough that the error rarely wraps around modulo $q$ and destroys correctness, yet small enough to keep keys compact and arithmetic fast; and, as $\S$4 showed, the ratio $q/\sigma$ directly sets the security--correctness trade-off. Real schemes add a further constraint: $q$ is chosen to admit an efficient number-theoretic transform (Chapter~\ref{ch:ntt}), which is why ML-KEM fixes the specific prime $q=3329$. Modulus selection is thus the first place where the abstract assumption meets hard engineering.
+
+\section{Sage experiments}
+
+The quickest route to intuition is to build a small instance by hand and watch the error convert an easy system into a hard one. Fix a modulus and dimension.
 
 \begin{lstlisting}[language=Python]
 q = 17
@@ -94,130 +174,52 @@ n = 3
 F = GF(q)
 \end{lstlisting}
 
-Choose a secret vector.
+Choose a secret vector and a batch of random rows.
 
 \begin{lstlisting}[language=Python]
 from sage.all import *
 s = random_vector(F, n)
+A = random_matrix(F, 8, n)
 print("secret =", s)
 \end{lstlisting}
 
-Generate several random vectors $a_i$ and form the matrix $A$.
-
-\begin{lstlisting}[language=Python]
-A = random_matrix(F, 8, n)
-\end{lstlisting}
-
-If there is no noise, then we can compute
-\[
-b = A s.
-\]
+Without noise, $\mathbf{b}=\mathbf{A}\mathbf{s}$ is an exact system and $\mathbf{s}$ is recovered by solving it directly.
 
 \begin{lstlisting}[language=Python]
 b = A * s
-print(b)
+print(A.solve_right(b) == s)   # True: exact recovery
 \end{lstlisting}
 
-In this case, the secret vector can be recovered by solving the linear system.
-
-\section{Add noise}
-
-Now add a small error vector. In the finite field $\mathbb{F}_{17}$, the value $16$ represents $-1$.
+Now add a short error. In $\mathbb{F}_{17}$ the value $16$ represents $-1$, so this vector has entries in $\{-1,0,1\}$.
 
 \begin{lstlisting}[language=Python]
-noise = vector(F, [1, 0, 16, 1, 0, 0, 16, 1])
+noise   = vector(F, [1, 0, 16, 1, 0, 0, 16, 1])
 b_noisy = A * s + noise
-print(b_noisy)
 \end{lstlisting}
 
-Now the equations are no longer exact. The ordinary linear system no longer has a perfect solution. This is exactly the phenomenon that makes LWE hard.
-
-\section{Why error is magical}
-
-A small error changes the value by only a tiny amount. In a low-dimensional picture, the noise moves the point slightly away from the lattice point. But in high dimension, the error moves the point in a direction that is not easily determined. The attacker sees a perturbed point but does not know the exact offset.
-
-This is the key: the error hides the secret without making the equations completely useless.
-
-\section{LWE and CVP}
-
-The LWE equation can be viewed geometrically as a lattice point plus a small perturbation. The task is to recover the nearest lattice point to the observed vector. That is precisely the flavor of the closest vector problem (CVP), which is why the lattice viewpoint is so important.
-
-\section{Search LWE and decision LWE}
-
-There are two common forms of the problem.
-
-\begin{itemize}
-    \item Search LWE: recover the secret $s$.
-    \item Decision LWE: distinguish whether a sample is drawn from an LWE distribution or from a truly random distribution.
-\end{itemize}
-
-In many theoretical papers, these two versions are shown to be essentially equivalent.
-
-\section{The dual problem: Short Integer Solution (SIS)}
-\label{sec:sis}
-
-LWE has a close relative that will become important once we reach signatures. Where LWE \emph{hides} a secret inside noise and asks you to recover it, the \textbf{Short Integer Solution} (SIS) problem~\cite{ajtai1996} asks you to \emph{find} a short combination of public vectors. Given a random matrix
-\[
-A \in \mathbb{Z}_q^{n \times m}, \qquad m > n,
-\]
-the task is to find a short nonzero integer vector $\mathbf{z}$ with
-\[
-A\mathbf{z} = \mathbf{0} \pmod q.
-\]
-Because there are more columns than rows, such vectors certainly exist; the difficulty is finding one that is \emph{short}. A random solution would have large entries, and shrinking it is exactly the kind of short-vector search that is hard in a high-dimensional lattice.
-
-The two problems are mirror images. LWE is a \emph{search among noisy points} (recover $s$ from $As+e$); SIS is a \emph{search for a short null vector} (find $\mathbf{z}$ with $A\mathbf{z}=0$). Both are hard for the same underlying reason -- short vectors in the associated lattice are hard to find -- and both reduce to worst-case lattice problems. We will meet SIS again directly: in the Dilithium signature (Chapter~\ref{ch:mldsa}), forging a signature means producing a short vector satisfying a public equation, which is precisely an SIS instance.
-
-\section{Why worst-case reduction matters}
-
-The deepest theoretical contribution of Regev's work~\cite{regev2009} is the reduction from LWE to worst-case lattice problems such as GapSVP and SIVP. In particular, if one could solve average-case LWE efficiently, then one could solve hard lattice problems in the worst case. This is the major reason why LWE is regarded as a strong security foundation.
-
-It is important to note that this is a quantum reduction. That means the proof uses quantum computation as a theoretical tool, but the scheme itself does not require a quantum computer to run.
-
-\section{A complete Sage experiment}
-
-A practical way to understand LWE is to implement the whole process by hand.
-
-\begin{enumerate}
-    \item Generate a random matrix $A$.
-    \item Choose a random secret vector $s$.
-    \item Sample a small noise vector $e$.
-    \item Compute $b = A s + e$.
-    \item Try to solve the system and observe when it fails.
-    \item Vary the amount of error and observe when recovery becomes impossible.
-\end{enumerate}
-
-This experiment gives a direct feeling for why a small error can make a simple linear system look hard.
-
-Algorithm~\ref{alg:lwe-sample} states steps 1--4 above formally, using the same variable names as the Sage code earlier in this chapter.
+The system $\mathbf{A}\mathbf{s}'=\mathbf{b}_{\text{noisy}}$ now has no exact solution, and naive solving returns the wrong secret. Sweeping the error magnitude reveals the phase transition of $\S$4: below a noise threshold the secret is still recoverable by more careful decoding, and above it recovery becomes infeasible. Algorithm~\ref{alg:lwe-sample} states the sampling procedure formally, using the same variable names as the code.
 
 \begin{algorithm}[H]
 \caption{Generate an LWE Sample}
 \label{alg:lwe-sample}
 \begin{algorithmic}[1]
-\Require Modulus $q$; dimension $n$; number of rows $m$; noise distribution $\chi$ over $\mathbb{Z}_q$
-\Ensure Public sample $(A,b)$ and secret $s$
-\State $s \gets$ uniformly random vector in $\mathbb{Z}_q^{n}$ \Comment{\texttt{s = random\_vector(F, n)}}
-\State $A \gets$ uniformly random matrix in $\mathbb{Z}_q^{m \times n}$ \Comment{\texttt{A = random\_matrix(F, m, n)}}
-\State $e \gets (e_1,\dots,e_m)$ with each $e_i \gets \chi$ \Comment{\texttt{noise = vector(F, [...])}}
-\State $b \gets A s + e \pmod q$ \Comment{\texttt{b\_noisy = A * s + noise}}
-\State \Return public sample $(A,b)$, secret $s$
+\Require Modulus $q$; dimension $n$; number of rows $m$; error distribution $\chi$ over $\mathbb{Z}_q$
+\Ensure Public sample $(\mathbf{A},\mathbf{b})$ and secret $\mathbf{s}$
+\State $\mathbf{s} \gets$ uniformly random vector in $\mathbb{Z}_q^{n}$ \Comment{\texttt{s = random\_vector(F, n)}}
+\State $\mathbf{A} \gets$ uniformly random matrix in $\mathbb{Z}_q^{m \times n}$ \Comment{\texttt{A = random\_matrix(F, m, n)}}
+\State $\mathbf{e} \gets (e_1,\dots,e_m)$ with each $e_i \gets \chi$ \Comment{\texttt{noise = vector(F, [...])}}
+\State $\mathbf{b} \gets \mathbf{A}\mathbf{s} + \mathbf{e} \pmod q$ \Comment{\texttt{b\_noisy = A * s + noise}}
+\State \Return public sample $(\mathbf{A},\mathbf{b})$, secret $\mathbf{s}$
 \end{algorithmic}
 \end{algorithm}
 
-\section{Why the modulus $q$ matters}
-
-The modulus $q$ must be chosen carefully. It must be large enough to avoid too much wrap-around, but small enough to keep the system efficient. In practical systems, $q$ is also chosen to support efficient polynomial arithmetic and NTT operations. This is one of the first places where cryptographic parameter design becomes central.
-
 \section{Summary}
 
-The essence of LWE can be summarized in one sentence:
-
-\begin{quote}
-A simple linear system is turned into a hard problem by adding carefully chosen noise, so that the system remains approximately solvable for legitimate users but becomes difficult for an attacker to invert exactly.
-\end{quote}
-
-The conceptual chain built up over the last several chapters is now complete:
+LWE turns the easiest problem in linear algebra into one of the most robust hardness assumptions in cryptography by adding calibrated noise:
+\[
+\mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}\pmod q.
+\]
+Its structure rests on a few precise ideas: the search and decision formulations are equivalent (Proposition~\ref{prop:search-decision}); the problem is bounded-distance decoding on the $q$-ary lattice $\Lambda_q(\mathbf{A})$; its average-case hardness follows from worst-case lattice problems (Theorem~\ref{thm:regev}); its dual SIS lives in the orthogonal lattice $\Lambda_q^{\perp}(\mathbf{A})$; and concrete parameters are set against BKZ-based estimators rather than the asymptotic reduction. The conceptual chain built over the last several chapters is now complete.
 
 \begin{center}
 \begin{tikzpicture}[node distance=5mm and 5mm, every node/.style={font=\scriptsize}]
@@ -234,3 +236,5 @@ The conceptual chain built up over the last several chapters is now complete:
   \draw[flowarrow] (e) -- (f);
 \end{tikzpicture}
 \end{center}
+
+The next chapter carries this assumption into a ring, replacing vectors of integers with polynomials to obtain the far more efficient Ring-LWE.
