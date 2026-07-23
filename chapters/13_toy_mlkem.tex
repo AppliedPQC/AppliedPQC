@@ -1,9 +1,65 @@
-\chapter{From Zero to a Toy ML-KEM}
+\chapter{Introduction to Kyber (ML-KEM)}
+\chaptermark{Introduction to Kyber (ML-KEM)}
 \label{ch:toymlkem}
 
-\section{The goal of this chapter}
+\section{What is Kyber?}
 
-From this point onward, the course enters the most practical part. The earlier chapters built the theoretical foundation. Now we build a toy version of Kyber-style encryption using only the mathematics that we have already studied, and obtain a complete working pipeline:
+\textbf{Kyber} -- standardized by NIST as \textbf{ML-KEM} in FIPS 203~\cite{fips203,kyber2018} -- is the post-quantum replacement for the key exchange that secures most of the internet today. It is a \emph{key-encapsulation mechanism} (KEM): a protocol by which two parties establish a shared secret over a public channel, taking the role that Diffie--Hellman and RSA key transport played in the pre-quantum world. Its hardness rests on Module-LWE (Chapter~\ref{ch:mlwe}), the middle member of the LWE family developed in the previous chapters.
+
+A KEM is defined by three algorithms:
+
+\begin{itemize}
+  \item \textsc{KeyGen}\,$\to (ek, dk)$ -- produce a public \emph{encapsulation key} $ek$ and a secret \emph{decapsulation key} $dk$;
+  \item \textsc{Encaps}$(ek)\,\to (K, c)$ -- generate a fresh shared secret $K$ together with a ciphertext $c$ that carries it;
+  \item \textsc{Decaps}$(dk, c)\,\to K$ -- recover the same shared secret $K$ from the ciphertext.
+\end{itemize}
+
+Crucially, a KEM transports a \emph{random} secret rather than a chosen message. That single design choice is what later lets the Fujisaki--Okamoto transform upgrade Kyber to security against active, chosen-ciphertext attackers.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\scriptsize]
+  \node[font=\small\bfseries] at (1.4,3.0) {Alice};
+  \node[font=\small\bfseries] at (8.6,3.0) {Bob};
+  \draw[pqcgray!45, dashed] (1.4,2.7) -- (1.4,-0.2);
+  \draw[pqcgray!45, dashed] (8.6,2.7) -- (8.6,-0.2);
+  \node[pqcgray, right] at (1.55,2.3) {KeyGen $\to (ek,dk)$};
+  \draw[flowarrow] (1.4,1.8) -- node[above]{encapsulation key $ek$} (8.6,1.8);
+  \node[pqcgray, left] at (8.45,1.3) {Encaps$(ek)\to(K,c)$};
+  \draw[flowarrow] (8.6,0.8) -- node[above]{ciphertext $c$} (1.4,0.8);
+  \node[keynode, align=center] at (5,0.0) {Decaps$(dk,c)\to K$: both sides now share $K$};
+\end{tikzpicture}
+\caption{Kyber as a key-encapsulation mechanism. Alice publishes an encapsulation key; Bob encapsulates a fresh random secret $K$ under it and sends only the ciphertext $c$; Alice decapsulates $c$ with her secret key to recover the same $K$. The shared secret $K$ itself never crosses the wire.}
+\label{fig:kyber-kem}
+\end{figure}
+
+\section{The pieces, and where this book builds them}
+
+Kyber is not a new primitive. It is a careful assembly of parts developed across this book, and this chapter is where they first come together -- in miniature. Some pieces are already in hand (the Module-LWE relation, the ring, the NTT); the toy below still shortcuts the others, which the cited chapters supply in full.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Ingredient & Role in Kyber & Built in \\
+\midrule
+Module-LWE relation $\mathbf{t}=A\mathbf{s}+\mathbf{e}$ & the underlying hard problem & Chapter~\ref{ch:mlwe} \\
+Ring $R_q=\mathbb{Z}_q[x]/(x^n+1)$ and NTT & fast polynomial arithmetic & Chapters~\ref{ch:rlwe},~\ref{ch:ntt} \\
+Centered binomial noise (CBD) & sampling small secrets/errors & Chapter~\ref{ch:cbd} \\
+Fujisaki--Okamoto transform & lifts CPA security to CCA & Chapter~\ref{ch:fips203} \\
+Full FIPS 203 pipeline & KeyGen / Encaps / Decaps $+$ FO & Chapter~\ref{ch:fips203} \\
+\bottomrule
+\end{tabular}
+\caption{Kyber is an assembly of pieces developed across this book; this introductory chapter shows the skeleton, and the cited chapters supply each real component.}
+\label{tab:kyber-pieces}
+\end{table}
+
+The three standardized parameter sets ML-KEM-512, ML-KEM-768, and ML-KEM-1024 differ only in the module dimension $k=2,3,4$, trading security for size; ML-KEM-768 is the common default. Their exact parameters appear with the standard in Chapter~\ref{ch:fips203}.
+
+\section{Building a toy Kyber}
+
+To see the skeleton before the machinery, we now build a \emph{toy} Kyber in about a hundred lines of SageMath -- small enough to inspect every object by hand. Using only mathematics already covered, it generates a public key, encrypts a message, and decrypts it:
 
 \begin{figure}[H]
 \centering
@@ -16,11 +72,11 @@ From this point onward, the course enters the most practical part. The earlier c
   \draw[flowarrow] (enc) -- (dec) node[midway, above, font=\scriptsize] {$(u,v)$};
   \draw[flowarrow] (dec) -- (out);
 \end{tikzpicture}
-\caption{The full pipeline built in this chapter: key generation produces a public key $(A,t)$ and secret key $s$; encryption turns a message bit into a ciphertext $(u,v)$; decryption recovers the bit using $s$.}
+\caption{The toy pipeline built in this chapter: key generation produces a public key $(A,t)$ and secret key $s$; encryption turns a message bit into a ciphertext $(u,v)$; decryption recovers the bit using $s$. This is the public-key-encryption \emph{core}; the full KEM of Figure~\ref{fig:kyber-kem} wraps exactly this core with the Fujisaki--Okamoto transform in Chapter~\ref{ch:fips203}.}
 \label{fig:toy-mlkem-pipeline}
 \end{figure}
 
-The goal is not to implement the full FIPS 203 standard immediately. Instead, we build an educational version of ML-KEM that can generate a public key, encrypt a message, decrypt it, and run completely inside SageMath in around one hundred lines, so that the structure remains clear.
+The goal is not to reproduce the full FIPS 203 standard here, but to expose its mathematical skeleton clearly. Everything runs inside SageMath in around one hundred lines so that the structure stays visible.
 
 \section{Simplifications used in the toy version}
 
@@ -330,4 +386,4 @@ These will be introduced gradually in later chapters.
 
 This toy implementation captures the core idea of Kyber in a compact form. Starting from the Module-LWE relation, key generation forms $\mathbf{t}=A\mathbf{s}+\mathbf{e}$; encryption forms $\mathbf{u}=A^{T}\mathbf{r}+\mathbf{e}_1$ and $v=\mathbf{t}^{T}\mathbf{r}+e_2+m$; and decryption computes $v-\mathbf{s}^{T}\mathbf{u}$, recovering the message from the resulting small, noisy value.
 
-The most important lesson is that Kyber is not a completely new primitive. It is a carefully engineered version of the same noisy linear structure that we have been studying throughout the book. The next two chapters replace the remaining shortcuts, starting with real CBD noise sampling and finishing with the real FIPS 203 key-generation pipeline.
+The most important lesson is that Kyber is not a completely new primitive. It is a carefully engineered version of the same noisy linear structure that we have been studying throughout the book. The next chapters replace the remaining shortcuts: real CBD noise sampling (Chapter~\ref{ch:cbd}), and then the complete FIPS 203 implementation -- key generation, encapsulation, decapsulation, and the Fujisaki--Okamoto transform -- in Chapter~\ref{ch:fips203}.
