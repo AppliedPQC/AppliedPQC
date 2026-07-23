@@ -206,9 +206,9 @@ print(a*s)
 
 The same cyclic structure appears in both viewpoints.
 
-\section{Why this chapter is so important for FHE and ZK}
+\section{Why this chapter matters}
 
-This chapter is foundational for many later topics. In FHE, the central operations are polynomial multiplications, and those are accelerated by NTT-style techniques. In ZK systems based on lattices, the same algebraic structure appears again. If one does not understand the transition from a matrix to a polynomial and from multiplication to convolution, the later constructions look mysterious.
+This chapter is foundational for everything that follows. The transition from a matrix to a polynomial, and from matrix multiplication to convolution, is exactly what makes RLWE and Module-LWE efficient, and it is what the NTT (Chapter~\ref{ch:ntt}) accelerates inside ML-KEM. The same algebra also underpins lattice-based fully homomorphic encryption and zero-knowledge proof systems -- topics beyond the scope of this book -- so the transition developed here is worth internalizing before those constructions can look anything but mysterious.
 
 \section{Summary}
 
@@ -226,4 +226,4 @@ The four key ideas to keep in mind are:
 \end{tikzpicture}
 \end{center}
 
-This is the hidden bridge that makes RLWE and Module-LWE practical. It is also the deep reason why the same algebra appears throughout post-quantum cryptography, from Kyber to FHE and beyond.
+This is the hidden bridge that makes RLWE and Module-LWE practical. It is also the deep reason why the same algebra appears again and again across lattice-based cryptography, from Kyber to fully homomorphic encryption and beyond.

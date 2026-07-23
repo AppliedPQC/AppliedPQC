@@ -141,9 +141,9 @@ In the Gaussian model, the parameter $\sigma$ controls the magnitude of the erro
 
 Gaussian distributions are theoretically unbounded, but in practice the probability of very large errors is tiny. When cryptographers talk about the tail of a distribution, they mean the probability of values far away from the center. A short tail is useful because it means that extreme errors are rare, which helps with correctness.
 
-\section{Noise growth}
+\section{The noise budget}
 
-In later chapters, especially in RLWE and FHE, we will encounter the phrase \emph{noise growth}. This is because the error term grows when we add ciphertexts, multiply them, or perform more operations. Eventually, if the noise becomes too large, decryption fails. This is why noise management is one of the central practical challenges in modern cryptography.
+Every scheme built on LWE and RLWE carries a small error term inside each ciphertext, and correct decryption depends on keeping that error below a fixed threshold -- the \emph{noise budget}. The tension is fundamental: choose the noise too small and the underlying problem becomes easy, so the scheme is insecure; choose it too large and honest decryption fails. Later chapters return to this balance when we fix concrete parameters for RLWE-based encryption and for ML-KEM, where the design drives the decryption-failure probability down to a negligible level. Managing the margin between correctness and security is one of the central practical challenges in lattice-based cryptography.
 
 \section{Why cryptography likes Gaussian noise}
 
