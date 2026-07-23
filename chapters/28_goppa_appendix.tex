@@ -1,0 +1,153 @@
+\chapter{Binary Goppa Codes}
+\chaptermark{Binary Goppa Codes}
+\label{app:goppa}
+
+Classic McEliece (Chapter~\ref{ch:mceliece}) hides its trapdoor inside a \textbf{binary Goppa code}: a family of algebraic codes that come with a fast $t$-error decoder yet, after four decades of scrutiny, still cannot be distinguished from random linear codes by any known efficient test. The main text used only two facts about them -- that they correct $t$ errors and that they have an efficient decoder. This appendix supplies the construction behind those facts: how a Goppa code is defined, why the binary case corrects the full $t$ errors rather than $t/2$, and how Patterson's algorithm decodes it~\cite{goppa1970,patterson1975}. Throughout we assume the finite fields of Chapter~\ref{ch:polyring}.
+
+\section{Setup: the field, the support, and the Goppa polynomial}
+
+Fix an extension field $\mathbb{F}_{2^m}$ of the binary field. A binary Goppa code is built from two ingredients.
+
+\begin{itemize}
+  \item A \textbf{support} $L = (\alpha_1,\dots,\alpha_n)$ of $n$ \emph{distinct} elements of $\mathbb{F}_{2^m}$. Since the field has $2^m$ elements, $n \le 2^m$.
+  \item A \textbf{Goppa polynomial} $g(x) \in \mathbb{F}_{2^m}[x]$ of degree $t$, subject to $g(\alpha_j) \neq 0$ for every $j$ -- so that each $x-\alpha_j$ is invertible modulo $g$.
+\end{itemize}
+
+The codewords will be binary vectors of length $n$; the field $\mathbb{F}_{2^m}$ is the scaffolding in which the defining constraints live. The number $t$ is the design parameter: it will be the number of errors the code corrects.
+
+\section{Definition}
+
+\begin{definition}[Binary Goppa code]
+The \emph{binary Goppa code} $\Gamma(L,g)$ is the set of binary vectors whose coordinates, weighted by the poles $x-\alpha_j$, sum to zero modulo $g$:
+\[
+\Gamma(L,g) \;=\; \Big\{\, c=(c_1,\dots,c_n)\in\mathbb{F}_2^{\,n} \;:\; \sum_{j=1}^{n} \frac{c_j}{x-\alpha_j} \equiv 0 \pmod{g(x)} \,\Big\},
+\]
+where each $\dfrac{1}{x-\alpha_j}$ denotes the inverse of $x-\alpha_j$ in the ring $\mathbb{F}_{2^m}[x]/(g)$, which exists because $g(\alpha_j)\neq 0$.
+\end{definition}
+
+The condition is $\mathbb{F}_{2^m}$-linear in $c$, so $\Gamma(L,g)$ is a linear code; and although the constraints are written over $\mathbb{F}_{2^m}$, the codewords are restricted to be \emph{binary}. This restriction is exactly what makes the binary case special, as Section~\ref{sec:goppa-distance} shows.
+
+\section{The parity-check matrix}
+
+To turn the congruence into a matrix, expand each pole. Because $g(\alpha_j)\neq 0$, one has the identity
+\[
+\frac{1}{x-\alpha_j} \;\equiv\; -\,g(\alpha_j)^{-1}\,\frac{g(x)-g(\alpha_j)}{x-\alpha_j} \pmod{g(x)},
+\]
+in which $\big(g(x)-g(\alpha_j)\big)/(x-\alpha_j)$ is an honest polynomial of degree $t-1$. Collecting the coefficients of $1,x,\dots,x^{t-1}$ in the defining sum and setting each to zero yields a parity-check matrix over $\mathbb{F}_{2^m}$ of the Vandermonde-times-diagonal form
+\[
+H \;=\;
+\underbrace{\begin{pmatrix}
+1 & 1 & \cdots & 1\\
+\alpha_1 & \alpha_2 & \cdots & \alpha_n\\
+\vdots & & & \vdots\\
+\alpha_1^{\,t-1} & \alpha_2^{\,t-1} & \cdots & \alpha_n^{\,t-1}
+\end{pmatrix}}_{\text{Vandermonde}}
+\underbrace{\begin{pmatrix}
+g(\alpha_1)^{-1} & & \\
+ & \ddots & \\
+ & & g(\alpha_n)^{-1}
+\end{pmatrix}}_{\text{diagonal}}
+\;\in\; \mathbb{F}_{2^m}^{\,t\times n}.
+\]
+A vector $c$ lies in $\Gamma(L,g)$ exactly when $H c^{\top}=0$. This is the parity check of an \emph{alternant} code, of which Goppa codes are the important special case.
+
+To obtain a \emph{binary} parity-check matrix, replace each entry of $H$ by the column of $m$ bits giving its coordinates in a fixed $\mathbb{F}_2$-basis of $\mathbb{F}_{2^m}$. This expands the $t\times n$ matrix over $\mathbb{F}_{2^m}$ into an $(mt)\times n$ matrix over $\mathbb{F}_2$. Its rows may be dependent, so the dimension satisfies
+\[
+k \;=\; \dim \Gamma(L,g) \;\ge\; n - m t .
+\]
+In Classic McEliece's regime -- $m$ around $12$--$13$, $n$ a few thousand, $t$ around $60$--$130$ -- this bound is met with near equality.
+
+\section{Minimum distance: why the binary code corrects \texorpdfstring{$t$}{t} errors}
+\label{sec:goppa-distance}
+
+A general alternant code with a degree-$t$ polynomial guarantees only $d \ge t+1$, hence correction of $\lfloor t/2\rfloor$ errors. The binary Goppa code does twice as well, provided $g$ is squarefree.
+
+\begin{proposition}[Doubled distance for binary Goppa codes]
+\label{prop:goppa-double}
+If $g$ is \emph{squarefree} (equivalently \emph{separable}: it has no repeated roots in the algebraic closure), then
+\[
+\Gamma(L,g) \;=\; \Gamma(L,g^2),
+\]
+and consequently its minimum distance obeys $d \ge 2t+1$. The code therefore corrects up to $t$ errors.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+For a binary $c$, let $\sigma_c(x)=\prod_{j:\,c_j=1}(x-\alpha_j)$ be the locator of its support. A short computation gives
+\[
+\sum_{j:\,c_j=1}\frac{1}{x-\alpha_j} \;=\; \frac{\sigma_c'(x)}{\sigma_c(x)},
+\]
+where $\sigma_c'$ is the formal derivative. Since $\gcd(\sigma_c,g)=1$ (no $\alpha_j$ is a root of $g$), the defining condition $c\in\Gamma(L,g)$ is equivalent to $g \mid \sigma_c'$. Now over characteristic $2$ the derivative kills every even-degree term, so $\sigma_c'(x)$ contains only even powers of $x$; because squaring is the Frobenius map on $\mathbb{F}_{2^m}$, such a polynomial is a \emph{perfect square}, $\sigma_c'=B^2$ for some $B\in\mathbb{F}_{2^m}[x]$. As $g$ is squarefree,
+\[
+g \mid B^2 \iff g \mid B \iff g^2 \mid B^2=\sigma_c',
+\]
+so $g\mid\sigma_c' \Leftrightarrow g^2\mid\sigma_c'$, i.e.\ $\Gamma(L,g)=\Gamma(L,g^2)$. The right-hand code is alternant with polynomial of degree $2t$, giving $d\ge 2t+1$.
+\end{proof}
+
+The whole point of using binary codewords is this free doubling: a Goppa polynomial of degree $t$ buys the error-correction of a designed distance $2t+1$.
+
+\section{Patterson's decoding algorithm}
+
+Decoding is the trapdoor. Given a received word $y=c+e$ with $c\in\Gamma(L,g)$ and $\mathrm{wt}(e)\le t$, Patterson's algorithm~\cite{patterson1975} recovers $e$ using $g$ and $L$ as the secret. It exploits the same characteristic-$2$ square structure used in Proposition~\ref{prop:goppa-double}.
+
+Write $E=\{\,j: e_j=1\,\}$ for the (unknown) set of error positions and let the \textbf{error-locator polynomial} be $\sigma(x)=\prod_{j\in E}(x-\alpha_j)$; its roots among $L$ are exactly the errors. The algorithm reconstructs $\sigma$ from the syndrome.
+
+\begin{algorithm}[H]
+\caption{Patterson decoding of a binary Goppa code $\Gamma(L,g)$, $\deg g=t$ squarefree}
+\label{alg:patterson}
+\begin{algorithmic}[1]
+\Require Received word $y\in\mathbb{F}_2^{\,n}$ with at most $t$ errors; secret $L$, $g$
+\Ensure Error vector $e$ (equivalently the codeword $c=y-e$)
+\State $S(x) \gets \sum_{j=1}^{n} \dfrac{y_j}{x-\alpha_j} \bmod g(x)$ \Comment{syndrome; the codeword part vanishes, so $S\equiv\sum_{j\in E}\frac{1}{x-\alpha_j}$}
+\If{$S \equiv 0$} \State \Return $e=0$ \Comment{$y$ is already a codeword} \EndIf
+\State $T(x) \gets S(x)^{-1} \bmod g(x)$
+\State $R(x) \gets \sqrt{\,T(x)+x\,} \bmod g(x)$ \Comment{unique square root mod $g$, as $g$ is squarefree}
+\State find $a(x),b(x)$ with $a \equiv R\,b \pmod{g}$, \ $\deg a\le\lfloor t/2\rfloor$, \ $\deg b\le\lfloor (t-1)/2\rfloor$
+\Statex \hfill\Comment{one truncated run of the extended Euclidean algorithm on $g$ and $R$}
+\State $\sigma(x) \gets a(x)^2 + x\,b(x)^2$ \Comment{the error locator}
+\State $E \gets \{\, j : \sigma(\alpha_j)=0 \,\}$ \Comment{roots of $\sigma$ in $L$}
+\State \Return $e$ with $e_j=1$ iff $j\in E$
+\end{algorithmic}
+\end{algorithm}
+
+The two non-obvious lines are the split and the key equation, and both come from characteristic $2$.
+
+\begin{itemize}
+  \item \textbf{The split $\sigma=a^2+x\,b^2$.} Any polynomial over $\mathbb{F}_{2^m}$ separates into even-degree and odd-degree parts; the even part is a perfect square $a^2$, and the odd part is $x$ times a perfect square $x\,b^2$. Differentiating, $(a^2)'=0$ and $(x b^2)'=b^2$, so $\sigma'=b^2$.
+  \item \textbf{The key equation.} Because $S=\sigma'/\sigma \bmod g$, we have $\sigma'\equiv \sigma S$, i.e.\ $b^2\equiv(a^2+xb^2)S \pmod g$. Multiplying by $T=S^{-1}$ and rearranging gives $a^2\equiv b^2\,(T+x)\pmod g$. Taking the square root $R=\sqrt{T+x}$ turns this into the linear-looking congruence $a\equiv R\,b\pmod g$, which the extended Euclidean algorithm solves for a pair of the required small degrees.
+\end{itemize}
+
+Once $\sigma$ is known, evaluating it at every $\alpha_j$ (a \emph{Chien search}) locates the errors, and over $\mathbb{F}_2$ correcting them is a bit flip. The cost is dominated by the extended Euclidean step and the root search, both quasi-linear in $n$ with fast arithmetic; this is the ``efficient decoder $\mathcal{D}_g$'' the main text invoked.
+
+\section{A construction in SageMath}
+
+The whole object is short to build. Take $m=4$, so $\mathbb{F}_{16}$, and a squarefree Goppa polynomial of degree $t=2$.
+
+\begin{lstlisting}[language=Python]
+F.<a> = GF(2^4)
+PR.<x> = F[]
+g = x^2 + x + a                     # squarefree: gcd(g, g') = gcd(g, 1) = 1
+L = [b for b in F if g(b) != 0]     # support: exclude any roots of g
+n = len(L)
+
+from sage.coding.goppa_code import GoppaCode
+C = GoppaCode(g, L)
+print(C)                            # a binary [n, k] Goppa code
+print(C.dimension(), n - g.degree() * F.degree())   # k  vs  n - m t
+\end{lstlisting}
+
+Here $mt = 4\cdot 2 = 8$, so the dimension satisfies $k\ge n-8$, and by Proposition~\ref{prop:goppa-double} the minimum distance is at least $2t+1=5$, so the code corrects $t=2$ errors. Scaling the same recipe to $m\approx 13$, $t\approx 100$ produces the codes Classic McEliece actually uses; the only thing that changes is the size.
+
+\section{Why Goppa codes, and not others}
+
+Three properties, taken together, are what make binary Goppa codes the enduring choice for McEliece.
+
+\begin{itemize}
+  \item \textbf{An efficient decoder.} Patterson's algorithm corrects the full $t$ errors in near-linear time -- the trapdoor the legitimate key holder uses.
+  \item \textbf{A vast family.} There are enormously many choices of support $L$ and polynomial $g$, so keys cannot be enumerated, and a random secret code is overwhelmingly unlikely to coincide with any particular target.
+  \item \textbf{Indistinguishability.} No known efficient algorithm distinguishes a scrambled binary Goppa code from a random linear code of the same parameters. This is the security-critical property, and it is where less conservative families failed: the generalized Reed--Solomon codes of the original Niederreiter proposal were broken by the Sidelnikov--Shestakov structural attack, and several Reed--Muller and algebraic-geometry variants fell the same way. Binary Goppa codes have resisted every such attack since 1978.
+\end{itemize}
+
+This is the concrete content behind the ``decodable code in disguise'' of Chapter~\ref{ch:mceliece}: the disguise is the scrambled generator matrix, and the code being disguised is $\Gamma(L,g)$.
+
+\section*{Further reading}
+Goppa introduced the codes in 1970~\cite{goppa1970}; Patterson gave the binary decoder in 1975~\cite{patterson1975}; McEliece turned them into a cryptosystem in 1978~\cite{mceliece1978}; and the current parameters and constant-time engineering are specified by the Classic McEliece submission~\cite{classicmceliece}.
