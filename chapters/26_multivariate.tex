@@ -1,0 +1,244 @@
+\chapter{Multivariate Cryptography}
+\chaptermark{Multivariate Cryptography}
+\label{ch:multivariate}
+
+\section{Learning objectives}
+
+The book has now surveyed lattices, hash functions, and codes. This chapter opens a fourth, again independent, hard-problem family. Multivariate cryptography abandons vectors, hashes, and codewords for a very different object: a system of nonlinear equations. Its security rests on a fact that predates cryptography itself -- solving a system of \emph{multivariate quadratic} equations over a finite field is, in general, computationally intractable, and no quantum algorithm is known to change that. The idea is old (it dates to the late 1980s and 1990s~\cite{ding2006}) and it has a turbulent history: many concrete proposals have been broken, sometimes years after they were thought safe. That history is worth studying in its own right, because it teaches, more sharply than any other family, how a structured trapdoor can be reverse-engineered.
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item state the \emph{multivariate quadratic} (MQ) problem -- solving a system of quadratic equations over $\mathbb{F}_q$ -- and explain why its NP-hardness (with no known quantum shortcut beyond Grover) is the security foundation of the family;
+  \item work through a tiny quadratic system over a small field and see why brute force costs $q^n$;
+  \item describe the shared trapdoor idea: a public system $P = S \circ F \circ T$ that looks random, built from an easily invertible \emph{central map} $F$ hidden between two secret linear maps $S$ and $T$;
+  \item explain why multivariate schemes are almost always \emph{signatures} -- tiny signatures, very large public keys -- rather than KEMs;
+  \item describe the \emph{oil-and-vinegar} construction and its unbalanced variant UOV, understand why the layered variant Rainbow was a NIST finalist, and know that Rainbow was broken in 2022;
+  \item place multivariate cryptography as one of the five post-quantum families, and state honestly that -- unlike the lattice and hash families -- it has no FIPS standard as of this writing.
+\end{enumerate}
+
+\paragraph{Why this chapter matters.}
+Post-quantum security is a portfolio of independent bets, and multivariate cryptography is one of its more distinctive holdings. Where the lattice and code families deliver both encryption and signatures, the multivariate family is almost entirely a \emph{signature} technology, and a specialized one: its signatures are among the smallest of any post-quantum scheme, at the cost of public keys measured in kilobytes to megabytes. It is also the family whose flagship candidates have been broken most publicly, which makes it a case study in the central tension of trapdoor design -- the very structure that lets the legitimate signer invert the system is the structure an attacker tries to detect. Understanding both the promise and the fragility rounds out the picture of what post-quantum cryptography is~\cite{bernstein2009}.
+
+\section{The hard problem: multivariate quadratics}
+
+Every scheme in this chapter reduces, for the attacker, to the same underlying task: given a system of quadratic equations, find a common solution.
+
+\begin{definition}[Multivariate quadratic (MQ) problem]
+Let $\mathbb{F}_q$ be a finite field. Given $m$ quadratic polynomials $p_1,\dots,p_m \in \mathbb{F}_q[x_1,\dots,x_n]$ and a target vector $y = (y_1,\dots,y_m) \in \mathbb{F}_q^m$, find, if it exists, a vector $x = (x_1,\dots,x_n) \in \mathbb{F}_q^n$ such that
+\[
+p_k(x) = y_k \qquad \text{for all } k = 1,\dots,m .
+\]
+Each polynomial has the form
+\[
+p_k(x) = \sum_{1 \le i \le j \le n} a^{(k)}_{ij}\, x_i x_j \;+\; \sum_{i=1}^{n} b^{(k)}_i\, x_i \;+\; c^{(k)} ,
+\]
+with all coefficients in $\mathbb{F}_q$.
+\end{definition}
+
+A single quadratic equation is easy; a large system of them, sharing variables, is not. Deciding whether such a system has a solution is \textbf{NP-complete}, and this holds even over the smallest field $\mathbb{F}_2$~\cite{ding2006}. The intuition is that the quadratic terms couple the variables together so tightly that fixing some of them does not straightforwardly simplify the rest, and there is no linear-algebra shortcut analogous to Gaussian elimination.
+
+The best classical attacks compute a \textbf{Gr\"obner basis} of the system (via algorithms such as $F_4$/$F_5$) or run the closely related \textbf{XL} linearization; both run, on random-looking instances, in time exponential in $n$ once $m$ and $n$ are comparable. Quantum computers do not overturn this. As with every family in this part of the book, the strongest quantum approach applies Grover-style search and buys at most a square-root speedup, the same mild erosion described in the Quantum Threat chapter. There is no Shor-like collapse: MQ has no known efficient quantum algorithm, and doubling the parameters restores any margin a quantum search would erode.
+
+\begin{example}[A tiny system over $\mathbb{F}_2$]
+Take $\mathbb{F}_2 = \{0,1\}$, where addition is XOR and multiplication is AND, and note that $x_i^2 = x_i$ there, so the only genuine quadratic monomials are the products $x_i x_j$ with $i \neq j$. Consider two quadratic polynomials in three variables,
+\[
+p_1(x) = x_1 x_2 + x_1 x_3 + x_2 , \qquad
+p_2(x) = x_2 x_3 + x_1 + x_3 ,
+\]
+and the target $y = (1,0)$. We seek $x \in \mathbb{F}_2^3$ with $p_1(x) = 1$ and $p_2(x) = 0$. With only $2^3 = 8$ candidates we can simply enumerate; doing so reveals three solutions, among them $x = (0,1,0)$:
+\[
+p_1(0,1,0) = 0 + 0 + 1 = 1 , \qquad p_2(0,1,0) = 0 + 0 + 0 = 0 .
+\]
+Brute force worked here only because the field and the dimension are tiny. In general an attacker faces $q^n$ candidate vectors, and a real scheme chooses $q$ and $n$ so that $q^n$ -- and, more precisely, the cost of the Gr\"obner/XL attacks, which is far below $q^n$ but still exponential -- is astronomically large.
+\end{example}
+
+This is the security foundation. If we can hand an attacker a system of quadratics that looks random, then forging without the trapdoor means solving an MQ instance.
+
+\section{The trapdoor: a solvable system in disguise}
+
+The difficulty is the familiar one: if the public system were genuinely random, then \emph{nobody} -- not even the legitimate key holder -- could solve it, and there would be no way to sign. Multivariate cryptography resolves this exactly as code-based cryptography does, by hiding an easy problem inside a hard-looking one.
+
+\paragraph{The central map.}
+The secret starts with a \textbf{central map} $F = (f_1,\dots,f_m) : \mathbb{F}_q^n \to \mathbb{F}_q^m$, a system of quadratics chosen with special structure so that it can be \emph{inverted efficiently}: given a target $a \in \mathbb{F}_q^m$, the key holder can quickly find some $b$ with $F(b) = a$. The particular structure that makes $F$ invertible is the design choice that distinguishes one multivariate scheme from another; the oil-and-vinegar structure of the next section is the most durable example.
+
+\paragraph{The disguise.}
+Left in the open, the structure of $F$ would be plainly visible and an attacker could invert it too. So it is hidden between two secret invertible \emph{affine} (for our purposes, linear) maps: an $n \times n$ map $T$ applied to the input, and an $m \times m$ map $S$ applied to the output. The public key is the composition
+\[
+P = S \circ F \circ T ,
+\]
+expanded out and published as $m$ explicit quadratic polynomials in $n$ variables. Composing with the linear maps $S$ and $T$ keeps $P$ quadratic, but it stirs the coefficients so thoroughly that the special shape of $F$ disappears: to anyone without $S$, $F$, and $T$, the public system $P$ looks like a random system of quadratics, and solving it looks like MQ.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm, every node/.style={font=\small}]
+  \node[keynode, text width=2.1cm] (T) {secret $T$\\[1pt]\scriptsize $n\times n$ linear};
+  \node[keynode, text width=2.7cm, right=of T] (F) {central map $F$\\[1pt]\scriptsize easy to invert};
+  \node[keynode, text width=2.1cm, right=of F] (S) {secret $S$\\[1pt]\scriptsize $m\times m$ linear};
+  \node[flownode, text width=3.0cm, right=13mm of S] (P) {public map\\[1pt] $P = S\circ F\circ T$\\[1pt]\scriptsize looks random};
+  \draw[flowarrow] (T) -- (F);
+  \draw[flowarrow] (F) -- (S);
+  \draw[flowarrow] (S) -- (P);
+  \node[font=\scriptsize, pqcteal, below=6mm of F, align=center]
+    {structured:\\ invert with the trapdoor};
+  \node[font=\scriptsize, pqcorange, below=6mm of P, align=center]
+    {random-looking:\\ solving is MQ};
+\end{tikzpicture}
+\caption{The trapdoor as a disguise. A structured central map $F$, which the key holder can invert efficiently, is sandwiched between two secret linear maps $T$ and $S$. The published composition $P = S \circ F \circ T$ is an explicit system of quadratic polynomials that, to anyone without the secret factors, is indistinguishable from a random system. Everyone can \emph{evaluate} $P$; only the trapdoor holder can \emph{invert} it.}
+\label{fig:mv-disguise}
+\end{figure}
+
+\paragraph{Signing, not encrypting.}
+Notice which direction is easy. \emph{Evaluating} $P$ at a point is cheap and needs no secret -- it is just plugging numbers into polynomials. \emph{Inverting} $P$, finding an $x$ with $P(x) = y$, is hard without the trapdoor. This asymmetry is exactly backwards from an encryption scheme, where anyone must be able to encrypt (compute the forward direction) and only the key holder decrypts. It fits a \textbf{signature} scheme perfectly: to sign a message $M$, hash it to a target $y = \mathcal{H}(M) \in \mathbb{F}_q^m$ and use the trapdoor to invert, producing a signature $x$ with $P(x) = y$; to verify, anyone evaluates $P(x)$ and checks that it equals $\mathcal{H}(M)$. For this reason multivariate schemes are almost always signatures. Encryption variants exist but have fared poorly, and the signatures are where the family's strengths -- very small signatures and fast verification -- actually appear.
+
+\section{Oil and vinegar}
+
+The oldest central-map structure still standing is \textbf{oil and vinegar}, introduced by Patarin and analysed in its unbalanced form by Kipnis, Patarin, and Goubin in 1999~\cite{kpg1999}. Its inversion trick is a small marvel of linear algebra.
+
+\begin{definition}[Oil-and-vinegar central map]
+Partition the $n$ variables into $v$ \emph{vinegar} variables $x_1,\dots,x_v$ and $o$ \emph{oil} variables $x_{v+1},\dots,x_{v+o}$, with $n = v + o$. A quadratic polynomial $f_k$ is of \emph{oil-and-vinegar} type if every quadratic term contains at least one vinegar variable -- equivalently, no two oil variables are ever multiplied together:
+\[
+f_k(x) = \sum_{i=1}^{v}\sum_{j=1}^{n} \alpha^{(k)}_{ij}\, x_i x_j
+       \;+\; \sum_{i=1}^{n} \beta^{(k)}_i\, x_i \;+\; \gamma^{(k)} .
+\]
+The central map is $F = (f_1,\dots,f_o)$, with one polynomial per oil variable.
+\end{definition}
+
+The oil variables are so named because, like oil in water, they never mix with one another -- only ever with vinegar. That single restriction is what makes $F$ invertible.
+
+\begin{proposition}[Inversion by linearization]
+Fix the vinegar variables to arbitrary field elements $x_1 = r_1,\dots,x_v = r_v$. Then each $f_k$, viewed as a function of the remaining oil variables alone, is \emph{linear}: every surviving quadratic term had a vinegar factor, which is now a constant. Solving $F = a$ therefore reduces to a system of $o$ linear equations in the $o$ oil unknowns, which is solved by Gaussian elimination.
+\end{proposition}
+
+So to invert $F$ on a target $a$: pick random values for the vinegar variables, substitute them, and solve the resulting linear system for the oil variables. If the linear system happens to be singular, re-randomize the vinegar values and try again. This is fast, and it is exactly the trapdoor step $F^{-1}$ used in signing.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm and 20mm, every node/.style={font=\small}]
+  % signing lane (right-to-left inversion), drawn left-to-right for reading
+  \node[keynode, text width=2.0cm] (y) {digest\\ $y=\mathcal{H}(M)$};
+  \node[keynode, text width=1.5cm, right=of y] (Si) {$S^{-1}$};
+  \node[keynode, text width=2.3cm, right=of Si] (Fi) {$F^{-1}$\\[1pt]\scriptsize trapdoor};
+  \node[keynode, text width=1.5cm, right=of Fi] (Ti) {$T^{-1}$};
+  \node[keynode, text width=1.9cm, right=of Ti] (x) {signature $x$};
+  \draw[flowarrow] (y) -- (Si);
+  \draw[flowarrow] (Si) -- (Fi);
+  \draw[flowarrow] (Fi) -- (Ti);
+  \draw[flowarrow] (Ti) -- (x);
+  \node[font=\scriptsize, pqcorange, left=3mm of y, align=right] {\textbf{Sign}\\ (secret)};
+  % verifying lane
+  \node[flownode, text width=1.9cm, below=14mm of y] (x2) {signature $x$};
+  \node[flownode, text width=3.2cm, right=16mm of x2] (ev) {evaluate public $P$\\[1pt]\scriptsize $P = S\circ F\circ T$};
+  \node[flownode, text width=2.6cm, right=16mm of ev] (chk) {$P(x)\stackrel{?}{=}\mathcal{H}(M)$};
+  \draw[flowarrow] (x2) -- (ev);
+  \draw[flowarrow] (ev) -- (chk);
+  \node[font=\scriptsize, pqcteal, left=3mm of x2, align=right] {\textbf{Verify}\\ (public)};
+\end{tikzpicture}
+\caption{Sign and verify with a multivariate trapdoor. To \emph{sign}, the digest $y = \mathcal{H}(M)$ is pushed backwards through the disguise -- undo $S$, invert the structured central map $F$ with the trapdoor, undo $T$ -- yielding a signature $x$ with $P(x) = y$. To \emph{verify}, anyone evaluates the public map $P$ at $x$ and checks the result against the digest. Only the middle step, $F^{-1}$, needs the secret; everything on the verify lane is public and cheap.}
+\label{fig:mv-signverify}
+\end{figure}
+
+\begin{remark}
+In pure single-layer UOV the outer map $S$ can be omitted (a single layer's output can be re-mixed into the central map without weakening it), so many descriptions write the public key as $P = F \circ T$. We keep $S$ explicit to match the general $P = S \circ F \circ T$ template, which is the right picture for the layered schemes below.
+\end{remark}
+
+\paragraph{Balanced versus unbalanced.}
+Patarin's original proposal took $v = o$. Kipnis and Shamir broke that balanced version, and the fix, due to Kipnis, Patarin, and Goubin, was to make the scheme \emph{unbalanced} -- take many more vinegar variables than oil, $v \gg o$~\cite{kpg1999}. This is \textbf{Unbalanced Oil and Vinegar (UOV)}. The extra vinegar variables enlarge the hidden subspace an attacker must find and defeat the balanced attack. UOV, with conservative parameters, has resisted attack for over two decades and is the stable core of the whole family.
+
+\begin{algorithm}[H]
+\caption{UOV KeyGen (teaching form)}
+\label{alg:uov-keygen}
+\begin{algorithmic}[1]
+\Require Field $\mathbb{F}_q$; parameters $v$ (vinegar), $o$ (oil), $n = v+o$, $m = o$
+\Ensure Public key $P$; secret key $(F, S, T)$
+\State choose an oil-and-vinegar central map $F = (f_1,\dots,f_o)$ \Comment{invertible by linearization}
+\State $T \gets$ random invertible $n\times n$ linear map over $\mathbb{F}_q$ \Comment{hides the input split}
+\State $S \gets$ random invertible $m\times m$ linear map over $\mathbb{F}_q$ \Comment{mixes the outputs}
+\State $P \gets S \circ F \circ T$, expanded as $m$ explicit quadratics \Comment{looks random}
+\State \Return $\big(\,P,\ (F, S, T)\,\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{UOV Sign (teaching form)}
+\label{alg:uov-sign}
+\begin{algorithmic}[1]
+\Require Message $M$; secret key $(F, S, T)$
+\Ensure Signature $x \in \mathbb{F}_q^n$
+\State $y \gets \mathcal{H}(M) \in \mathbb{F}_q^m$ \Comment{hash the message to a target}
+\State $a \gets S^{-1}(y)$ \Comment{undo the output mixing}
+\State pick random vinegar values; solve the resulting linear system for the oil variables to get $b$ with $F(b) = a$ \Comment{the trapdoor step; retry if singular}
+\State $x \gets T^{-1}(b)$ \Comment{undo the input map}
+\State \Return $x$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{UOV Verify (teaching form)}
+\label{alg:uov-verify}
+\begin{algorithmic}[1]
+\Require Message $M$; signature $x$; public key $P$
+\Ensure Accept or reject
+\State \textbf{if} $P(x) = \mathcal{H}(M)$ \textbf{then} \Return accept \textbf{else} \Return reject \Comment{just evaluate the public quadratics}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Rainbow: layers, and a fall.}
+\textbf{Rainbow} stacks several oil-and-vinegar maps in layers, each layer's variables serving as vinegar for the next. Layering shrinks the keys and signatures relative to plain UOV, and on that strength Rainbow advanced to the \emph{third round} of the NIST post-quantum project as one of three signature finalists. Then, in 2022, Beullens found a key-recovery attack that exploited the extra algebraic structure the layers introduced, recovering a Rainbow private key at the claimed lowest security level in about a weekend on a single laptop~\cite{beullens2022}. The break did not touch the MQ problem itself, nor plain UOV; it exploited Rainbow's \emph{specific} layered structure, which turned out to leak more than its designers realized. Rainbow was withdrawn from standardization.
+
+\paragraph{Where the family stands.}
+The lesson the community drew was to retreat toward the more conservative, less structured UOV. As of this writing, several multivariate signatures -- \textbf{UOV} itself, \textbf{MAYO} (a UOV variant with a smaller key, using a ``whipping'' technique to reuse a compact map), and \textbf{QR-UOV} (a quotient-ring variant that compresses the key) -- are candidates in NIST's additional-signatures ``on-ramp'' process, the round opened specifically to broaden the signature portfolio beyond the lattice and hash standards. None of them is a FIPS standard, and the process is ongoing; their standing may change.
+
+\section{Trade-offs and status}
+
+Multivariate signatures occupy a very particular corner of the design space, and Table~\ref{tab:mv-tradeoffs} lays out the shape of the bargain. The signatures are extraordinarily small -- often tens to a couple of hundred bytes, competitive with or smaller than pre-quantum ECDSA -- and verification, being a batch of polynomial evaluations, is fast. The price is the public key, which stores the coefficients of $m$ quadratics in $n$ variables. That is roughly $m \cdot n^2 / 2$ field elements, growing quadratically with the dimension, so public keys run from tens of kilobytes to over a megabyte, and there is no seed that regenerates them, for the same reason as in the code-based case: a compressible public key would carry structure an attacker could exploit. Key-generation cost and the absence of a KEM round out the profile.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+Property & Multivariate signatures (UOV family) \\
+\midrule
+Primitive          & signatures only (no practical KEM) \\
+Signature size     & very small (tens to a few hundred bytes) \\
+Public key size    & very large (tens of KB to $>1$\,MB) \\
+Verification       & fast (evaluate public quadratics) \\
+Signing            & moderate (invert the central map) \\
+Hardness assumption & MQ: solving random multivariate quadratics \\
+\bottomrule
+\end{tabular}
+\caption{The multivariate signature bargain. Tiny signatures and fast verification are bought with a very large, incompressible public key, and the family offers signatures but no practical key-encapsulation mechanism. This is close to the mirror image of the hash-based signatures of the earlier chapter, which have tiny public keys but large signatures.}
+\label{tab:mv-tradeoffs}
+\end{table}
+
+\paragraph{Status.}
+No multivariate scheme is among the FIPS standards (ML-KEM, ML-DSA, SLH-DSA, FN-DSA); those are drawn from the lattice and hash families. Rainbow, the family's most prominent standardization candidate, was broken in 2022 and withdrawn. The conservative core, UOV, together with the more compact variants MAYO and QR-UOV, is under evaluation in NIST's additional-signatures round as of this writing, with the outcome not yet settled. The practical appeal, if these schemes are standardized, is a niche but real one: settings where signatures are transmitted or stored constantly but the public key is distributed rarely, so that a small signature matters far more than a large key.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: assuming a structured trapdoor is safe because MQ is hard.}
+This is the defining hazard of the family, and Rainbow is its cautionary tale. The public key is \emph{not} a random MQ instance -- it is $S \circ F \circ T$, and the hidden structure of $F$ can leak through the linear disguise. Attacks like Kipnis--Shamir on balanced oil-and-vinegar and Beullens on Rainbow~\cite{beullens2022} never solved MQ in general; they detected and peeled away the specific structure of the central map. The more structure a variant adds to shrink its keys, the more an attacker has to grip. Security rests on the disguised system being indistinguishable from random, and that must be argued for each construction, not inherited from the NP-hardness of MQ.
+
+\paragraph{Pitfall 2: forgetting that the public key is large and incompressible.}
+Unlike the lattice standards, whose public matrix expands from a 32-byte seed, a multivariate public key is a dense list of quadratic coefficients with no shorter description. Budgeting for it as if it were a few kilobytes, or planning to ship it inside every handshake, will not work. The family suits scenarios where the key is installed once and reused, not renegotiated per session.
+
+\paragraph{Pitfall 3: using a balanced or under-parameterized oil-and-vinegar split.}
+Plain balanced oil and vinegar ($v = o$) is broken. Security requires an \emph{unbalanced} split with substantially more vinegar than oil, and the exact ratio and field size are load-bearing parameters, not free choices. Under-sizing them re-opens the very attacks the unbalanced design was introduced to close.
+
+\paragraph{Pitfall 4: expecting a KEM.}
+The trapdoor is easy to evaluate and hard to invert, which is the right shape for signing and the wrong shape for public-key encryption. Multivariate encryption schemes have a poor security track record; if you need post-quantum key establishment, reach for a lattice or code-based KEM, not this family.
+
+\section{Summary}
+
+Multivariate cryptography is the fourth of the post-quantum families this book surveys, and it rests on the \textbf{MQ problem}: solving a system of multivariate quadratic equations over a finite field, an NP-hard task with no known quantum shortcut beyond Grover's mild square-root erosion~\cite{ding2006}. It is turned into a signature scheme by the now-familiar trapdoor manoeuvre:
+
+\begin{itemize}
+  \item start from a \textbf{central map} $F$ with special structure -- classically the \textbf{oil-and-vinegar} form -- that can be inverted by linearization;
+  \item \textbf{disguise} it between two secret linear maps and publish $P = S \circ F \circ T$, an explicit system of quadratics that looks random;
+  \item anyone can \textbf{verify} by evaluating $P$, but only the trapdoor holder can \textbf{sign} by inverting it;
+  \item accept a \textbf{very large public key} in exchange for an unusually \textbf{small signature} and fast verification -- and no KEM.
+\end{itemize}
+
+The family's history is a lesson in the fragility of structured trapdoors: the balanced oil-and-vinegar scheme fell, and the layered Rainbow, a NIST third-round finalist, was broken by Beullens in 2022~\cite{beullens2022}, both by attacks that exploited structure rather than by any progress against MQ itself. The response has been a retreat to the conservative core, UOV, and its compact relatives MAYO and QR-UOV, which are under evaluation in NIST's additional-signatures round as of this writing.
+
+Placed among the five post-quantum families -- lattices, codes, hashes, multivariate systems, and isogenies -- multivariate cryptography is the specialist of the group: signature-only, smallest-in-class signatures, largest-in-class keys, and a hard-won reputation for caution after some public failures. Crucially, and unlike the lattice and hash families that supply today's FIPS standards, it has \emph{no} standardized scheme yet. It remains a live and valuable hedge -- an independent hard problem held in reserve -- but one still proving, candidate by candidate, that its trapdoors can withstand the scrutiny that broke its predecessors.

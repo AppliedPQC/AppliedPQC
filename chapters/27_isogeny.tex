@@ -1,0 +1,215 @@
+\chapter{Isogeny-Based Cryptography}
+\chaptermark{Isogeny-Based Cryptography}
+\label{ch:isogeny}
+
+\section{Learning objectives}
+
+The families covered so far -- lattices, hashes, and codes -- account for every scheme NIST has standardized, but they do not exhaust the landscape of post-quantum cryptography. The standard taxonomy names five broad families~\cite{bernstein2009}, and this chapter surveys the youngest and most mathematically demanding of them: \textbf{isogeny-based} cryptography, whose hardness comes not from decoding or short vectors but from navigating a vast graph of elliptic curves. It is the family with the smallest keys and signatures of any post-quantum approach, and also the one that produced the field's most dramatic cautionary tale -- a flagship scheme that reached the final round of the NIST competition and was then broken outright in an afternoon. Both facts are worth understanding, and they are connected.
+
+This chapter is a survey, not an implementation guide. The mathematics of isogenies runs deep, and we deliberately trade rigour for intuition: the aim is to convey what the objects are, why the underlying problem is believed hard, how the schemes use it, and what the 2022 break did and did not destroy.
+
+After finishing this chapter, you should be able to:
+
+\begin{enumerate}
+  \item recall what an elliptic curve over a finite field is, and describe an \emph{isogeny} as a structure-preserving map between two such curves;
+  \item explain what makes a curve \emph{supersingular} and picture the \textbf{supersingular isogeny graph}, whose rapid mixing is the source of cryptographic hardness;
+  \item state the \textbf{supersingular isogeny path problem} and explain why it is believed hard for classical and quantum computers alike, and why it yields the smallest parameters of any post-quantum family;
+  \item describe SIDH/SIKE as a Diffie--Hellman-style key exchange on the graph, and explain how the \emph{Castryck--Decru attack} recovered its secret key in polynomial time by exploiting the auxiliary torsion-point information the protocol reveals;
+  \item place what survives the break -- CSIDH and SQIsign -- and explain why isogeny signatures are the smallest known, even though no isogeny scheme is yet a FIPS standard.
+\end{enumerate}
+
+\paragraph{Why this chapter matters.}
+The value of a portfolio of post-quantum families is that they fail independently: a breakthrough against lattices would say nothing about codes or isogenies. Isogeny-based cryptography is the most extreme point in that portfolio -- the smallest bandwidth by a wide margin, resting on a problem with no known subexponential attack, but built on machinery only a couple of decades old and probed far less than lattices or codes. The story of SIDH is the sharpest illustration in this book of a general principle: a hard problem can be quietly undermined not by attacking it head-on, but by the extra information a protocol hands the attacker for free. That lesson outlives the scheme that taught it.
+
+\section{A crash course in elliptic curves and isogenies}
+
+The reader has met finite fields and polynomial rings, but not the geometry this family is built on. This section introduces just enough of it. Everything lives over a finite field $\mathbb{F}_q$, and for the cryptographically interesting case $q = p^2$ for a large prime $p$.
+
+\paragraph{Elliptic curves.}
+An elliptic curve is a particular kind of cubic equation whose solutions can be \emph{added} to one another, turning a geometric object into an algebraic group.
+
+\begin{definition}[Elliptic curve over a finite field]
+Let $\mathbb{F}_q$ be a finite field of characteristic greater than $3$. An \textbf{elliptic curve} $E$ over $\mathbb{F}_q$ is the set of solutions $(x,y) \in \mathbb{F}_q \times \mathbb{F}_q$ to an equation
+\[
+  y^2 = x^3 + a x + b, \qquad a,b \in \mathbb{F}_q, \quad 4a^3 + 27b^2 \neq 0,
+\]
+together with a distinguished \emph{point at infinity} $\mathcal{O}$. These points form a finite \textbf{abelian group} under a geometric ``chord-and-tangent'' addition law, with $\mathcal{O}$ as the identity.
+\end{definition}
+
+Two facts about this group matter for us. First, its size is finite and close to $q$; the group is where classical elliptic-curve cryptography (ECC) hides its secrets, in the difficulty of the discrete logarithm. That difficulty is exactly what Shor's algorithm destroys, so ECC is \emph{not} post-quantum. Isogeny-based cryptography reuses the curves but abandons the discrete logarithm entirely, hiding its secrets somewhere Shor cannot reach: in the maps \emph{between} curves.
+
+Second, each curve carries a single number, its \textbf{$j$-invariant} $j(E) \in \mathbb{F}_q$, computed from $a$ and $b$. Two curves are isomorphic exactly when their $j$-invariants agree, so we may think of $j(E)$ as a fingerprint that names the curve up to relabelling. The schemes in this chapter transmit $j$-invariants, not equations.
+
+\paragraph{Isogenies.}
+An isogeny is a map from one elliptic curve to another that respects both the geometry and the group structure -- the natural notion of ``morphism'' for these objects.
+
+\begin{definition}[Isogeny]
+An \textbf{isogeny} $\varphi : E_1 \to E_2$ between two elliptic curves over $\mathbb{F}_q$ is a non-constant rational map that is also a group homomorphism, so $\varphi(\mathcal{O}) = \mathcal{O}$ and $\varphi(P + Q) = \varphi(P) + \varphi(Q)$. Its \textbf{kernel} is the finite subgroup of points sent to $\mathcal{O}$, and (for the separable isogenies we use) its \textbf{degree} is the size of that kernel.
+\end{definition}
+
+The single most useful fact about isogenies is that they are pinned down by their kernels. Given any finite subgroup $G \subseteq E_1$, there is an isogeny $\varphi : E_1 \to E_2$ with kernel exactly $G$, unique up to isomorphism of the target, and it can be computed efficiently from $G$ by \textbf{V\'{e}lu's formulas}. So ``choosing an isogeny out of $E_1$'' and ``choosing a finite subgroup of $E_1$'' are the same act. A secret isogeny is really a secret subgroup, and to walk a long isogeny is to compose many small ones.
+
+Two more properties make isogenies behave like the arrows of a well-connected network. Degrees multiply under composition, so a chain of $\ell$-degree steps is an isogeny of degree $\ell^e$. And every isogeny $\varphi$ of degree $d$ has a \textbf{dual} isogeny $\hat{\varphi}$ of the same degree running the other way, with $\hat{\varphi} \circ \varphi = [d]$ (multiplication by $d$). Isogenies of a fixed small degree therefore come in matched pairs, which is what lets us regard them as undirected edges of a graph.
+
+\section{The supersingular isogeny graph}
+
+Among all elliptic curves over $\mathbb{F}_{p^2}$, a special and comparatively rare class -- the \textbf{supersingular} curves -- provides the setting for cryptography. The precise definition (a curve whose ring of self-maps, its \emph{endomorphism ring}, is unusually large -- an order in a quaternion algebra rather than in an imaginary quadratic field) is beyond a survey. What matters is the consequence.
+
+\paragraph{A small, tightly connected world.}
+There are only about $p/12$ supersingular $j$-invariants over $\mathbb{F}_{p^2}$ -- a finite set, but astronomically large for a cryptographic $p$ of several hundred bits. Fix a small prime $\ell$ (in practice $\ell = 2$ or $\ell = 3$). Build a graph:
+\begin{itemize}
+  \item the \textbf{vertices} are the supersingular curves over $\mathbb{F}_{p^2}$, each named by its $j$-invariant;
+  \item the \textbf{edges} are the isogenies of degree $\ell$ between them; because every $\ell$-isogeny has a dual of degree $\ell$, edges are undirected.
+\end{itemize}
+Each vertex has exactly $\ell + 1$ neighbours, so this \textbf{supersingular $\ell$-isogeny graph} is $(\ell+1)$-regular. It is also connected: from any supersingular curve you can reach any other by a sequence of $\ell$-isogeny steps.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=14mm and 18mm, every node/.style={font=\small}]
+  \node[flownode, circle, minimum size=9mm] (a) {$E_0$};
+  \node[flownode, circle, minimum size=9mm, above right=of a] (b) {};
+  \node[flownode, circle, minimum size=9mm, right=26mm of a] (c) {};
+  \node[flownode, circle, minimum size=9mm, below right=of a] (d) {};
+  \node[flownode, circle, minimum size=9mm, right=26mm of c] (e) {};
+  \node[keynode, circle, minimum size=9mm, right=26mm of e] (f) {$E_t$};
+  \draw[flowarrow, {Latex}-{Latex}] (a) -- (b);
+  \draw[flowarrow, {Latex}-{Latex}] (a) -- (d);
+  \draw[flowarrow, {Latex}-{Latex}] (b) -- (c);
+  \draw[flowarrow, {Latex}-{Latex}] (d) -- (c);
+  \draw[flowarrow, {Latex}-{Latex}] (c) -- (e);
+  \draw[flowarrow, {Latex}-{Latex}] (b) -- (e);
+  \draw[flowarrow, {Latex}-{Latex}] (e) -- (f);
+  \draw[flowarrow, {Latex}-{Latex}] (d) to[bend right=25] (f);
+\end{tikzpicture}
+\caption{A fragment of a supersingular isogeny graph. Vertices are supersingular curves (named by $j$-invariant); each undirected edge is an $\ell$-isogeny, matched with its dual. Every vertex has the same number of neighbours, and the graph is a rapidly mixing \emph{expander}: a short random walk from a start curve $E_0$ lands on an essentially unpredictable curve. The hard problem is to recover a \emph{path} from $E_0$ to a given target $E_t$, when only the two endpoints are known.}
+\label{fig:isogeny-graph}
+\end{figure}
+
+\paragraph{Rapid mixing.}
+The property that makes the graph cryptographically useful is that it is an optimal \textbf{expander} -- in fact a \emph{Ramanujan} graph, meeting the theoretical limit on how well-connected a regular graph can be. In plain terms, a random walk mixes extremely fast: after only about $\log p$ steps, the endpoint of a random path is distributed almost uniformly over all $\sim p/12$ vertices, with no detectable bias toward where it started. A secret path of a few hundred small steps therefore lands on a curve that reveals nothing about the route taken. This is the isogeny analogue of a one-way function: composing the steps forward is cheap, but the endpoint alone does not betray the path.
+
+\section{The hard problem: finding an isogeny path}
+
+The security of the entire family rests on the belief that the walk cannot be run backwards -- that seeing only the two endpoints of a secret path gives no efficient way to reconstruct it.
+
+\begin{definition}[Supersingular isogeny path problem]
+Given two supersingular elliptic curves $E_0$ and $E_t$ over $\mathbb{F}_{p^2}$, known to be connected by a path in the $\ell$-isogeny graph, \textbf{find} an isogeny $\varphi : E_0 \to E_t$ -- equivalently, a sequence of $\ell$-isogeny steps joining $E_0$ to $E_t$.
+\end{definition}
+
+Because the graph is an expander, the two endpoints look like an unrelated pair of curves; nothing local about $E_t$ points back toward $E_0$. The best known classical algorithms are generic path-finding (meet-in-the-middle) searches that cost on the order of $\sqrt{p}$ work, and the best known quantum algorithms -- claw-finding built on Grover-style search -- cost on the order of $p^{1/4}$. Both are fully \emph{exponential} in the bit-length of $p$: there is no known subexponential attack, classical or quantum, and in particular nothing resembling Shor's collapse of factoring and discrete logarithms. The problem is closely tied to the difficulty of computing the endomorphism ring of a supersingular curve, which is believed equally hard.
+
+This exponential hardness with tiny objects is the family's headline advantage. Because attacks scale as $\sqrt{p}$ or $p^{1/4}$ rather than as a mild erosion of a large structured key, a few hundred bits of $p$ already buy a comfortable security margin. The transmitted data are $j$-invariants and a handful of curve coordinates -- a few dozen to a few hundred bytes. No other post-quantum family comes close on bandwidth. The catch, developed over the rest of the chapter, is that a \emph{protocol} may have to reveal more than the two bare endpoints, and that ``more'' is where the danger lives.
+
+\section{SIDH and SIKE: a Diffie--Hellman on the graph}
+
+The first practical isogeny scheme was \textbf{SIDH} -- Supersingular Isogeny Diffie--Hellman -- proposed by Jao and De Feo in 2011~\cite{jaodefeo2011}. Its shape mirrors classical Diffie--Hellman exactly, with secret \emph{isogenies} playing the role of secret exponents.
+
+\paragraph{The commutative square.}
+Fix a public starting curve $E_0$ over $\mathbb{F}_{p^2}$, where $p$ is chosen so that $E_0$ has plentiful torsion of two coprime orders -- typically powers of $2$ and of $3$. The two parties walk in the two different graphs:
+\begin{itemize}
+  \item \textbf{Alice} picks a secret subgroup of $2$-power order and computes her secret isogeny $\varphi_A : E_0 \to E_A$;
+  \item \textbf{Bob} picks a secret subgroup of $3$-power order and computes his secret isogeny $\varphi_B : E_0 \to E_B$.
+\end{itemize}
+Each publishes the endpoint curve ($E_A$, $E_B$) of their own walk. If each could now re-apply their own secret isogeny starting from the other's curve, the two routes would commute and meet at a single shared curve $E_{AB}$, whose $j$-invariant is the shared secret. This is the commutative square of Figure~\ref{fig:sidh-square}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\small}]
+  \node[flownode, circle, minimum size=11mm] (e0) at (0,3) {$E_0$};
+  \node[flownode, circle, minimum size=11mm] (eb) at (5,3) {$E_B$};
+  \node[flownode, circle, minimum size=11mm] (ea) at (0,0) {$E_A$};
+  \node[keynode, circle, minimum size=11mm] (eab) at (5,0) {$E_{AB}$};
+  \draw[flowarrow] (e0) -- node[above, font=\scriptsize]{Bob: $\varphi_B$} (eb);
+  \draw[flowarrow] (e0) -- node[left, font=\scriptsize]{Alice: $\varphi_A$} (ea);
+  \draw[flowarrow] (eb) -- node[right, font=\scriptsize]{Alice: $\varphi_A'$} (eab);
+  \draw[flowarrow] (ea) -- node[below, font=\scriptsize]{Bob: $\varphi_B'$} (eab);
+  \node[font=\scriptsize, pqcgray, align=center] at (2.5,-1.1)
+    {shared secret $= j(E_{AB})$};
+\end{tikzpicture}
+\caption{The SIDH commutative square. Alice and Bob walk secret isogenies of coprime degree out of the public curve $E_0$, publishing only the endpoints $E_A$ and $E_B$. To close the square each must re-apply their own secret isogeny \emph{starting from the other party's curve}, which requires knowing where their private torsion points land under the partner's map. Publishing those torsion-point images is what makes the protocol work -- and, as the next section shows, what breaks it.}
+\label{fig:sidh-square}
+\end{figure}
+
+\paragraph{The auxiliary torsion points.}
+Here lies the subtle ingredient. To let Bob re-apply Alice's isogeny from his curve, Alice must publish not only $E_A$ but also the \emph{images} under $\varphi_A$ of a fixed public basis of Bob's torsion subgroup -- two extra points on $E_A$. Bob does the symmetric thing. These \textbf{auxiliary torsion-point images} are what allow each party to reconstruct the partner's secret subgroup translated onto their own curve, and so to finish the square. They are essential to the protocol. They are also strictly more information than the bare path problem gives an attacker: alongside the endpoints $E_0$ and $E_A$, the adversary is handed the action of the secret isogeny on a known set of points.
+
+\paragraph{SIKE.}
+Wrapping SIDH in a Fujisaki--Okamoto-style transform yields \textbf{SIKE} (Supersingular Isogeny Key Encapsulation), a chosen-ciphertext-secure KEM. SIKE was a serious contender in the NIST competition: it advanced to the fourth round as one of the few remaining key-encapsulation candidates, prized above all for its exceptionally small keys and ciphertexts -- on the order of a few hundred bytes, several times smaller than any lattice or code alternative. For a decade it was the poster child for how little bandwidth post-quantum security might cost.
+
+\section{The 2022 break}
+
+In the summer of 2022, SIDH and SIKE were broken. Castryck and Decru gave an \textbf{efficient key-recovery attack}~\cite{castryckdecru2023}: given a party's public key, it reconstructs the secret isogeny in \emph{polynomial time}. For the actual SIKE parameters the attack runs in minutes to about an hour on a single ordinary computer -- not a marginal weakening of the security level, but a total collapse. Independent refinements by others followed within weeks, generalizing and speeding up the result.
+
+\paragraph{What the attack exploited.}
+Crucially, the attack did \emph{not} solve the supersingular isogeny path problem. It targeted the extra information SIDH reveals: the auxiliary torsion-point images. The core idea uses a theorem of Kani to relate Alice's secret isogeny to an isogeny between \emph{higher-dimensional} abelian varieties (products of elliptic curves), and the known torsion-point images provide exactly the data needed to build and evaluate that higher-dimensional object step by step. Each step tests and extends a guess about the secret walk, and because the auxiliary points pin the walk down so tightly, the search collapses from exponential to polynomial. The starting curve's special structure, whose endomorphisms are known, made the construction concrete.
+
+\begin{remark}
+The distinction is worth stating sharply. The abstract problem in the definition above -- recover an isogeny from two bare curves -- was \emph{not} weakened by the attack and is still believed hard. What fell was SIDH, because SIDH does not present an attacker with two bare curves. It presents them with two curves \emph{plus} the images of a known torsion basis, and that auxiliary information was enough to bypass the hard problem entirely. The hardness assumption survived; the scheme's way of using it did not.
+\end{remark}
+
+\paragraph{The lesson.}
+This is the sharpest example in the book of a recurring hazard: side information volunteered by a protocol can undermine a hard problem without touching the problem itself. SIDH's designers knew the torsion images were extra data, but for eleven years no one saw how to weaponize them; the mathematics that turned them into a break -- higher-dimensional isogenies -- simply had not been connected to the setting yet. It is a reminder that ``the underlying problem is hard'' is a necessary but not sufficient condition for a scheme's security, and that young assumptions can hide such connections for a long time.
+
+\section{What survives: CSIDH and SQIsign}
+
+The break was specific to SIDH's torsion-point construction. Isogeny schemes that do \emph{not} publish the action of a secret isogeny on known points were untouched, and the family remains active. Two lines are worth naming.
+
+\paragraph{CSIDH.}
+\textbf{CSIDH} (``commutative SIDH'', pronounced ``sea-side'') is a key exchange built on a different structure: a commutative \emph{group action} of an ideal-class group on a set of supersingular curves defined over the prime field $\mathbb{F}_p$. Because the shared secret is derived purely from composing group-action elements, CSIDH transmits only curves -- no auxiliary torsion-point images -- so the Castryck--Decru attack does not apply to it. Its distinctive feature is that the key exchange is \emph{non-interactive} and commutative in the way classical Diffie--Hellman is, which SIDH never quite was. The trade-off is that a commutative group action is vulnerable to a subexponential \emph{quantum} attack (Kuperberg's hidden-shift algorithm), so CSIDH must use larger parameters than its exponential-hardness cousins, and it is computationally slow. Its exact security level remains debated.
+
+\paragraph{SQIsign.}
+The most prominent survivor is \textbf{SQIsign} (``Short Quaternion and Isogeny Signature''), introduced by De Feo, Kohel, Leroux, Petit, and Wesolowski in 2020~\cite{sqisign2020}. It is a signature scheme, built from the correspondence between supersingular curves and quaternion orders (the Deuring correspondence), and it rests on the hardness of the endomorphism-ring / isogeny-path problem rather than on any torsion-point trick. Its headline property is size: SQIsign produces the \textbf{smallest signatures and public keys of any post-quantum signature scheme by a wide margin} -- a signature of a couple of hundred bytes and a public key of a few dozen, where lattice signatures run to a kilobyte or more and hash-based signatures to many kilobytes. The price is speed: signing and verification are far slower than lattice schemes, historically on the order of seconds, though later variants have cut this substantially. As of writing, SQIsign is a candidate in NIST's additional-signatures round (the ``on-ramp'' for signatures beyond the lattice and hash standards), where its tiny footprint is the main attraction and its performance and youth are the main concerns.
+
+\section{Trade-offs and status}
+
+Isogeny-based cryptography occupies a clear and unusual corner of the design space.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrl}
+\toprule
+Scheme (NIST level 1) & Public key & Signature & Family \\
+\midrule
+SQIsign        & $\approx 64$\,B   & $\approx 177$\,B  & isogenies \\
+FN-DSA (Falcon-512) & $897$\,B      & $\approx 666$\,B  & lattices \\
+ML-DSA-44      & $1312$\,B         & $2420$\,B         & lattices \\
+SLH-DSA-128s   & $32$\,B           & $7856$\,B         & hashes \\
+\bottomrule
+\end{tabular}
+\caption{Approximate signature footprints at the lowest NIST security level. SQIsign's combined public-key-plus-signature size is the smallest of any post-quantum signature by a wide margin; the cost, not shown here, is far slower signing and verification and a much younger, less-scrutinized assumption. Figures are indicative and vary across parameter sets and revisions.}
+\label{tab:sqisign-vs}
+\end{table}
+
+\begin{remark}
+The isogeny bet is the mirror image of Classic McEliece's. Where McEliece sells four decades of conservatism at the cost of a megabyte-scale public key, isogenies sell the smallest bandwidth of any family at the cost of youth, speed, and a demonstrated capacity to surprise. The SIKE break is not a reason to discard the family -- the path problem it never solved is still standing -- but it is a standing warning that the assumptions here have been probed for years, not decades, and that the ground can still move.
+\end{remark}
+
+\paragraph{Status.}
+No isogeny-based scheme is a FIPS standard. SIKE, once a NIST fourth-round KEM candidate, was withdrawn after the 2022 break. SQIsign is under evaluation in the additional-signatures round as of writing, valued for its unmatched compactness but held back by performance and by the relative youth of its security foundations; whether it advances to standardization is undecided. CSIDH remains a research-grade proposal with contested parameters. The honest summary is that isogeny-based cryptography is the most promising \emph{small}-footprint post-quantum family and simultaneously the least mature -- a live research area rather than a settled toolbox.
+
+\section{Pitfalls}
+
+\paragraph{Pitfall 1: assuming a hard underlying problem makes a scheme safe.}
+This is the SIKE lesson, and it is the most important idea in the chapter. The supersingular isogeny path problem was never broken; SIDH was broken because it revealed \emph{more} than that problem -- the images of known torsion points under the secret isogeny -- and that surplus was enough. A security proof is only as strong as the assumption it actually reduces to, and a protocol that leaks auxiliary structure may be reducing to a much easier problem than its designers intended.
+
+\paragraph{Pitfall 2: treating ``smallest keys'' as ``best.''}
+Isogeny schemes win decisively on bandwidth, and it is tempting to read that as an overall verdict. It is not. They are slow, their assumptions are young, and one flagship has already fallen. Size is one axis among several; conservatism and speed pull the other way, and for most deployments a lattice scheme's balance is the safer default today.
+
+\paragraph{Pitfall 3: thinking the 2022 break killed the whole family.}
+The Castryck--Decru attack was specific to the torsion-point construction of SIDH and SIKE. Schemes that do not publish such images -- CSIDH, SQIsign -- are not affected by it, and the family remains an active standardization candidate through SQIsign. ``SIDH is broken'' and ``isogenies are broken'' are very different statements; only the first is true.
+
+\paragraph{Pitfall 4: forgetting how young the field is.}
+Lattices and codes have been attacked for decades; the supersingular-isogeny assumptions have been under concentrated cryptanalysis for a far shorter time, and the mathematics involved -- endomorphism rings, higher-dimensional isogenies, the Deuring correspondence -- is deep enough to hide further connections. Youth is not a flaw, but it is a reason to demand hybrid deployment and to avoid betting long-lived secrets on isogenies alone.
+
+\section{Summary}
+
+Isogeny-based cryptography is the fifth and youngest of the post-quantum families, and the one that departs furthest from the rest of this book:
+
+\begin{itemize}
+  \item its objects are \textbf{elliptic curves} over a finite field and the \textbf{isogenies} -- structure-preserving maps -- between them, organized into a \textbf{supersingular isogeny graph} that is a rapidly mixing expander;
+  \item its hard problem is the \textbf{supersingular isogeny path problem} -- recover a secret path from its two endpoint curves -- which has no known subexponential attack, classical or quantum, and so yields the \textbf{smallest keys and signatures} of any family;
+  \item \textbf{SIDH/SIKE}~\cite{jaodefeo2011} turned this into a Diffie--Hellman-style key exchange, reached NIST's fourth round, and was then \textbf{broken in polynomial time in 2022}~\cite{castryckdecru2023} -- not by solving the path problem, but by exploiting the auxiliary torsion-point images the protocol reveals;
+  \item what survives -- \textbf{CSIDH} for key exchange and \textbf{SQIsign}~\cite{sqisign2020} for the smallest signatures known -- avoids that leak, and SQIsign is a live candidate in NIST's additional-signatures round, though \textbf{no isogeny scheme is yet a FIPS standard}.
+\end{itemize}
+
+The enduring lesson is not that isogenies failed -- the assumption at their core is intact -- but that a hard problem can be undermined by the information a protocol volunteers around it. That, together with the family's unmatched compactness and its unmistakable youth, is what to remember. Isogeny-based cryptography is the high-risk, high-reward corner of the post-quantum portfolio: the smallest footprint on offer, resting on the least-settled ground.

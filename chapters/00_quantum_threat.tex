@@ -100,13 +100,37 @@ Because Shor's algorithm targets the specific structure of factoring and discret
   \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices~\cite{fips206} (still in draft as of writing; the other three were finalized in 2024).
 \end{itemize}
 
-These rest on three broad problem families, each a different bet against the quantum future:
+Post-quantum security does not come from one idea but from \emph{five} independent families of hard problems, each a different bet against the quantum future~\cite{bernstein2009}. A scheme is only as trustworthy as the family it belongs to, so it is worth meeting all five before diving into any one.
 
 \begin{itemize}
-  \item \textbf{Lattice-based} -- short vectors and noisy linear systems in high-dimensional lattices. The workhorse of the standards, balancing speed and size. Parts~II--IV of this book.
-  \item \textbf{Hash-based} -- security reduced to nothing but a hash function; the most conservative choice.
-  \item \textbf{Code-based} -- decoding random-looking linear codes; the oldest family, with a decades-long track record.
+  \item \textbf{Lattice-based} -- short vectors and noisy linear systems in high-dimensional lattices~\cite{micciancioregev2009,peikert2014}. The workhorse of the standards, balancing speed and size; the main subject of this book.
+  \item \textbf{Hash-based} -- security reduced to nothing but a hash function; the most conservative choice, resting on the longest-understood assumption (Chapter~\ref{ch:slhdsa}).
+  \item \textbf{Code-based} -- decoding random-looking linear codes; the oldest family, with a decades-long track record (Chapter~\ref{ch:mceliece}).
+  \item \textbf{Multivariate} -- solving systems of multivariate quadratic equations over a finite field~\cite{ding2006}; very compact signatures and large keys, with a turbulent cryptanalytic history (Chapter~\ref{ch:multivariate}).
+  \item \textbf{Isogeny-based} -- walking between elliptic curves along secret isogenies; the smallest keys of all, but the youngest and least settled family (Chapter~\ref{ch:isogeny}).
 \end{itemize}
+
+The NIST standards are concrete \emph{implementations} of the first two families: three are lattice schemes and one is hash-based. The code-based, multivariate, and isogeny families have no FIPS standard yet, but each offers active candidates and, crucially, a structurally different hedge should a future attack ever undermine lattices. Table~\ref{tab:pqc-families} places every standard in its family.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+Family & Hard problem & Standard / leading scheme & Role \\
+\midrule
+Lattice & Module-LWE & FIPS 203 ML-KEM & KEM \\
+Lattice & Module-LWE / SIS & FIPS 204 ML-DSA & signature \\
+Lattice & NTRU & FIPS 206 FN-DSA (draft) & signature \\
+Hash & preimage / collision & FIPS 205 SLH-DSA & signature \\
+Code & syndrome decoding & Classic McEliece, HQC & KEM \\
+Multivariate & MQ (quadratic systems) & UOV, MAYO (candidates) & signature \\
+Isogeny & supersingular isogeny path & SQIsign (candidate) & signature \\
+\bottomrule
+\end{tabular}
+\caption{The five families of post-quantum cryptography and where the standards sit. FIPS 203--206 implement the lattice and hash families; the code, multivariate, and isogeny families remain unstandardized but active, each a structurally different fallback.}
+\label{tab:pqc-families}
+\end{table}
 
 \section{Summary}
 
@@ -115,7 +139,7 @@ These rest on three broad problem families, each a different bet against the qua
   \item \textbf{Shor's algorithm} solves both in polynomial time on a quantum computer, breaking these schemes at \emph{any} key size.
   \item \textbf{Grover's algorithm} only gives a quadratic speedup, so symmetric ciphers and hashes survive with larger parameters.
   \item ``Harvest now, decrypt later'' makes migration urgent even before quantum computers arrive.
-  \item The answer is to rebuild public-key cryptography on lattice, hash, and code problems -- the subject of the rest of this book, culminating in FIPS 203--206.
+  \item The answer is to rebuild public-key cryptography on five independent families of hard problems -- lattice, hash, code, multivariate, and isogeny -- the subject of the rest of this book, with FIPS 203--206 as the first standardized implementations.
 \end{itemize}
 
 The remaining chapters start from the ground up: the mathematical objects -- finite fields, vectors, polynomials, and lattices -- on which these new hard problems are built.
