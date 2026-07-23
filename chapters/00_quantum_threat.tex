@@ -91,13 +91,13 @@ A natural objection is that large quantum computers do not yet exist, so why mig
 
 \section{The response: post-quantum standards}
 
-Because Shor's algorithm targets the specific structure of factoring and discrete logarithms, the defense is to build public-key cryptography on entirely different hard problems -- ones with no known efficient quantum algorithm. After a multi-year public competition, NIST standardized the first post-quantum schemes:
+Because Shor's algorithm targets the specific structure of factoring and discrete logarithms, the defense is to build public-key cryptography on entirely different hard problems -- ones with no known efficient quantum algorithm. After a multi-year public competition, NIST selected the first post-quantum schemes:
 
 \begin{itemize}
   \item \textbf{FIPS 203 -- ML-KEM} (Kyber): key encapsulation, based on module lattices~\cite{fips203};
   \item \textbf{FIPS 204 -- ML-DSA} (Dilithium): signatures, based on module lattices~\cite{fips204};
   \item \textbf{FIPS 205 -- SLH-DSA} (SPHINCS\textsuperscript{+}): signatures, based only on hash functions~\cite{fips205};
-  \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices~\cite{fips206}.
+  \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices~\cite{fips206} (still in draft as of writing; the other three were finalized in 2024).
 \end{itemize}
 
 These rest on three broad problem families, each a different bet against the quantum future:

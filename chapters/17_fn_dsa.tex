@@ -4,7 +4,7 @@
 
 \section{Learning objectives}
 
-The second lattice-based signature standard, FIPS 206, is \textbf{FN-DSA} -- the standardized form of Falcon~\cite{fips206,falcon2020}. (At the time of writing it is the newest of the four NIST standards, finalized after ML-KEM, ML-DSA, and SLH-DSA.) Where ML-DSA uses Fiat--Shamir with aborts, Falcon takes a different route on the same lattice foundation: \emph{hash-and-sign} over NTRU lattices, using a Gaussian trapdoor sampler. The payoff is remarkably compact signatures and keys; the price is the most delicate implementation of the three.
+The second lattice-based signature standard, FIPS 206, is \textbf{FN-DSA} -- NIST's standardization of Falcon~\cite{fips206,falcon2020}. (Unlike ML-KEM, ML-DSA, and SLH-DSA, which were finalized in 2024, FIPS 206 is still in draft as of writing: its floating-point Gaussian sampler is notoriously hard to specify and implement in constant time, which is exactly why it is the last of the four to be standardized.) Where ML-DSA uses Fiat--Shamir with aborts, Falcon takes a different route on the same lattice foundation: \emph{hash-and-sign} over NTRU lattices, using a Gaussian trapdoor sampler. The payoff is remarkably compact signatures and keys; the price is the most delicate implementation of the three.
 
 After finishing this chapter, you should be able to:
 
