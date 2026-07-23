@@ -1,6 +1,31 @@
 \chapter{Ring-LWE (RLWE)}
 \label{ch:rlwe}
 
+\section{A roadmap of the LWE family}
+
+This chapter is the middle step of a three-part evolution, and it helps to see the whole arc before diving into the details. Lattice-based key exchange did not arrive fully formed; it grew through a sequence of assumptions, each fixing a shortcoming of the last.
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 8mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (lwe) {LWE\\[-2pt]\scriptsize 2005};
+  \node[flownode, right=of lwe] (rlwe) {RLWE\\[-2pt]\scriptsize 2010};
+  \node[flownode, right=of rlwe] (mlwe) {Module-LWE\\[-2pt]\scriptsize 2015};
+  \node[keynode, right=of mlwe] (mlkem) {ML-KEM\\[-2pt]\scriptsize 2024};
+  \draw[flowarrow] (lwe) -- (rlwe);
+  \draw[flowarrow] (rlwe) -- (mlwe);
+  \draw[flowarrow] (mlwe) -- (mlkem);
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{LWE} (Regev, 2005~\cite{regev2009}) is provably as hard as worst-case lattice problems, but its public key is a full $n\times n$ matrix -- hundreds of kilobytes -- which is impractical to deploy (Chapter~\ref{ch:lwe}).
+  \item \textbf{Ring-LWE} (Lyubashevsky, Peikert, and Regev, 2010~\cite{lpr2010}) replaces that matrix with a single polynomial in a ring $R_q=\mathbb{Z}_q[x]/(x^n+1)$, shrinking the key from an entire matrix to one row's worth of coefficients and enabling near-linear-time multiplication. The price is extra algebraic structure, a potential attack surface. \textbf{This chapter builds RLWE.}
+  \item \textbf{Module-LWE} (Langlois and Stehl\'e, 2015~\cite{langlois2015}) is the deliberate compromise: a short \emph{vector} of ring elements instead of a single one. It recovers most of RLWE's efficiency while diluting the ring structure, hedging against any future attack that exploits the full ring. The next chapter builds it.
+  \item \textbf{ML-KEM} (Kyber~\cite{kyber2018}, standardized as FIPS 203 in 2024~\cite{fips203}) is the module-lattice key-encapsulation mechanism that the next part assembles in full -- the destination of this whole progression.
+\end{itemize}
+
+One trade-off runs through the entire story: \emph{more algebraic structure buys smaller keys and faster arithmetic, but widens the attack surface}. LWE sits at one extreme (no structure, largest keys); RLWE at the other (full ring structure, smallest keys); Module-LWE is the tunable middle that the standard ultimately chose. Note the arc is not monotone -- the field advanced to RLWE's full structure, then deliberately \emph{stepped back} to Module-LWE as a hedge. With that map in hand, we now build the ring step.
+
 \section{The fatal problem of LWE}
 
 LWE is elegant in theory, but it is not practical in the naive form. Recall the basic equation
@@ -152,19 +177,6 @@ In a full implementation, the NTT (Chapter~\ref{ch:ntt}) is the technique used t
 \section{Is RLWE secure?}
 
 At first glance, the additional algebraic structure might look dangerous. Maybe it makes the problem easier for an attacker. The security story is more subtle. RLWE is based on hardness in ideal lattices, not just general lattices~\cite{lpr2010}. This makes the security analysis more involved, but it is still believed to be strong enough for practical use.
-
-\section{Why Module-LWE appears later}
-
-The history is roughly:
-
-\begin{itemize}
-    \item 2005: LWE
-    \item 2010s: RLWE
-    \item 2016 onward: Module-LWE
-    \item 2022: ML-KEM (Kyber)
-\end{itemize}
-
-Why did Module-LWE appear? Because RLWE is too structured, while plain LWE is too large. Module-LWE is a compromise. It keeps the efficiency benefits of algebraic structure but avoids the strongest structural weaknesses of pure RLWE.
 
 \section{Sage experiment: a toy RLWE-style setup}
 
