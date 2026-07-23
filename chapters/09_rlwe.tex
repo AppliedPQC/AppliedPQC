@@ -134,8 +134,7 @@ This is one of the central reasons RLWE became attractive for real-world deploym
 
 \section{What is an NTT?}
 
-An NTT is the finite-field analogue of the FFT. The FFT works over the complex numbers; the NTT works over $
-\mathbb{Z}_q$. The purpose is the same: to turn convolution into pointwise multiplication. This transforms polynomial multiplication into a much more efficient operation.
+The tool that realizes this $O(n\log n)$ multiplication is the \emph{number-theoretic transform} (NTT), the finite-field analogue of the FFT: where the FFT works over the complex numbers, the NTT works over $\mathbb{Z}_q$, turning the cyclic convolution of two polynomials into cheap pointwise multiplication. The NTT is central enough to ML-KEM that it gets a full chapter of its own: Chapter~\ref{ch:ntt} builds it from first principles, including the negacyclic variant required by the ring $\mathbb{Z}_q[x]/(x^n+1)$ used here. For now it is enough to know that such a fast polynomial multiplication exists.
 
 \section{Sage experiment: polynomial multiplication}
 
@@ -148,7 +147,7 @@ g = 3 + x
 print(f*g)
 \end{lstlisting}
 
-In a full implementation, NTT is the technique used to compute this multiplication much faster than naive schoolbook multiplication.
+In a full implementation, the NTT (Chapter~\ref{ch:ntt}) is the technique used to compute this multiplication much faster than naive schoolbook multiplication.
 
 \section{Is RLWE secure?}
 
