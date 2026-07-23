@@ -76,62 +76,11 @@ This kind of distribution is important because it matches the mathematical struc
 
 Discrete Gaussian sampling is central in Regev-style reductions and in the theoretical analysis of lattice problems. In many proofs, the Gaussian distribution is not just convenient; it is essential. If we replace it with something else, the reduction arguments may fail.
 
-\section{Why Kyber does not use Gaussian}
+\section{Toward CBD: the distribution Kyber ships}
 
-A very common question is: why does Kyber not use Gaussian noise? The short answer is engineering.
+Elegant as the discrete Gaussian is in theory, it is awkward in practice: sampling it well needs exponentials, floating-point comparisons, or rejection loops -- all slow, and all hard to make constant-time, so that a careless sampler leaks the secret through its timing. For this engineering reason Kyber abandons the Gaussian in favour of the \emph{centered binomial distribution} (CBD): a bits-only distribution, built from nothing more than sums of coin flips, whose bell shape approximates a Gaussian closely enough for security while remaining trivial to sample in constant time.
 
-Discrete Gaussian sampling is expensive. In practice, implementations require methods such as:
-
-\begin{itemize}
-    \item cumulative distribution tables (CDT),
-    \item Knuth--Yao sampling,
-    \item Bernoulli sampling,
-    \item rejection sampling.
-\end{itemize}
-
-These methods are mathematically elegant but costly in software and hardware. They may also introduce side-channel concerns. As a result, practical schemes such as Kyber prefer a simpler distribution.
-
-\section{What is CBD?}
-
-Kyber uses a centered binomial distribution (CBD). The main idea is very simple.
-
-Take a small number of independent bits, for example $\eta$ bits. Count the number of ones in the first half and second half, then subtract them. The result is a small integer centered around zero. For example, if we sample $8$ bits and split them into two groups of $4$, then the difference of the two sums produces an integer in a small range. Repeating this many times gives a distribution that looks very much like a Gaussian.
-
-This is why CBD is practical: it is easy to implement, fast to sample, and sufficient for the security and correctness goals of the scheme.
-
-\section{Sage experiment: simulate CBD}
-
-A toy implementation is easy:
-
-\begin{lstlisting}[language=Python]
-import random
-
-
-def cbd(eta):
-    a = sum(random.randint(0, 1) for _ in range(eta))
-    b = sum(random.randint(0, 1) for _ in range(eta))
-    return a - b
-
-samples = [cbd(3) for _ in range(10000)]
-print(samples[:20])
-\end{lstlisting}
-
-If we plot the histogram, we observe that values near zero appear most often, while larger absolute values are rarer. This already resembles a bell-shaped distribution.
-
-Algorithm~\ref{alg:cbd-sample} states this simulation formally, for a general parameter $\eta$; it is exactly what the Sage code above computes for $\eta=3$. A later chapter revisits CBD sampling in the precise form used by FIPS 203.
-
-\begin{algorithm}[H]
-\caption{Sample from CBD($\eta$)}
-\label{alg:cbd-sample}
-\begin{algorithmic}[1]
-\Require Parameter $\eta \in \mathbb{Z}_{>0}$
-\Ensure A sample $e \in \{-\eta,\dots,\eta\}$ drawn from the centered binomial distribution
-\State Draw $2\eta$ independent uniform random bits $b_1,\dots,b_{2\eta} \in \{0,1\}$
-\State $a \gets \sum_{i=1}^{\eta} b_i$ \Comment{sum of the first half of the bits}
-\State $b \gets \sum_{i=\eta+1}^{2\eta} b_i$ \Comment{sum of the second half of the bits}
-\State \Return $a - b$
-\end{algorithmic}
-\end{algorithm}
+CBD is important enough -- and specific enough to ML-KEM -- to have a chapter of its own: Chapter~\ref{ch:cbd} develops it in full, from the ``count the ones in each half and subtract'' recipe to the exact FIPS 203 sampling procedure and its constant-time properties. Here we only place it at the end of the progression of noise distributions.
 
 \section{What does $\sigma$ mean?}
 
@@ -232,7 +181,7 @@ Uniform noise is easy to sample but too wild for correct decryption; the (discre
 \end{tikzpicture}
 \caption{CBD($\eta=2$)}
 \end{subfigure}
-\caption{Three noise shapes over the same range $\{-3,\dots,3\}$. Uniform (left, blue) is flat: every value is equally likely, which is too wild for reliable decryption. Discrete Gaussian (middle, teal) is the theoretically convenient bell curve. CBD with $\eta=2$ (right, orange) is produced only by summing and subtracting a handful of random bits (Algorithm~\ref{alg:cbd-sample}), yet its shape already approximates the same bell curve.}
+\caption{Three noise shapes over the same range $\{-3,\dots,3\}$. Uniform (left, blue) is flat: every value is equally likely, which is too wild for reliable decryption. Discrete Gaussian (middle, teal) is the theoretically convenient bell curve. CBD with $\eta=2$ (right, orange) is produced only by summing and subtracting a handful of random bits (Chapter~\ref{ch:cbd}), yet its shape already approximates the same bell curve.}
 \label{fig:noise-shapes}
 \end{figure}
 

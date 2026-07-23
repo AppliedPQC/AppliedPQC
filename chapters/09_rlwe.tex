@@ -62,34 +62,13 @@ s(x)=4+5x+6x^2.
 \]
 When we multiply $a(x)$ and $s(x)$, the coefficients naturally arrange themselves in a cyclic way. After we represent the multiplication in a matrix form, the matrix turns out to be circulant. This is the key insight behind RLWE.
 
-\section{Polynomial rings}
+\section{The working ring $R_q$}
 
-The relevant algebraic object is not an ordinary polynomial ring, but a quotient ring
+RLWE lives not in an ordinary polynomial ring but in the quotient ring
 \[
-R_q = \mathbb{Z}_q[x]/(f(x)).
+R_q = \mathbb{Z}_q[x]/(x^n+1),
 \]
-
-In Kyber, the choice is typically
-\[
-R_q = \mathbb{Z}_{3329}[x]/(x^{256}+1).
-\]
-
-This notation appears everywhere in the literature. The important point is that we do not work with arbitrary vectors only; we work with polynomials modulo a fixed polynomial.
-
-\section{Why do we reduce modulo $x^n+1$?}
-
-When we multiply polynomials, the degree may grow. But in the ring, we define the relation
-\[
-x^n \equiv -1.
-\]
-Therefore,
-\[
-x^{n+1} \equiv -x,
-\quad
-x^{n+2} \equiv -x^2,
-\quad \text{and so on.}
-\]
-As a result, every polynomial is reduced back to degree less than $n$. This keeps the representation compact and structured.
+whose construction -- quotient rings, the reduction rule $x^n\equiv-1$, and the cyclotomic modulus $x^n+1$ -- was developed in Chapter~\ref{ch:polyring}. We recall only what the rest of this chapter needs. Multiplying two polynomials can push the degree to $n$ or beyond, but the defining relation $x^n\equiv-1$ (hence $x^{n+1}\equiv-x$, $x^{n+2}\equiv-x^2$, and so on) folds every product back to degree below $n$, so the representation stays compact and structured. Kyber instantiates this as $R_q=\mathbb{Z}_{3329}[x]/(x^{256}+1)$.
 
 \section{Sage experiment}
 
