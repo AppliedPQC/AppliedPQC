@@ -79,6 +79,7 @@ For a prime modulus $q=\mathrm{poly}(n)$, Search-LWE and Decision-LWE are equiva
 The forward direction (search solves decision) is immediate. The reverse -- bootstrapping a mere distinguisher into a full secret-recovery algorithm -- is the substantial part: one guesses each coordinate $s_j\in\mathbb{Z}_q$ in turn, uses the distinguisher to test the guess, and amplifies. Regev proved the equivalence for prime $q=\mathrm{poly}(n)$~\cite{regev2009}; later work extended it to composite and larger moduli. The practical consequence is that designers may reason about the clean search problem while security proofs consume the decision problem.
 
 \section{The error distribution and the modulus-to-noise ratio}
+\label{sec:lwe-noise}
 
 The error distribution $\chi$ is the beating heart of LWE. In Regev's formulation it is a \emph{discrete Gaussian} $D_{\mathbb{Z},\sigma}$ of width $\sigma$: the probability of an integer $x$ is proportional to $\exp(-\pi x^2/\sigma^2)$, rounded to $\mathbb{Z}$. It is convenient to parameterize the width relative to the modulus by a factor $\alpha\in(0,1)$,
 \[
@@ -94,6 +95,7 @@ so that $\alpha$ measures the noise as a fraction of the modulus. Two competing 
 The single quantity that governs both is the \emph{modulus-to-noise ratio} $q/\sigma = 1/\alpha$. A larger ratio makes decryption more robust but the underlying problem easier (it corresponds to a larger lattice approximation factor); a smaller ratio does the reverse. Parameter selection for a real scheme is, at bottom, the art of choosing this ratio. In practice the exact discrete Gaussian is replaced by the centered binomial distribution (Chapter~\ref{ch:cbd}), which has essentially the same shape but is far easier to sample in constant time; the foundational analysis, however, is cleanest for the Gaussian~\cite{micciancioregev2007}.
 
 \section{A geometric view: bounded-distance decoding}
+\label{sec:lwe-bdd}
 
 LWE has a precise lattice interpretation, which is the source of both its hardness and its name-recognition among lattice problems. Given $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$, define the \emph{$q$-ary lattice}
 \[
@@ -143,14 +145,40 @@ Because there are more columns than rows, such vectors certainly exist; the diff
 \]
 and a solution is a short vector of $\Lambda_q^{\perp}(\mathbf{A})$ -- the SVP counterpart to the BDD instance $\Lambda_q(\mathbf{A})$ that defines LWE.
 
-The two problems are mirror images. LWE is a \emph{search among noisy points} (recover $\mathbf{s}$ from $\mathbf{A}\mathbf{s}+\mathbf{e}$); SIS is a \emph{search for a short null vector} (find $\mathbf{z}$ with $\mathbf{A}\mathbf{z}=\mathbf{0}$). Both are hard for the same underlying reason -- short vectors in the associated lattice are hard to find -- and both admit worst-case reductions (SIS to the worst case of SIVP~\cite{ajtai1996}). We will meet SIS again directly: in ML-DSA / Dilithium (Chapter~\ref{ch:mldsa}), forging a signature amounts to producing a short vector satisfying a public equation, which is precisely an SIS instance.
+The label \emph{dual} is precise, not a loose analogy, and it holds in three linked senses. Write $\mathbf{A}\in\mathbb{Z}_q^{n\times m}$ for the SIS matrix; its transpose has the shape of an LWE sample matrix (Section~\ref{sec:lwe-bdd}), so the matching LWE sample is $\mathbf{b}=\mathbf{A}^{\mathsf T}\mathbf{s}+\mathbf{e}$, and
+\[
+\Lambda_q(\mathbf{A}) \;=\; \{\mathbf{A}^{\mathsf T}\mathbf{s}\bmod q : \mathbf{s}\in\mathbb{Z}_q^{n}\}+q\mathbb{Z}^{m}
+\]
+is exactly the LWE image lattice seen there.
+
+\begin{itemize}
+  \item \textbf{Dual lattices.} The SIS lattice and the LWE lattice are dual to each other, up to the scale factor $q$:
+  \[
+  \Lambda_q^{\perp}(\mathbf{A}) \;=\; q\cdot\Lambda_q(\mathbf{A})^{*},
+  \qquad
+  L^{*}=\{\mathbf{x}\in\operatorname{span}(L):\langle\mathbf{x},\mathbf{y}\rangle\in\mathbb{Z}\ \ \forall\,\mathbf{y}\in L\}.
+  \]
+  SIS lives on the dual of the lattice on which LWE lives -- this is the literal source of the name.
+  \item \textbf{Dual problem types.} On that pair, the two are the archetypal lattice problems, themselves a dual pair: LWE is bounded-distance decoding (find the lattice point near $\mathbf{b}$), while SIS is a shortest-vector search (find a short $\mathbf{z}\in\Lambda_q^{\perp}(\mathbf{A})$). Short vectors in the dual lattice are precisely what let one decode in the primal.
+  \item \textbf{A dual solution breaks the primal.} An SIS solution \emph{is} an LWE distinguisher. For a short $\mathbf{z}$ with $\mathbf{A}\mathbf{z}=\mathbf{0}$,
+  \[
+  \langle \mathbf{z},\mathbf{b}\rangle
+  = \mathbf{z}^{\mathsf T}\!\left(\mathbf{A}^{\mathsf T}\mathbf{s}+\mathbf{e}\right)
+  = (\mathbf{A}\mathbf{z})^{\mathsf T}\mathbf{s} + \langle \mathbf{z},\mathbf{e}\rangle
+  = \langle \mathbf{z},\mathbf{e}\rangle \pmod q,
+  \]
+  which is \emph{small} because $\mathbf{z}$ and $\mathbf{e}$ are both short, whereas $\langle\mathbf{z},\mathbf{u}\rangle$ for a uniform $\mathbf{u}$ is spread over all of $\mathbb{Z}_q$. That gap decides Decision-LWE, and it is the engine of the dual attack of Section~\ref{sec:lwe-cryptanalysis}; conversely, an LWE (BDD) oracle yields short dual vectors, so each problem solves the other.
+\end{itemize}
+
+Both problems also reduce to worst-case lattice problems -- SIS to the worst case of SIVP~\cite{ajtai1996}, as LWE does through Theorem~\ref{thm:regev} -- which is why breaking either is hard for the same underlying reason. We will meet SIS again directly: in ML-DSA / Dilithium (Chapter~\ref{ch:mldsa}), forging a signature amounts to producing a short vector satisfying a public equation, which is precisely an SIS instance.
 
 \section{Concrete security and cryptanalysis}
+\label{sec:lwe-cryptanalysis}
 
 Theorem~\ref{thm:regev} is asymptotic; deploying LWE requires \emph{concrete} parameters $(n,q,\alpha,m)$ for which the best known attack costs more than $2^{128}$ (or $2^{192}$, $2^{256}$) operations. Concrete security is estimated against lattice-reduction attacks rather than the reduction itself, since the reduction is not tight.
 
 \begin{itemize}
-  \item \textbf{Primal attack.} Embed the BDD instance of $\S$5 as a unique-shortest-vector instance in a lattice of dimension $\approx m+n+1$ (Kannan's embedding) and run lattice reduction to find the short error vector, revealing $\mathbf{s}$.
+  \item \textbf{Primal attack.} Embed the BDD instance of Section~\ref{sec:lwe-bdd} as a unique-shortest-vector instance in a lattice of dimension $\approx m+n+1$ (Kannan's embedding) and run lattice reduction to find the short error vector, revealing $\mathbf{s}$.
   \item \textbf{Dual attack.} Find short vectors in the orthogonal lattice $\Lambda_q^{\perp}(\mathbf{A})$ and use them to distinguish LWE samples from uniform, solving Decision-LWE directly.
 \end{itemize}
 
@@ -162,7 +190,7 @@ Attack cost depends on how many samples $m$ the adversary sees, not only on $(n,
 
 \section{Choosing the modulus $q$}
 
-The modulus ties the preceding threads together. It must be large enough that the error rarely wraps around modulo $q$ and destroys correctness, yet small enough to keep keys compact and arithmetic fast; and, as $\S$4 showed, the ratio $q/\sigma$ directly sets the security--correctness trade-off. Real schemes add a further constraint: $q$ is chosen to admit an efficient number-theoretic transform (Chapter~\ref{ch:ntt}), which is why ML-KEM fixes the specific prime $q=3329$. Modulus selection is thus the first place where the abstract assumption meets hard engineering.
+The modulus ties the preceding threads together. It must be large enough that the error rarely wraps around modulo $q$ and destroys correctness, yet small enough to keep keys compact and arithmetic fast; and, as Section~\ref{sec:lwe-noise} showed, the ratio $q/\sigma$ directly sets the security--correctness trade-off. Real schemes add a further constraint: $q$ is chosen to admit an efficient number-theoretic transform (Chapter~\ref{ch:ntt}), which is why ML-KEM fixes the specific prime $q=3329$. Modulus selection is thus the first place where the abstract assumption meets hard engineering.
 
 \section{Sage experiments}
 
@@ -197,7 +225,7 @@ noise   = vector(F, [1, 0, 16, 1, 0, 0, 16, 1])
 b_noisy = A * s + noise
 \end{lstlisting}
 
-The system $\mathbf{A}\mathbf{s}'=\mathbf{b}_{\text{noisy}}$ now has no exact solution, and naive solving returns the wrong secret. Sweeping the error magnitude reveals the phase transition of $\S$4: below a noise threshold the secret is still recoverable by more careful decoding, and above it recovery becomes infeasible. Algorithm~\ref{alg:lwe-sample} states the sampling procedure formally, using the same variable names as the code.
+The system $\mathbf{A}\mathbf{s}'=\mathbf{b}_{\text{noisy}}$ now has no exact solution, and naive solving returns the wrong secret. Sweeping the error magnitude reveals the phase transition of Section~\ref{sec:lwe-noise}: below a noise threshold the secret is still recoverable by more careful decoding, and above it recovery becomes infeasible. Algorithm~\ref{alg:lwe-sample} states the sampling procedure formally, using the same variable names as the code.
 
 \begin{algorithm}[H]
 \caption{Generate an LWE Sample}
