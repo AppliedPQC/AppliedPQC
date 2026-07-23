@@ -263,26 +263,53 @@ This is the basic object behind the shortest vector problem (SVP), one of the ce
 
 \section{Experiments}
 
-\subsection{Experiment 1: enumerate lattice points}
+The lattices underlying ML-KEM (FIPS 203~\cite{fips203}) and ML-DSA (FIPS 204~\cite{fips204}) live in dimensions of several hundred, where their geometry cannot be visualized. The following experiments isolate, in two dimensions where every object can be drawn and checked by hand, the four phenomena on which those standards ultimately depend: the discreteness of the point set, the basis-invariance of the determinant, the gap between good and bad bases, and the intractability of the shortest vector. Each recurs unchanged in principle at cryptographic scale.
+
+\subsection{Experiment 1: enumerating the lattice}
+Generate a finite window of the lattice $\Lambda(\mathbf{b}_1,\mathbf{b}_2)$ and confirm that it is a discrete grid of points, not a continuous span.
 
 \begin{lstlisting}[language=Python]
 b1 = vector(ZZ, [2, 1])
 b2 = vector(ZZ, [1, 3])
-pts = []
-for i in range(-4, 5):
-    for j in range(-4, 5):
-        pts.append(i * b1 + j * b2)
+pts = [i * b1 + j * b2 for i in range(-4, 5) for j in range(-4, 5)]
 pts
 \end{lstlisting}
 
-\subsection{Experiment 2: compare determinants}
-Try changing the basis and computing the determinant each time. What happens to the density of the lattice?
+Plotting \texttt{pts} reveals the characteristic regular grid. This is the same object that, in dimension $256$ and over $\mathbb{Z}_q$ rather than $\mathbb{Z}$, becomes the module lattice at the core of ML-KEM.
 
-\subsection{Experiment 3: random bases}
-Generate random integer matrices and observe which ones look like good bases and which ones look like bad bases. Compare the resulting shortest vectors and note how the geometry changes when the basis becomes more skewed.
+\subsection{Experiment 2: the determinant is a basis invariant}
+Compute the lattice determinant $\det\Lambda = |\det B|$ for several bases of the \emph{same} lattice, each obtained by left-multiplying $B$ by a unimodular matrix $U \in \mathrm{GL}_n(\mathbb{Z})$ (an integer matrix with $\det U = \pm 1$).
 
-\subsection{Experiment 4: shortest vector}
-Compute the shortest vector for several different bases and compare the results.
+\begin{lstlisting}[language=Python]
+B = matrix(ZZ, [[2, 1], [1, 3]])
+U = matrix(ZZ, [[1, 0], [1, 1]])          # unimodular: det U = 1
+print(abs(B.det()), abs((U * B).det()))   # identical
+\end{lstlisting}
+
+The determinant -- the covolume of the fundamental parallelepiped, and hence the inverse density of the lattice -- is unchanged, while the basis vectors themselves change completely. This invariance under $\mathrm{GL}_n(\mathbb{Z})$ is precisely what allows a scheme to publish one basis of a lattice while holding another in secret.
+
+\subsection{Experiment 3: good bases versus bad bases}
+A single lattice admits both near-orthogonal (``good'') and highly skewed (``bad'') bases. Contrast the two, and quantify the skew through the orthogonality defect $\prod_i \lVert \mathbf{b}_i\rVert / \det\Lambda$.
+
+\begin{lstlisting}[language=Python]
+good = matrix(ZZ, [[1, 0], [0, 1]])       # orthonormal basis of Z^2
+bad  = matrix(ZZ, [[1, 7], [0, 1]])       # a sheared basis of the same Z^2
+\end{lstlisting}
+
+This gap is the heart of trapdoor lattice cryptography. In the NTRU-based FN-DSA and, in spirit, throughout ML-DSA (FIPS 204~\cite{fips204}), the secret key behaves as a good basis and the public key as a bad one; forging a signature without the good basis reduces to a hard lattice problem. Chapter~\ref{ch:lll} makes the good/bad distinction quantitative and shows how far a bad basis can be reduced toward a good one.
+
+\subsection{Experiment 4: the shortest vector is a lattice invariant}
+Compute the shortest nonzero vector for several distinct bases of the same lattice and confirm that its length is a property of the lattice, not of the chosen basis.
+
+\begin{lstlisting}[language=Python]
+from sage.modules.free_module_integer import IntegerLattice
+B1 = matrix(ZZ, [[2, 1], [1, 3]])
+B2 = matrix(ZZ, [[3, 4], [4, 7]])          # = U*B1, U unimodular: same lattice
+for B in [B1, B2]:
+    print(IntegerLattice(B).shortest_vector())   # identical length
+\end{lstlisting}
+
+In two dimensions \texttt{shortest\_vector} answers instantly. In the dimensions of FIPS 203 and 204 no known algorithm does so in feasible time, and that asymptotic intractability -- formalized as the shortest vector problem (SVP), together with its approximate and decisional variants -- is the security foundation on which both standards rest.
 
 \section{Summary}
 The main lessons of this chapter are threefold:
