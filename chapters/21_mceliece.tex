@@ -72,7 +72,7 @@ This is the security foundation. If we can present an attacker with what looks l
 The problem, of course, is that the honest parties also see only the public matrix. If it were truly random, \emph{nobody} could decode, and the scheme would be useless. The resolution is the central trick of trapdoor cryptography: start from a code that \emph{does} have an efficient decoder, then disguise it so thoroughly that from the outside it is indistinguishable from a random code.
 
 \paragraph{The secret code.}
-Classic McEliece builds its secret from a \textbf{binary Goppa code}. The full construction, parameters, and decoding of these codes are developed in Appendix~\ref{app:goppa}; here the two properties we rely on are simple to state:
+Classic McEliece builds its secret from a \hyperref[app:goppa]{\textbf{binary Goppa code}}. The full construction, parameters, and decoding of these codes are developed in Appendix~\ref{app:goppa}; here the two properties we rely on are simple to state:
 \begin{itemize}
   \item it is an $[n,k]$ linear code, with a generator matrix $G$, chosen so that it can correct $t$ errors;
   \item it comes with an \emph{efficient} $t$-error decoding algorithm $\mathcal{D}_g$ (Patterson's algorithm), which takes any word within distance $t$ of a codeword and returns the codeword and the error.
