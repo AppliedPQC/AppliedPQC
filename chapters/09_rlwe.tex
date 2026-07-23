@@ -136,9 +136,9 @@ In RLWE, the multiplication is polynomial multiplication. With FFT-like methods,
 
 This is one of the central reasons RLWE became attractive for real-world deployments.
 
-\section{What is an NTT?}
+\section{Fast multiplication via the NTT}
 
-The tool that realizes this $O(n\log n)$ multiplication is the \emph{number-theoretic transform} (NTT), the finite-field analogue of the FFT: where the FFT works over the complex numbers, the NTT works over $\mathbb{Z}_q$, turning the cyclic convolution of two polynomials into cheap pointwise multiplication. The NTT is central enough to ML-KEM that it gets a full chapter of its own: Chapter~\ref{ch:ntt} builds it from first principles, including the negacyclic variant required by the ring $\mathbb{Z}_q[x]/(x^n+1)$ used here. For now it is enough to know that such a fast polynomial multiplication exists.
+The tool that realizes this $O(n\log n)$ multiplication is the \emph{number-theoretic transform} (NTT) of Chapter~\ref{ch:ntt}: the finite-field analogue of the FFT, it works over $\mathbb{Z}_q$ and turns the cyclic convolution of two polynomials into cheap pointwise multiplication, in the negacyclic form required by the ring $\mathbb{Z}_q[x]/(x^n+1)$ used here. It is precisely this transform -- built earlier as a foundational tool -- that makes RLWE's polynomial products fast enough for practice.
 
 \section{Sage experiment: polynomial multiplication}
 
