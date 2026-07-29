@@ -45,8 +45,8 @@ mathematical ones -- minutes with an oscilloscope rather than aeons on a quantum
 computer -- which is exactly why they matter. The concern is not hypothetical for
 PQC: several of the schemes in this book have delicate implementation requirements,
 and those requirements shaped the standards. It is why ML-KEM samples noise with CBD
-rather than a Gaussian (\ref{ch:cbd}), and why Falcon is the hardest of the three
-signature standards to deploy safely (\ref{ch:fndsa}).
+rather than a Gaussian (\ref{ch:cbd}), and why FN-DSA (based on Falcon; FIPS~206
+remains in development) is especially delicate to deploy safely (\ref{ch:fndsa}).
 
 \section{The attack families}
 
@@ -154,7 +154,7 @@ the identical sequence of operations.
   \draw[pqcgray!40, dashed] (-0.9,0.7) -- (8.3,0.7);
 
   % ---- Bottom: constant-time straight line ----
-  \node[font=\small\bfseries] at (3.1,0.1) {Constant-time (safe)};
+  \node[font=\small\bfseries] at (3.1,0.1) {Constant-time (timing/cache-safe)};
   \node[flownode] (c0) at (0,-1.1) {input};
   \node[flownode] (c1) at (1.9,-1.1) {op};
   \node[flownode] (c2) at (3.4,-1.1) {op};
@@ -242,12 +242,13 @@ The noise in a lattice scheme must be sampled every time a key or ciphertext is 
 A discrete \emph{Gaussian} sampler is the natural mathematical choice, but it is a
 side-channel minefield: it typically needs rejection loops (a secret-dependent number
 of iterations), table lookups (secret-dependent memory addresses), and floating-point
-arithmetic (variable-time on most hardware). This is exactly why ML-KEM and ML-DSA do
-not use a Gaussian at all. They sample from the \emph{centered binomial distribution}
-of Chapter~\ref{ch:cbd}, which is nothing but ``count the ones in two bit strings and
-subtract'': no rejection, no tables, no floating point, and no data-dependent branch.
-CBD is a security choice as much as an efficiency one. Falcon (\ref{ch:fndsa}) is the
-cautionary opposite. Its trapdoor sampler genuinely needs a high-precision Gaussian
+arithmetic (variable-time on most hardware). ML-KEM samples its small noise
+polynomials from the \emph{centered binomial distribution} of
+Chapter~\ref{ch:cbd}. ML-DSA uses its own bounded-uniform and rejection-sampling
+procedures for secrets and masks; it is not an instance of the ML-KEM CBD sampler.
+Both standards avoid a general-purpose discrete-Gaussian sampler, but their sampling
+interfaces and side-channel reviews must be considered separately. FN-DSA
+(\ref{ch:fndsa}) is the cautionary opposite. Its trapdoor sampler genuinely needs a high-precision Gaussian
 over the reals, computed with floating-point FFT, and making \emph{that} constant-time
 is the hardest implementation problem among all the standards -- if the sampler's
 timing or rounding leaks, the secret basis can be reconstructed. That difficulty,
@@ -256,15 +257,16 @@ single strongest reason Falcon is the most demanding of the three signature stan
 to deploy safely.
 
 \paragraph{Rejection sampling in ML-DSA.}
-ML-DSA signing (\ref{ch:mldsa}) also loops: it draws a fresh mask, forms the response
-$\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$, and \emph{aborts} to retry whenever
-$\mathbf{z}$ would leak the secret. The number of iterations is therefore variable --
-but it depends on the freshly sampled mask, not on the secret key, so the abort count
-is safe to reveal as public information. What must \emph{not} leak is the secret
-inside the rejected attempts. FIPS 204 helps here by deriving the per-signature
-randomness deterministically, as $\rho'' = H(K\,\|\,\mu)$ from the secret PRF key $K$
-and the message: signing becomes reproducible, and its timing profile is a function of
-public inputs rather than a fresh secret drawn on every call.
+ML-DSA signing (\ref{ch:mldsa}) also loops: it draws a mask, forms
+$\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$, and applies rejection conditions involving
+secret-dependent quantities, including checks related to $\mathbf{s}_2$ and
+$\mathbf{t}_0$. The retry count and signing time therefore must not be declared
+harmless merely from distributional intuition. Implementations must follow FIPS~204's
+sampling and side-channel design, protect intermediate values, and evaluate the
+resulting machine code on the target platform. FIPS~204 supports hedged signing, with
+randomness derived from secret $K$, the message representative $\mu$, and input $rnd$;
+deterministic operation fixes $rnd$, but does not remove $K$ or the secret-related
+rejection conditions.
 
 \paragraph{Decapsulation and the Fujisaki--Okamoto transform.}
 The subtlest PQC side channel lives in KEM decapsulation. A raw lattice decryption can
@@ -277,7 +279,9 @@ The Fujisaki--Okamoto (FO) transform~\cite{fo1999} closes this door with \textbf
 rejection}. Decapsulation re-encrypts the recovered message and compares the result to
 the received ciphertext in constant time. On a match it returns the real shared key;
 on a mismatch it returns a \emph{pseudorandom} key derived from a secret seed and the
-ciphertext -- not an error. Both outcomes produce a key of identical form, and the
+ciphertext -- not a distinguishable ciphertext-validity error. This applies after
+basic input and decapsulation-key checks; an API may still reject malformed types,
+lengths, or unusable key material. Both cryptographic outcomes produce a key of identical form, and the
 final choice is a constant-time select, so the caller cannot tell success from
 failure. Figure~\ref{fig:fo-implicit} shows the flow.
 
@@ -377,7 +381,7 @@ optimizer -- not assumed.
 \paragraph{Pitfall 2: confusing constant-time with constant wall-clock time.}
 Constant-time does not mean the code always runs for the same number of nanoseconds.
 It means no \emph{secret}-dependent variation. Variation that depends only on public
-data -- the length of a message, or the public number of ML-DSA aborts -- is perfectly
+data -- for example the length of a message -- is perfectly
 acceptable. Chasing literally constant duration is both unnecessary and, on modern
 out-of-order CPUs, impossible.
 
@@ -422,10 +426,9 @@ The defense is a discipline, not a gadget:
 
 And this is where the theory of the previous parts closes the loop with practice. The
 standards did not treat implementation security as an afterthought; they engineered for
-it. CBD was chosen
-over the Gaussian precisely because it is constant-time-friendly (\ref{ch:cbd});
-ML-DSA derives its per-signature randomness deterministically so its abort loop leaks
-nothing exploitable (\ref{ch:mldsa}); ML-KEM decapsulation is built on implicit
+it. ML-KEM's CBD sampler avoids a general discrete Gaussian
+(\ref{ch:cbd}); ML-DSA and FN-DSA require careful treatment of secret-dependent
+sampling and rejection conditions (\ref{ch:mldsa}, \ref{ch:fndsa}); ML-KEM decapsulation is built on implicit
 rejection so success and failure are indistinguishable (\ref{ch:fips203}); and
 Falcon's floating-point sampler stands as the standing reminder that when a scheme is
 hard to implement safely, that difficulty is itself a security cost (\ref{ch:fndsa}).

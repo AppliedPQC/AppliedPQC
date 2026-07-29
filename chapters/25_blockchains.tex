@@ -16,9 +16,18 @@ After reading this chapter, you should be able to:
 \end{itemize}
 
 \section{The blockchain threat model}
-The danger is entirely to the \emph{signatures}, not the hashing. Shor's algorithm (Chapter~\ref{ch:quantum}) recovers a private key from a public key on any elliptic-curve or pairing-based scheme: this breaks Bitcoin's ECDSA and Schnorr over secp256k1, Ethereum's account ECDSA, its consensus BLS12-381 signatures, the pairing curves behind on-chain SNARK verifiers, and the KZG commitments used for Ethereum's data blobs~\cite{quantumhorizon2026,ethpqroadmap}. Grover's algorithm only halves the security of the hash functions (SHA-256, Keccak-256), which remains intractable and is not the concern; indeed hashing is the \emph{foundation} of the replacement plans.
+The immediate migration pressure is on signatures and pairing-based public-key systems.
+Shor's algorithm (Chapter~\ref{ch:quantum}) threatens Bitcoin's ECDSA and Schnorr,
+Ethereum's account ECDSA and consensus BLS signatures, and the public-key assumptions
+behind SNARK and KZG systems~\cite{quantumhorizon2026,ethpqroadmap}. Grover gives
+hashes a square-root rather than exponential weakening, but hashes still require
+property- and output-length-specific assessment: HASH160, for example, has only a
+nominal $2^{80}$ quantum preimage margin.
 
-The subtlety that governs everything is \textbf{when a public key becomes visible}. An address is a hash of a public key, so a freshly funded, never-spent address hides its key behind that hash -- safe against Shor until it is used. But spending reveals the key: a signature exposes (or lets one recover) the public key, after which the account is permanently Shor-vulnerable.
+The subtlety that governs everything is \textbf{when a public key becomes visible}.
+P2PK and P2TR expose a public key or tweaked public key when a UTXO is created;
+P2PKH and P2WPKH usually reveal it on first spend, and reuse leaves later outputs
+exposed. Other scripts must be assessed by their actual path and witness.
 
 \begin{figure}[H]
 \centering
@@ -47,14 +56,23 @@ Two Bitcoin Improvement Proposals anchor the response, and it is worth stressing
   \item \textbf{BIP-361, ``Post-Quantum Migration and Legacy Signature Sunset''}~\cite{bip361} -- the migration-and-deadline layer. It proposes a phased sunset of ECDSA/Schnorr: a first phase (on the order of three years after activation) that stops sending funds to legacy address types, and a later flag-day (around five years) that restricts legacy signatures, so that only a holder who can prove ownership by a quantum-safe route can still move the coins.
 \end{itemize}
 
-A recurring safety mechanism in these designs is \emph{commit--reveal}: a holder first publishes a hash commitment to an intended spend and only later reveals it, so that even an attacker who already possesses a quantum computer cannot front-run the transaction, having made no earlier commitment.
+A recurring safety mechanism is \emph{commit--reveal}: a holder first publishes a
+binding commitment and only later reveals it. It is designed to mitigate front-running
+under the stated confirmation-depth, reorganization, fee, timeout, and recovery
+assumptions; it is not an unconditional guarantee.
 
 \subsection{The freeze controversy}
 BIP-361's sunset implies that coins whose owners never migrate -- and coins for which no ownership proof is possible, notably P2PK -- become effectively unspendable, i.e.\ \emph{frozen}. This is the sharpest open dispute in Bitcoin's roadmap. Proponents argue a pre-announced sunset is defensive: a quantum attacker would otherwise \emph{steal} those coins outright, whereas a freeze at least preserves them. Critics call any forced migration confiscatory, contrary to Bitcoin's property-rights ethos, and warn that freezing long-dormant coins (including Satoshi's) sets a dangerous precedent. This is a genuine, unresolved political disagreement, not a settled plan, and should be read as such.
 
 \section{Ethereum}
 \subsection{What is exposed}
-Ethereum's account model has the same exposure principle with a sharper edge: an address is the hash of a public key, but the key is recoverable from any ECDSA signature, so \emph{every account that has ever sent a transaction has an effectively public key} and is Shor-exposed~\cite{quantumhorizon2026}. Beyond user accounts, the consensus layer's BLS12-381 validator signatures, the pairing curves behind rollup SNARK verifiers, and the KZG commitments used for data blobs are all pairing- or discrete-log-based and thus Shor-vulnerable~\cite{ethpqroadmap,quantumhorizon2026}. A counter-intuitive point worth noting: BLS12-381 is \emph{harder} to break than secp256k1, because Shor's cost grows with the field size and BLS12-381 uses larger $381$-bit coordinates against secp256k1's $256$~\cite{quantumhorizon2026}. The KZG exposure is comparatively mild -- it concerns data availability rather than theft, and blobs are pruned within weeks.
+Ethereum addresses reveal an effectively public key once an ECDSA transaction has been
+sent. BLS validator signatures, pairing curves behind SNARK verifiers, and KZG
+commitments all rely on public-key assumptions threatened by Shor~\cite{ethpqroadmap,quantumhorizon2026}.
+A comparison of quantum cost for secp256k1 and BLS12-381 needs group-specific resource
+estimates; the 381-bit base-field name alone is not such an estimate. KZG migration
+must distinguish blob retention from commitment binding, proof verification, and
+consensus dependencies; blob pruning alone does not make the risk mild.
 
 \subsection{The two-front plan}
 Ethereum's response has an emergency track and a structural track; nothing post-quantum has yet shipped to mainnet.
@@ -66,7 +84,11 @@ Vitalik Buterin's proposal ``How to hard-fork to save most users' funds in a qua
 The structural plan is to let accounts choose their own signature scheme. \textbf{EIP-7702} (``Set Code for EOAs,'' \emph{Final}, shipped in the 2025 Pectra upgrade)~\cite{eip7702} lets an externally-owned account delegate to contract code, turning it into a smart account with arbitrary verification logic -- although 7702 authorizations are themselves secp256k1-signed, so it is a stepping stone, not itself a post-quantum migration. The dedicated vehicle is \textbf{EIP-8141} (``Frame Transaction,'' \emph{Draft}, 2026, co-authored by Buterin)~\cite{eip8141}, which explicitly describes native account abstraction as ``a native off-ramp \dots{} to post-quantum secure systems,'' supporting a slot for an arbitrary (custom, post-quantum) signature scheme alongside the classical ones. At the consensus layer, the plan is to replace BLS aggregation with a hash-based signature of the XMSS/Winternitz family (Chapter~\ref{ch:hashots}), aggregated inside a STARK-based zero-knowledge virtual machine, and to move KZG commitments to STARK- or lattice-based alternatives; the Ethereum Foundation's stated assessment targets first-layer post-quantum infrastructure around 2029~\cite{ethpqroadmap}.
 
 \subsection{On-chain verification, revisited}
-Both tracks ultimately need a post-quantum signature \emph{verified on chain}, which is the cost problem of Section~\ref{sec:onchain} in the previous chapter. The dominant cost is the NTT (Chapter~\ref{ch:ntt}); the ZKNOX \texttt{ETHFALCON}/\texttt{ETHDILITHIUM} implementations report cutting a Solidity NTT routine from roughly $20$~million to about $1.5$~million gas by optimizing it and replacing SHAKE with keccak~\cite{zknox2025}, and the draft \textbf{EIP-7885} NTT precompile~\cite{eip7885} reports Falcon-512 verification falling from about $1.8$~million to roughly $479$ thousand gas. These figures move between sources and versions, so any specific number should be read with its date attached.
+The structural migration path may introduce post-quantum signature verification on
+chain; the emergency path instead proposes a STARK proof of seed/preimage knowledge.
+These are different authentication mechanisms. Their costs are scheme-, parameter-,
+implementation-, chain-, and gas-schedule-dependent, so a benchmark must state those
+details, including code commit and measurement date, before comparing gas figures.
 
 \begin{table}[H]
 \centering
@@ -88,7 +110,11 @@ Status (mid-2026) & Draft BIPs, not activated & research; one AA piece shipped; 
 \end{table}
 
 \section{Timelines and honest uncertainty}
-No quantum computer capable of breaking secp256k1 or BLS12-381 exists as of mid-2026, and the community plans against a probability distribution rather than a date. One 2026 survey estimates roughly a one-in-six chance of a cryptographically relevant quantum computer by 2035, near 30\% by 2040, and about 60\% by 2050~\cite{quantumhorizon2026}. What has changed is the \emph{trend}: a 2025 Google analysis lowered the estimated cost of breaking RSA-2048 to under one million noisy qubits running about a week, roughly a twenty-fold reduction from a 2019 estimate of twenty million~\cite{gidney2025}. The lesson for chain planners is not that the break is imminent but that the lead time needed to migrate -- new address formats, wallet support, and rough consensus across a decentralized community -- may be longer than the warning.
+No quantum computer capable of breaking secp256k1 or BLS12-381 exists as of mid-2026.
+A 2026 arXiv preprint, not a consensus survey, gives one set of model-dependent
+estimates for cryptographically relevant quantum computing~\cite{quantumhorizon2026}.
+A 2025 Google analysis of RSA-2048 illustrates a downward resource-estimation trend,
+but is RSA-specific and not a direct estimate for Bitcoin or Ethereum curves~\cite{gidney2025}.
 
 \section{Pitfalls}
 
