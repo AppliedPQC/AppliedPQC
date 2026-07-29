@@ -94,6 +94,8 @@ This means that solving SVP requires looking at the entire lattice structure, no
 We can build a small lattice and ask Sage for its shortest vector.
 
 \begin{lstlisting}[language=Python]
+from sage.modules.free_module_integer import IntegerLattice
+
 B = matrix(ZZ, [[2, 1], [1, 3]])
 L = IntegerLattice(B)
 print(L.shortest_vector())

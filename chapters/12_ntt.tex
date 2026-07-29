@@ -63,7 +63,7 @@ a = vector(F, [1, 2, 3, 0, 0, 0, 0, 0])
 b = vector(F, [4, 5, 0, 0, 0, 0, 0, 0])
 A, B = ntt(a), ntt(b)
 c = vector(F, intt([A[i]*B[i] for i in range(n)]))
-print(c)                 # (4, 13, 22, 15, 0, 0, 0, 0)
+print(c)                 # (4, 13, 5, 15, 0, 0, 0, 0)  (22 = 5 in GF(17))
 print(intt(ntt(a)) == list(a))  # True
 \end{lstlisting}
 

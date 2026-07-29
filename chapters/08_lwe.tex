@@ -197,17 +197,18 @@ The modulus ties the preceding threads together. It must be large enough that th
 The quickest route to intuition is to build a small instance by hand and watch the error convert an easy system into a hard one. Fix a modulus and dimension.
 
 \begin{lstlisting}[language=Python]
+from sage.all import *
+
 q = 17
-n = 3
 F = GF(q)
+dimension = 3
 \end{lstlisting}
 
 Choose a secret vector and a batch of random rows.
 
 \begin{lstlisting}[language=Python]
-from sage.all import *
-s = random_vector(F, n)
-A = random_matrix(F, 8, n)
+s = random_vector(F, dimension)
+A = random_matrix(F, 8, dimension)
 print("secret =", s)
 \end{lstlisting}
 

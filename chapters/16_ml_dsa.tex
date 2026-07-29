@@ -270,11 +270,27 @@ An attacker without $sk$ may freely choose $\mathbf{z}$ and $c$, but to pass ver
 The core cancellation is easy to verify in miniature. Using small parameters, sample a key, form a masked response, and confirm the verification identity holds before any signature is even released.
 
 \begin{lstlisting}[language=Python]
-# toy sizes; real ML-DSA uses n=256, q=8380417
+# Toy sizes; real ML-DSA uses n=256, q=8380417.
+from random import Random
+from sage.all import GF, Matrix, PolynomialRing, vector
+
 q = 8380417
 R.<x> = PolynomialRing(GF(q))
 Rq = R.quotient(x^8 + 1)  # toy ring
-# ... build A, s1, s2, t = A*s1 + s2 as in the toy Kyber chapter ...
+rng = Random("mldsa-cancellation")
+
+def small_poly():
+    return Rq([rng.choice([-1, 0, 1]) for _ in range(8)])
+
+def uniform_poly():
+    return Rq([rng.randrange(q) for _ in range(8)])
+
+A = Matrix(Rq, 2, 2, [uniform_poly() for _ in range(4)])
+s1 = vector(Rq, [small_poly(), small_poly()])
+s2 = vector(Rq, [small_poly(), small_poly()])
+t = A * s1 + s2
+y = vector(Rq, [uniform_poly(), uniform_poly()])
+c = small_poly()
 # For a mask y and challenge c, check the verifier's identity:
 #   A*z - c*t  ==  A*y - c*s2   (should hold exactly)
 z = y + c*s1

@@ -157,6 +157,48 @@ Verification is cheap: one multiplication to recover $s_1$, then a norm check. A
 
 The Gaussian sampler needs high-precision \emph{floating-point} arithmetic (FFT over the reals) to get the output distribution exactly right. Floating-point operations are notoriously variable-time and platform-dependent, which makes a \emph{constant-time} implementation -- one that leaks nothing through timing -- genuinely difficult. If the sampler's timing or rounding depends on the secret basis, an attacker can gradually reconstruct it. This is the direct motivation for the final chapter on side-channel security, and it is the main reason Falcon, despite its elegance and compactness, is the most demanding of the three standards to deploy safely.
 
+\section{SageMath experiment: the public NTRU relation}
+
+Sage can verify the public-key equation underlying the NTRU lattice. The
+example deliberately stops before the Gaussian trapdoor sampler: finding a
+correctly distributed short signature is the hard, specification-sensitive part
+of FN-DSA and is not reproduced by this toy calculation.
+
+\begin{lstlisting}[language=Python]
+from random import Random
+from sage.all import GF, PolynomialRing
+
+q = 17
+n = 8
+rng = Random("fndsa-ntru-relation")
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^n + 1)
+
+def small_poly():
+    return Rq([rng.choice([-1, 0, 1]) for _ in range(n)])
+
+def small_unit():
+    f = small_poly()
+    while not f.is_unit():
+        f = small_poly()
+    return f
+
+f = small_unit()
+g = small_poly()
+h = g * f^(-1)                 # public NTRU value
+assert f * h == g               # f h = g in Rq
+
+c = Rq([rng.randrange(q) for _ in range(n)])
+s2 = small_poly()
+s1 = c - s2*h                  # verifier's reconstruction rule
+assert s1 + s2*h == c
+print("NTRU public relation and verification equation hold")
+\end{lstlisting}
+
+The last equality is only an algebra check. In a real signature, \textsc{FFSampling}
+must choose $(s_1,s_2)$ with the required short Gaussian distribution; choosing
+an arbitrary small $s_2$ as above is not an FN-DSA signing algorithm.
+
 \section{Parameter sets}
 
 \begin{table}[H]

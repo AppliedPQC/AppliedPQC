@@ -104,16 +104,24 @@ The same seed always yields the same matrix. This is a crucial compression trick
 For a teaching implementation, we can first simulate the expansion by using a simple deterministic pseudo-random generator.
 
 \begin{lstlisting}[language=Python]
-import random
+from random import Random
+from sage.all import GF, Matrix, PolynomialRing
+
+q = 17
+n = 8
+k = 2
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^n + 1)
 
 
 def expand_A(seed):
-    random.seed(seed)
+    rng = Random(str(seed))
     return Matrix(
         Rq,
         k,
         k,
-        [Rq.random_element() for _ in range(k * k)]
+        [Rq([rng.randrange(q) for _ in range(n)])
+         for _ in range(k * k)]
     )
 \end{lstlisting}
 
@@ -351,7 +359,12 @@ Then verify that \(A_1 = A_2\). Now change the seed and observe that the matrix 
 Generate many samples from the CBD distribution and check that the average is close to zero.
 
 \begin{lstlisting}[language=Python]
-# toy example
+from random import randint
+
+def cbd(eta):
+    return sum(randint(0, 1) for _ in range(eta)) - \
+           sum(randint(0, 1) for _ in range(eta))
+
 samples = [cbd(2) for _ in range(10000)]
 print(sum(samples) / len(samples))
 \end{lstlisting}
@@ -362,7 +375,7 @@ Observe how the variance changes when \(\eta\) changes.
 
 Finally, write a function
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}
 pk, sk = keygen(seed)
 \end{lstlisting}
 
@@ -374,6 +387,33 @@ and test the following properties:
 \end{itemize}
 
 This gives a first impression of how modern public-key cryptography is built from deterministic pseudo-random procedures.
+
+\paragraph{Experiment 4: one \textsc{MultiplyNTTs} base product}
+
+The NTT-domain multiplication in FIPS~203 is not 256 independent scalar
+products. Each coordinate pair is multiplied modulo a quadratic relation. The
+following check implements one such pair; it tests the algebraic base case, not
+the full standardized transform or its serialization.
+
+\begin{lstlisting}[language=Python]
+q = 3329
+
+def multiply_ntt_pair(a, b, gamma):
+    a0, a1 = a
+    b0, b1 = b
+    return ((a0*b0 + gamma*a1*b1) % q,
+            (a0*b1 + a1*b0) % q)
+
+# (1 + 2X)(3 + 4X) modulo X^2 - gamma, with gamma = 17.
+got = multiply_ntt_pair((1, 2), (3, 4), 17)
+assert got == ((3 + 17*8) % q, (4 + 6) % q)
+print("one ML-KEM quadratic base product:", got)
+\end{lstlisting}
+
+This is precisely the local multiplication used 128 times by
+\textsc{MultiplyNTTs}; a conforming ML-KEM implementation must additionally
+use FIPS~203's transform ordering, twiddle factors, reductions, encodings, and
+test vectors.
 
 \section{Pitfalls}
 

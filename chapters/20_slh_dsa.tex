@@ -157,6 +157,62 @@ SLH-DSA-256\{s,f\} & 32 & 5 & highest security \\
 
 Signatures are large -- roughly $8$ to $50$ kilobytes -- which is the price of relying on hashing alone. In return, the security argument is the simplest and most conservative of any post-quantum scheme.
 
+\section{SageMath experiment: addressed Merkle authentication}
+
+This small hash-only example checks the part of SLH-DSA verification that folds
+an authentication path back to a public root. It uses eight leaves and a
+SHA-256-based toy hash; it is not a FORS, WOTS\textsuperscript{+}, or full
+SLH-DSA implementation.
+
+\begin{lstlisting}[language=Python]
+from hashlib import sha256
+from operator import xor
+
+n = 16
+pk_seed = b"public seed for a toy tree"
+
+def H(label, address, data=b""):
+    return sha256(pk_seed + label + address + data).digest()[:n]
+
+def leaf(index):
+    return H(b"leaf", int(index).to_bytes(4, "big"))
+
+def parent(left, right, level, index):
+    address = (int(level).to_bytes(1, "big") +
+               int(index).to_bytes(4, "big"))
+    return H(b"node", address, left + right)
+
+levels = [[leaf(i) for i in range(8)]]
+for level in range(3):
+    previous = levels[-1]
+    levels.append([parent(previous[2*i], previous[2*i + 1], level, i)
+                   for i in range(len(previous)//2)])
+root = levels[-1][0]
+
+leaf_index = 5
+auth = [levels[level][xor(int(leaf_index >> level), 1)]
+        for level in range(3)]
+
+def root_from_path(node, index, path):
+    for level, sibling in enumerate(path):
+        parent_index = index >> 1
+        node = (parent(node, sibling, level, parent_index)
+                if index % 2 == 0 else
+                parent(sibling, node, level, parent_index))
+        index >>= 1
+    return node
+
+assert root_from_path(leaf(leaf_index), leaf_index, auth) == root
+bad_auth = list(auth)
+bad_auth[0] = bytes([xor(bad_auth[0][0], 1)]) + bad_auth[0][1:]
+assert root_from_path(leaf(leaf_index), leaf_index, bad_auth) != root
+print("addressed Merkle path accepts intact data and rejects a tampered path")
+\end{lstlisting}
+
+The address is included in every hash call, so the same byte strings at a
+different layer or node index are domain-separated. That is the small-scale
+version of the address discipline used throughout SLH-DSA.
+
 \section{Pitfalls}
 
 \paragraph{Pitfall 1: reusing a one-time (WOTS\textsuperscript{+}) leaf.}
