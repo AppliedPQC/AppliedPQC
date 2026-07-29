@@ -191,7 +191,7 @@ With the ring in hand, the transition from LWE to RLWE is a change of alphabet:
 \qquad\longrightarrow\qquad
 \underbrace{a(x)\,s(x)+e(x)=b(x)}_{\text{RLWE, over } R_q}.
 \]
-The random matrix $A$ collapses to a single polynomial $a(x)$, because a polynomial encodes an entire negacyclic (circulant-like) matrix; the secret and error become polynomials. This is why RLWE public keys are a factor of $n$ smaller than plain LWE keys, and it is the subject of Chapter~\ref{ch:rlwe}.
+The random matrix $A$ is replaced by structured polynomial multiplication, because one polynomial encodes an entire negacyclic linear map; the secret and error become polynomials. This can substantially reduce storage relative to an unstructured matrix, but there is no parameter-independent ``factor of $n$'' size theorem: a comparison depends on dimensions, sample counts, moduli, security targets, and encoding. The precise RLWE construction is the subject of Chapter~\ref{ch:rlwe}.
 
 \section{Experiments}
 

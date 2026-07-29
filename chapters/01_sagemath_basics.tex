@@ -182,7 +182,7 @@ A finite field of order $q$ exists if and only if $q=p^m$ is a power of a prime 
 with arithmetic reduced modulo $p$.
 \end{theorem}
 
-Almost every modulus in this book is a prime, so the working picture is the clean one: $\mathbb{F}_q$ is ``clock arithmetic'' modulo $q$ in which division is also available. That last property -- division -- is exactly what separates a field from the ring $\mathbb{Z}$, and it is what makes Gaussian elimination, and hence key generation, possible. Kyber's $q=3329$ and Dilithium's $q=8380417$ are both prime for this reason.
+Almost every modulus in this book is prime, so the working picture is the clean one: $\mathbb{F}_q$ is ``clock arithmetic'' modulo $q$ in which division is also available. This field structure makes tools such as Gaussian elimination available when they are needed. It is not, however, why ML-KEM or ML-DSA key generation works: those algorithms sample secrets and public values rather than solving a random linear system. Their prime moduli are chosen for several interacting reasons, including algebraic structure, NTT compatibility, noise distributions, correctness, security, and implementation efficiency.
 
 \subsection{Creating a finite field}
 For example, the field with seven elements is:
@@ -264,7 +264,7 @@ This is the algebraic setting behind equations such as $A s + e = b$, which will
 Vectors are convenient for representing secret values and noise terms.
 
 \begin{lstlisting}[language=Python]
-v = vector(GF(7), [1, 2, 3])
+v = vector(F, [1, 2])
 v
 \end{lstlisting}
 
@@ -273,6 +273,8 @@ Matrix-vector multiplication is then straightforward:
 \begin{lstlisting}[language=Python]
 A * v
 \end{lstlisting}
+
+The output is \texttt{(5, 4)}. The vector has length $2$, matching the two columns of $A$; dimensions must agree for matrix--vector multiplication.
 
 \section{Polynomial rings}
 Polynomial rings are essential for the ring-based versions of lattice problems, especially RLWE and related constructions.
@@ -346,7 +348,7 @@ Try to solve the following exercises on your own.
   \item Create $\mathrm{GF}(13)$ and compute the inverse of every nonzero element.
   \item Create $R = \mathrm{GF}(17)[x]$ and compute $(x^2 + 3x + 1)^2$.
   \item Create $\mathrm{GF}(17)[x]/(x^4 + 1)$ and verify that $x^4 = -1$.
-  \item Randomly generate $A \in \mathrm{GF}(17)^{4 \times 4}$ and verify that $A^{-1}A = I$.
+  \item Repeatedly sample $A \in \mathrm{GF}(17)^{4 \times 4}$ until \texttt{A.is\_invertible()} is true, then verify that $A^{-1}A = I$. What happens for a singular sample?
 \end{enumerate}
 
 \section{Connection to the next chapters}

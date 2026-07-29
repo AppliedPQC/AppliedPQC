@@ -43,7 +43,7 @@ An element of $R$ is a binary polynomial of degree less than $n$, equivalently a
 \[
 (h\cdot y)_k \;=\; \bigoplus_{i+j\equiv k \ (\mathrm{mod}\ n)} h_i\, y_j .
 \]
-This is exactly the circulant/convolution picture of Figure~\ref{fig:circulant-grid}: the map $y \mapsto h\cdot y$ is multiplication by the circulant matrix whose first row is $h$. Storing the single vector $h$ is enough to describe that entire $n\times n$ circulant -- this is the ``quasi-cyclic'' compression, and it is why HQC keys are small.
+This uses the cyclic/circulant side of the convolution picture introduced in Chapter~\ref{ch:convolution}: the map $y \mapsto h\cdot y$ is multiplication by the circulant matrix whose first row is $h$. Storing the single vector $h$ is enough to describe that entire $n\times n$ circulant -- this is the ``quasi-cyclic'' compression, and it is why HQC keys are small.
 
 \paragraph{Weight is what stays secret.} The \emph{Hamming weight} of a ring element is the number of nonzero coefficients. A \emph{low-weight} element has only a handful of ones among its $n$ coordinates. HQC's secrets are low-weight elements; a uniformly random $h$ is not. The whole security argument turns on the gap between ``low weight'' and ``random.'' (For scale, HQC-128 uses $n = 17669$ with secret weight $w = 66$: sixty-six ones hidden among more than seventeen thousand coordinates.)
 

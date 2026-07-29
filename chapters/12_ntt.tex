@@ -1,262 +1,188 @@
 \chapter{Number Theoretic Transform (NTT)}
 \label{ch:ntt}
 
-\section{Why do we need NTT?}
+\section{Purpose and scope}
 
-The ring-based encryption schemes this book builds toward -- RLWE, Module-LWE, and ultimately Kyber -- all reduce to one central operation: the polynomial product
+The NTT is a finite-field analogue of a discrete Fourier transform. It changes representation so that structured polynomial multiplication becomes much cheaper. It is an integral part of ML-KEM's specified arithmetic, not merely an optional optimization~\cite{fips203}.
+
+This chapter distinguishes three settings that are often conflated:
+\begin{enumerate}
+  \item a cyclic NTT for $\mathbb{F}_q[x]/(x^n-1)$;
+  \item a full scalar negacyclic transform for $\mathbb{F}_q[x]/(x^n+1)$, when a primitive $2n$-th root exists; and
+  \item ML-KEM's partial NTT, whose output consists of 128 degree-one residues modulo quadratic polynomials.
+\end{enumerate}
+
+\section{Roots of unity and the cyclic transform}
+
+If $\omega\in\mathbb{F}_q$ has multiplicative order $n$, then evaluation at
 \[
-b(x)=a(x)s(x)+e(x).
+1,\omega,\omega^2,\ldots,\omega^{n-1}
 \]
-The expensive part is the multiplication of two polynomials. If each polynomial has about $256$ coefficients, ordinary multiplication costs roughly
+identifies multiplication modulo $x^n-1$ with $n$ scalar products. This requires $n\mid(q-1)$. The standard radix-2 butterfly network implements this map in $O(n\log n)$ operations when $n$ is a power of two.
+
+For the negacyclic quotient $x^n+1$, scalar evaluation points must be roots of $x^n+1$, so a primitive $2n$-th root is required. The difference is structural, not cosmetic: an algorithm written only for an $n$-th root and cyclic convolution is not automatically an ML-KEM algorithm.
+
+\subsection{Finding a root in a toy field}
+
+The nonzero elements of $\mathbb{F}_{17}$ form a group of order $16$. If $g$ is a generator, then $g^2$ has order $8$ and can serve as $\omega$ for an 8-point cyclic NTT. SageMath can check that condition directly:
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+g = F.multiplicative_generator()
+omega = g^2
+print(omega.multiplicative_order())  # 8
+\end{lstlisting}
+
+The important test is the multiplicative order, not merely that an element happens to satisfy an isolated power equation. For a coefficient vector $(a_0,\ldots,a_{n-1})$, the cyclic transform records
 \[
-256^2 = 65536
+\widehat a_i=a(\omega^i)=\sum_{j=0}^{n-1}a_j\omega^{ij},\qquad 0\le i<n.
 \]
-scalar multiplications in the straightforward schoolbook method. In a real cryptosystem, this operation is repeated many times, so the cost becomes very large.
+The inverse uses $\omega^{-1}$ and multiplies by $n^{-1}$, so an NTT is a reversible change of representation, not a lossy sampling operation.
 
-This is why NTT is essential. It accelerates polynomial multiplication dramatically.
+\section{A complete toy cyclic NTT}
 
-\section{A schoolbook multiplication example}
-
-Before discussing polynomials, it is useful to remember that ordinary integer multiplication also has a similar cost. Multiplying two numbers such as
-\[
-1234 \times 5678
-\]
-by the schoolbook algorithm requires many intermediate steps. The same phenomenon appears in polynomial multiplication: the full coefficient convolution is expensive.
-
-\section{What is convolution?}
-
-Suppose
-\[
-f(x)=1+2x+3x^2,
-\qquad
-g(x)=4+5x.
-\]
-Their product is
-\[
-f(x)g(x)=4+13x+22x^2+15x^3.
-\]
-The intermediate coefficient $22$ comes from combining many terms such as
-\[
-1\cdot 5 + 2\cdot 4 + 3\cdot 3.
-\]
-This combining of all coefficient pairs is exactly what is called convolution.
-
-\section{Why convolution is slow}
-
-When the degree is large, the number of coefficient pairs grows quadratically. If we have two polynomials with $256$ coefficients, then we need to combine roughly $256^2$ pairs. That is too slow for real cryptographic workloads.
-
-\section{The great idea of FFT}
-
-The FFT does not invent a new multiplication algorithm. Instead, it changes the representation of the polynomial. A polynomial can be represented in coefficient form, but it can also be represented by its values at many points. Once the polynomial is known at sufficiently many points, multiplication becomes easy.
-
-If we know the values of $f(x)$ and $g(x)$ at a point $a$, then
-\[
-(fg)(a)=f(a)g(a).
-\]
-In other words, multiplication becomes pointwise multiplication. That is the main conceptual trick behind FFT and NTT.
-
-\section{Why the point-value representation helps}
-
-The coefficient form presents the polynomial as a list of coefficients. The point-value form presents it as a list of values at chosen evaluation points. Under point-value representation, polynomial multiplication becomes much cheaper: we simply multiply the values pointwise and then recover the coefficients again.
-
-\section{Why we cannot use ordinary FFT directly}
-
-The classic FFT works over the complex numbers using roots of unity such as
-\[
-e^{2\pi i/n}.
-\]
-However, cryptographic schemes such as Kyber operate over finite fields, not over the complex numbers. For example,
-\[
-\mathbb{Z}_{3329}
-\]
-contains only finitely many elements. We therefore need a finite-field version of FFT, which is exactly the NTT.
-
-\section{What is a primitive root?}
-
-The FFT uses roots of unity. The NTT uses roots of unity in a finite field. We need an element $\omega$ such that
-\[
-\omega^n = 1,
-\]
-and smaller powers do not collapse to $1$. Such an element is called a primitive root. The existence of such an element is crucial for the transform to work.
-
-For Kyber, the modulus $q=3329$ is chosen so that the finite field contains suitable roots of unity for the length used by the transform. The fact that
-\[
-3329-1=3328=2^8\times 13
-\]
-allows a $256$-th root of unity to exist in the field, which is a key design condition.
-
-\section{Sage experiment: primitive roots}
-
-We can test this in Sage. Start with a finite field.
+The following SageMath program performs a complete forward transform, pointwise product, and inverse transform in the cyclic ring $\mathbb{F}_{17}[x]/(x^8-1)$. It is intentionally a toy model, not ML-KEM.
 
 \begin{lstlisting}[language=Python]
 q = 17
 F = GF(q)
-print(F.multiplicative_generator())
-\end{lstlisting}
-
-This returns a generator of the multiplicative group. We can then test whether a certain element has the required multiplicative order.
-
-\begin{lstlisting}[language=Python]
+n = 8
 g = F.multiplicative_generator()
-omega = g^2
-print(omega.multiplicative_order())
+omega = g^((q - 1)//n)
+assert omega.multiplicative_order() == n
+
+def ntt(a):
+    return [sum(a[j] * omega^(i*j) for j in range(n)) for i in range(n)]
+
+def intt(A):
+    n_inv = F(n)^(-1)
+    return [n_inv * sum(A[i] * omega^(-i*j) for i in range(n))
+            for j in range(n)]
+
+a = vector(F, [1, 2, 3, 0, 0, 0, 0, 0])
+b = vector(F, [4, 5, 0, 0, 0, 0, 0, 0])
+A, B = ntt(a), ntt(b)
+c = vector(F, intt([A[i]*B[i] for i in range(n)]))
+print(c)                 # (4, 13, 22, 15, 0, 0, 0, 0)
+print(intt(ntt(a)) == list(a))  # True
 \end{lstlisting}
 
-If the order is $8$, then this element behaves like an $8$-th root of unity for an $8$-point transform.
+The code evaluates at powers of the actual primitive root \texttt{omega}, uses an inverse transform, and checks reconstruction. It therefore demonstrates an NTT, unlike evaluation at the unrelated points $0,1,\ldots,n-1$.
 
-\section{The three stages of NTT}
+\subsection{Following one product through the transform}
 
-In practical usage, an NTT-based multiplication proceeds in three stages:
-
+For the input polynomials $a(x)=1+2x+3x^2$ and $b(x)=4+5x$, direct multiplication gives $4+13x+22x^2+15x^3$. The program computes the same result in four conceptual steps:
 \begin{enumerate}
-    \item \textbf{Forward NTT}: convert the polynomial from coefficient form to evaluation form.
-    \item \textbf{Pointwise multiplication}: multiply the transformed values pointwise.
-    \item \textbf{Inverse NTT}: convert the result back to coefficient form.
+  \item evaluate $a$ at $1,\omega,\ldots,\omega^7$;
+  \item evaluate $b$ at the same points;
+  \item multiply the eight pairs of values; and
+  \item apply the inverse transform to obtain $(4,13,22,15,0,0,0,0)$.
 \end{enumerate}
+Because the toy ring is modulo $x^8-1$ and the product has degree below eight, no visible wrap-around occurs. Higher-degree terms would wrap cyclically, not negacyclically.
 
-This is the high-level shape of the algorithm.
+\section{Butterflies and complexity}
 
-\section{Why the butterfly structure appears}
-\label{sec:butterfly}
-
-If you open a reference implementation of NTT, you will see many repeated patterns such as
+The direct code is intentionally transparent, but it evaluates every output from every input and therefore takes $O(n^2)$ field operations. A practical radix-2 NTT uses butterflies to reuse work. A butterfly combines two values $u$ and $v$ using a twiddle factor $\omega^k$:
 \[
-a \leftarrow a+\omega^k b,
-\qquad
-b \leftarrow a-\omega^k b.
+(u,v)\longmapsto(u+\omega^k v,\;u-\omega^k v).
 \]
-These are the butterfly operations. They are the basic computational building blocks of the transform. They are analogous to the butterfly structure of the Cooley--Tukey FFT~\cite{cooleytukey1965}, except that all arithmetic happens in the finite field.
-
-Each butterfly takes two values and produces two values, so the whole transform can be drawn as a network of butterflies. Figure~\ref{fig:ntt-butterfly} shows the network for a $4$-point transform; the $256$-point transform used in Kyber has the same structure with $\log_2 256 = 8$ stages instead of $2$.
+There are $\log_2n$ stages and $O(n)$ work per stage, giving $O(n\log n)$ operations.
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[scale=0.95, every node/.style={font=\scriptsize}]
-  \def\cA{0}\def\cB{2.4}\def\cC{4.8}
-  \node[pqcgray, left] at (\cA,0)  {$a_0$};
-  \node[pqcgray, left] at (\cA,-1) {$a_2$};
-  \node[pqcgray, left] at (\cA,-2) {$a_1$};
-  \node[pqcgray, left] at (\cA,-3) {$a_3$};
-  \node[pqcblue, right] at (\cC,0)  {$X_0$};
-  \node[pqcblue, right] at (\cC,-1) {$X_1$};
-  \node[pqcblue, right] at (\cC,-2) {$X_2$};
-  \node[pqcblue, right] at (\cC,-3) {$X_3$};
-  \foreach \p/\q in {0/1,2/3} {
-    \draw[pqcteal, thin] (\cA,-\p) -- (\cB,-\p);
-    \draw[pqcteal, thin] (\cA,-\p) -- (\cB,-\q);
-    \draw[pqcteal, thin] (\cA,-\q) -- (\cB,-\p);
-    \draw[pqcteal, thin] (\cA,-\q) -- (\cB,-\q);
+\begin{tikzpicture}[x=1.2cm,y=0.72cm,every node/.style={font=\scriptsize}]
+  \foreach \y/\name in {0/$a_0$,1/$a_1$,2/$a_2$,3/$a_3$}
+    \node[left] at (0,-\y) {\name};
+  \foreach \y/\name in {0/$\hat a_0$,1/$\hat a_1$,2/$\hat a_2$,3/$\hat a_3$}
+    \node[right] at (4,-\y) {\name};
+  \foreach \u/\v in {0/1,2/3} {
+    \draw[pqcteal,thick] (0,-\u)--(2,-\u); \draw[pqcteal,thick] (0,-\u)--(2,-\v);
+    \draw[pqcteal,thick] (0,-\v)--(2,-\u); \draw[pqcteal,thick] (0,-\v)--(2,-\v);
   }
-  \foreach \p/\q in {0/2,1/3} {
-    \draw[pqcblue, thin] (\cB,-\p) -- (\cC,-\p);
-    \draw[pqcblue, thin] (\cB,-\p) -- (\cC,-\q);
-    \draw[pqcblue, thin] (\cB,-\q) -- (\cC,-\p);
-    \draw[pqcblue, thin] (\cB,-\q) -- (\cC,-\q);
+  \foreach \u/\v in {0/2,1/3} {
+    \draw[pqcblue,thick] (2,-\u)--(4,-\u); \draw[pqcblue,thick] (2,-\u)--(4,-\v);
+    \draw[pqcblue,thick] (2,-\v)--(4,-\u); \draw[pqcblue,thick] (2,-\v)--(4,-\v);
   }
-  \foreach \r in {0,...,3} {
-    \node[latticeptbold] at (\cA,-\r) {};
-    \node[latticeptbold] at (\cB,-\r) {};
-    \node[latticeptbold] at (\cC,-\r) {};
-  }
-  \node[pqcteal, font=\scriptsize\itshape] at (\cA*0.5+\cB*0.5,0.6) {stage 1};
-  \node[pqcblue, font=\scriptsize\itshape] at (\cB*0.5+\cC*0.5,0.6) {stage 2};
+  \node[pqcteal] at (1,0.65) {stage 1};
+  \node[pqcblue] at (3,0.65) {stage 2};
 \end{tikzpicture}
-\caption{The butterfly network for a $4$-point NTT. Inputs enter in bit-reversed order $a_0,a_2,a_1,a_3$; stage~1 combines adjacent pairs (distance $1$), stage~2 combines pairs at distance $2$, and the outputs $X_0,\dots,X_3$ emerge in natural order. Every crossing is the two-line update $a\leftarrow a+\omega^k b,\ b\leftarrow a-\omega^k b$. Kyber's $256$-point transform is the same picture with $8$ stages instead of $2$.}
-\label{fig:ntt-butterfly}
+\caption{A conceptual four-point radix-2 butterfly network. The picture shows the reuse pattern, not ML-KEM's complete partial NTT.}
+\label{fig:toy-ntt-butterfly}
 \end{figure}
 
-\section{A toy NTT experiment}
+\section{Why ML-KEM is different}
 
-We do not need to start with degree $256$. A toy experiment with length $8$ is enough to understand the idea.
+ML-KEM uses $q=3329$ and $n=256$. Since
+\[
+q-1=3328=2^8\cdot13,
+\]
+there are primitive $256$-th roots in $\mathbb{Z}_{3329}$, but no primitive $512$-th roots. In particular, $x^{256}+1$ does not split into 256 linear factors. With $\zeta=17$, a primitive 256-th root, FIPS~203 gives the factorization
+\[
+x^{256}+1=\prod_{i=0}^{127}\left(x^2-\zeta^{2\operatorname{BitRev}_7(i)+1}\right).
+\]
+Consequently, the ML-KEM NTT is an isomorphism from
+\[
+R_q=\mathbb{Z}_{3329}[x]/(x^{256}+1)
+\]
+to a product of 128 quadratic residue rings, not to 256 scalar evaluation values~\cite[Sec.~4.3]{fips203}.
 
-\begin{lstlisting}[language=Python]
-q = 17
-R.<x> = PolynomialRing(GF(q))
-S = R.quotient(x^8 + 1)
-\end{lstlisting}
+\subsection{The three-level mental model}
 
-Choose a primitive root and evaluate the polynomial at powers of that root. This is the first step of the transform.
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.24\textwidth}p{0.26\textwidth}p{0.31\textwidth}}
+\toprule
+Setting & Required roots / factorisation & Multiplication after transform \\
+\midrule
+Cyclic NTT, $x^n-1$ & primitive $n$-th root & $n$ scalar products \\
+Full negacyclic NTT, $x^n+1$ & primitive $2n$-th root & $n$ scalar products at roots of $x^n+1$ \\
+ML-KEM, $x^{256}+1$ over $\mathbb{Z}_{3329}$ & 128 quadratic factors & 128 quadratic base products \\
+\bottomrule
+\end{tabular}
+\caption{Related transforms with different algebraic targets. Only the third row describes ML-KEM.}
+\label{tab:ntt-three-settings}
+\end{table}
 
-\begin{lstlisting}[language=Python]
-# A simple toy example: evaluate a polynomial at powers of a root
-f = 1 + 2*x + 3*x^2
-for i in range(8):
-    print(f(i))
-\end{lstlisting}
+\section{Multiplication in the ML-KEM NTT domain}
 
-This gives the point-value representation, which is the conceptual starting point of NTT.
-
-\section{Why NTT gives $O(n\log n)$ complexity}
-
-The reason NTT is so fast is that it uses divide-and-conquer. A transform of size $256$ is split recursively into smaller transforms of size $128$, then $64$, then $32$, and so on. The butterfly operations are applied at each stage. Written out, the recursion is Algorithm~\ref{alg:ntt}.
+Each NTT-domain coordinate is represented by two coefficients, $a_0+a_1X$, reduced modulo $X^2-\gamma$. For two such residues, multiplication is
+\[
+(a_0+a_1X)(b_0+b_1X)\bmod(X^2-\gamma)
+= (a_0b_0+a_1b_1\gamma)+(a_0b_1+a_1b_0)X.
+\]
+FIPS~203's \texttt{MultiplyNTTs} applies this base-case multiplication to each of the 128 coordinate pairs. Thus ``pointwise multiplication'' is accurate only if each point is understood as a quadratic component; it is not 256 independent scalar multiplications.
 
 \begin{algorithm}[H]
-\caption{Forward NTT (recursive, radix-2)}
-\label{alg:ntt}
+\caption{ML-KEM NTT-domain multiplication (conceptual form)}
+\label{alg:mlkem-base-multiply}
 \begin{algorithmic}[1]
-\Function{NTT}{$(a_0,\dots,a_{n-1})$, $\omega$} \Comment{$\omega$ is a primitive $n$-th root of unity}
-  \If{$n = 1$}
-    \State \Return $(a_0)$
-  \EndIf
-  \State $(u_0,\dots,u_{n/2-1}) \gets \Call{NTT}{(a_0,a_2,a_4,\dots,a_{n-2}),\ \omega^2}$ \Comment{even-indexed coefficients}
-  \State $(v_0,\dots,v_{n/2-1}) \gets \Call{NTT}{(a_1,a_3,a_5,\dots,a_{n-1}),\ \omega^2}$ \Comment{odd-indexed coefficients}
-  \For{$k = 0,\dots,n/2-1$}
-    \State $t \gets \omega^{k} \cdot v_k$
-    \State $X_k \gets u_k + t$
-    \State $X_{k+n/2} \gets u_k - t$ \Comment{the butterfly}
-  \EndFor
-  \State \Return $(X_0,\dots,X_{n-1})$
-\EndFunction
+\Require NTT representations $\hat f,\hat g\in\mathbb{Z}_q^{256}$
+\Ensure $\hat h=\hat f\times_{T_q}\hat g$
+\For{$i=0$ to $127$}
+  \State $\gamma\gets\zeta^{2\operatorname{BitRev}_7(i)+1}$
+  \State $\hat h_{2i}\gets \hat f_{2i}\hat g_{2i}+\gamma\hat f_{2i+1}\hat g_{2i+1}\pmod q$
+  \State $\hat h_{2i+1}\gets \hat f_{2i}\hat g_{2i+1}+\hat f_{2i+1}\hat g_{2i}\pmod q$
+\EndFor
+\State \Return $\hat h$
 \end{algorithmic}
 \end{algorithm}
 
-Each recursive call halves $n$, so there are $\log_2 n$ levels of recursion; each level does $O(n)$ work across all of its butterflies. That gives the total
-\[
-O(n\log n),
-\]
-which is far better than the $O(n^2)$ schoolbook method. The inverse NTT runs the same algorithm with $\omega^{-1}$ in place of $\omega$, followed by dividing every output by $n$.
+The forward and inverse transforms themselves use butterfly networks and precomputed twiddle factors, as specified by FIPS~203. Their implementation details are deliberately not reconstructed here from a generic radix-2 routine: a conforming implementation must follow the standard's algorithms, bounds, and test vectors.
 
-\section{How NTT fits into Kyber}
+\section{Practical implementation checklist}
 
-In Kyber, polynomial multiplications appear everywhere in the arithmetic of the ring. Instead of doing them directly with schoolbook methods, the implementation converts the polynomial to NTT form, performs pointwise multiplication, and then converts back. That is why the implementation speed is high.
+Before treating an NTT implementation as an ML-KEM implementation, verify all of the following.
+\begin{itemize}
+  \item The coefficient ring is $\mathbb{Z}_{3329}[x]/(x^{256}+1)$, not a cyclic substitute.
+  \item The forward and inverse transforms follow the specified ordering and twiddle factors.
+  \item NTT-domain multiplication operates on 128 pairs with the appropriate quadratic modulus.
+  \item Modular reduction, serialization, sampling, and bounds follow FIPS~203 in addition to the transform itself.
+  \item The implementation is checked against official known-answer tests and is engineered for its required side-channel model.
+\end{itemize}
 
-The overall flow is:
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=8mm and 8mm]
-  \node[flownode] (a) {Polynomial\\[-2pt]\scriptsize (coefficient form)};
-  \node[flownode, right=of a] (b) {Forward NTT};
-  \node[flownode, right=of b] (c) {Pointwise\\[-2pt]\scriptsize multiply};
-  \node[flownode, right=of c] (d) {Inverse NTT};
-  \node[flownode, right=of d] (e) {Polynomial\\[-2pt]\scriptsize (coefficient form)};
-  \draw[flowarrow] (a) -- (b);
-  \draw[flowarrow] (b) -- (c);
-  \draw[flowarrow] (c) -- (d);
-  \draw[flowarrow] (d) -- (e);
-\end{tikzpicture}
-\caption{NTT-based polynomial multiplication in Kyber: both factors are moved into evaluation form, multiplied one coefficient at a time, and the product is moved back.}
-\label{fig:ntt-flow}
-\end{figure}
-
-\section{Why the parameters $(q=3329, n=256)$ matter}
-
-The modulus and ring dimension are not arbitrary. They are chosen so that the finite field contains suitable roots of unity, making the NTT efficient. In particular, the ring dimension $256$ is chosen to line up with NTT-friendly transform lengths and with practical Kyber parameters.
-
-\section{Suggested experiments}
-
-A few hands-on experiments are highly recommended.
-
-\begin{enumerate}
-    \item Multiply two polynomials directly and record the cost.
-    \item Implement a naive NTT by evaluating at powers of a primitive root.
-    \item Check that inverse NTT reconstructs the original polynomial.
-    \item Compare the direct multiply and NTT-based multiply on a small example.
-\end{enumerate}
+This checklist explains why a short classroom transform is valuable for intuition but must not be described as a complete implementation of ML-KEM.
 
 \section{Summary}
 
-The important conceptual picture is the round trip already drawn in Figure~\ref{fig:ntt-flow}: a polynomial in \emph{coefficient} form is carried by the forward NTT into \emph{value} (evaluation) form, where multiplication is a cheap pointwise product, and the inverse NTT carries the result back to coefficient form.
-
-The central intuition is that polynomial multiplication, which looks expensive in coefficient form, becomes cheap in evaluation form. NTT makes this transformation possible inside a finite field, and this is exactly why Kyber can be implemented efficiently in software and hardware.
+An NTT is not simply ``evaluate a polynomial at several integers.'' It is a structured transform at roots of unity, together with its inverse. A cyclic transform uses $x^n-1$; a full scalar negacyclic transform needs a primitive $2n$-th root. ML-KEM uses neither simplified picture directly: its partial NTT maps $R_q$ to 128 quadratic components and multiplies them with base-case quadratic products.

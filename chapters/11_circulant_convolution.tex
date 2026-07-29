@@ -1,229 +1,187 @@
-\chapter{From Circulant Matrices to Convolution Algebra}
-
-\section{Revisiting matrix multiplication}
-
-Consider a vector
-\[
-s =
-\begin{bmatrix}
-s_0\\ s_1\\ s_2\\ s_3
-\end{bmatrix}
-\]
-and a matrix
-\[
-A=
-\begin{bmatrix}
-1&2&3&4\\
-4&1&2&3\\
-3&4&1&2\\
-2&3&4&1
-\end{bmatrix}.
-\]
-
-The product $As$ is a standard linear-algebra computation. But if we look carefully, we notice a striking pattern: every row is a cyclic shift of the previous row. Such a matrix is called a circulant matrix.
-
-Figure~\ref{fig:circulant-grid} makes this pattern visible instead of just stated: coloring every entry of $A$ by its value shows that each color forms a complete wrapped diagonal.
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=1.05, every node/.style={font=\small}]
-  \foreach \i/\j/\v/\clr in {
-    0/0/1/pqcblue, 1/0/2/pqcteal, 2/0/3/pqcorange, 3/0/4/pqcgray,
-    0/1/4/pqcgray, 1/1/1/pqcblue, 2/1/2/pqcteal, 3/1/3/pqcorange,
-    0/2/3/pqcorange, 1/2/4/pqcgray, 2/2/1/pqcblue, 3/2/2/pqcteal,
-    0/3/2/pqcteal, 1/3/3/pqcorange, 2/3/4/pqcgray, 3/3/1/pqcblue} {
-    \draw[fill=\clr!22, draw=\clr, thick] (\i,-\j) rectangle ++(1,-1);
-    \node at (\i+0.5,-\j-0.5) {\v};
-  }
-  \foreach \i in {0,...,3} {
-    \node[pqcgray, font=\scriptsize] at (\i+0.5,0.4) {col $\i$};
-  }
-  \foreach \j in {0,...,3} {
-    \node[pqcgray, font=\scriptsize, anchor=east] at (-0.15,-\j-0.5) {row $\j$};
-  }
-\end{tikzpicture}
-
-\vspace{4pt}
-{\small\centering
-\textcolor{pqcblue}{$\blacksquare$}~$=1$ \quad
-\textcolor{pqcteal}{$\blacksquare$}~$=2$ \quad
-\textcolor{pqcorange}{$\blacksquare$}~$=3$ \quad
-\textcolor{pqcgray}{$\blacksquare$}~$=4$ \par}
-
-\caption{The circulant matrix $A=\left(\begin{smallmatrix}1&2&3&4\\4&1&2&3\\3&4&1&2\\2&3&4&1\end{smallmatrix}\right)$ redrawn as a color-coded grid. Every cell on the same wrapped diagonal (constant $(\text{col}-\text{row})\bmod 4$) carries the same value and the same color, so the cyclic-shift structure that defines a circulant matrix is visible at a glance instead of having to be read off row by row.}
-\label{fig:circulant-grid}
-\end{figure}
-
-\section{Why circulant matrices matter}
-
-A general $4\times 4$ matrix needs $16$ numbers to describe it. A circulant matrix, however, is determined entirely by its first row:
-\[
-(1,2,3,4).
-\]
-Once the first row is known, the remaining rows are generated automatically by cyclic shifts. So the storage cost drops from $16$ values to only $4$ values. In higher dimensions, the savings become dramatic. This is the first compression mechanism behind RLWE.
-
-\section{From the first row to a polynomial}
-
-The first row
-\[
-(1,2,3,4)
-\]
-can be written as a polynomial
-\[
-a(x)=1+2x+3x^2+4x^3.
-\]
-Now the entire circulant matrix is no longer stored explicitly. Instead, we represent it by the single polynomial $a(x)$.
-
-This is the most important conceptual step behind RLWE: a structured matrix can be encoded by a polynomial.
-
-\section{Why a polynomial naturally produces cyclicity}
-
-Suppose we multiply two polynomials, for example
-\[
-a(x)=1+2x+3x^2,
-\qquad
-s(x)=5+6x+7x^2.
-\]
-The product is computed by combining coefficients in a way that is not ordinary scalar multiplication but rather a convolution of coefficients. If we reduce modulo a polynomial such as
-\[
-x^4+1,
-\]
-then powers above degree $3$ wrap around. In other words, the multiplication becomes cyclic. The resulting algebraic structure is exactly the same as the circulant matrix structure we saw above.
-
-\section{Sage experiment}
-
-We can test this directly in Sage.
-
-\begin{lstlisting}[language=Python]
-q = 17
-R.<x> = PolynomialRing(GF(q))
-Rq = R.quotient(x^4 + 1)
-
-a = Rq(1 + 2*x + 3*x^2 + 4*x^3)
-s = Rq(5 + 6*x + 7*x^2)
-print(a*s)
-\end{lstlisting}
-
-The multiplication is carried out modulo $x^4+1$, so higher powers wrap back into lower ones. This is exactly the cyclic behavior that mirrors circulant matrices.
-
-\section{The real secret: convolution}
-
-Polynomial multiplication is not just ordinary multiplication of two expressions. It is a convolution. For example, if we multiply
-\[
-(1+2x+3x^2)(4+5x),
-\]
-we obtain
-\[
-4+13x+22x^2+15x^3.
-\]
-The coefficient $22$ comes from combining multiple overlaps of coefficients, such as
-\[
-1\cdot 5 + 2\cdot 4 + 3\cdot 3.
-\]
-This is the convolution operation.
-
-The same process appears in circulant matrix multiplication. Multiplying a circulant matrix by a vector is essentially convolution in disguise.
-
-\section{The key equivalence}
-
-The central equivalence is:
-
-\begin{verbatim}
-Polynomial multiplication
-    = circulant matrix multiplication
-    = circular convolution
-\end{verbatim}
-
-This is the mathematical bridge between linear algebra and RLWE.
-
-Algorithm~\ref{alg:circulant-mult} makes the equivalence completely explicit: it builds the circulant matrix $C$ from the coefficients of $a(x)$ and shows that the matrix--vector product $Cs$ reproduces exactly the coefficients of the polynomial product $a(x)s(x)$.
-
-\begin{algorithm}[H]
-\caption{Polynomial Multiplication as Circulant Matrix--Vector Product}
-\label{alg:circulant-mult}
-\begin{algorithmic}[1]
-\Require Coefficients $a_0,\dots,a_{n-1}$ of $a(x)$; coefficients $s_0,\dots,s_{n-1}$ of $s(x)$
-\Ensure Coefficients $c_0,\dots,c_{n-1}$ of $c(x) = a(x)\,s(x) \bmod (x^n-1)$
-\Statex \textit{Step 1: build the circulant matrix $C$ from $a$}
-\For{$i = 0$ \textbf{to} $n-1$}
-    \For{$j = 0$ \textbf{to} $n-1$}
-        \State $C_{i,j} \gets a_{(i-j) \bmod n}$ \Comment{row $i$ is row $i-1$ cyclically shifted by one place}
-    \EndFor
-\EndFor
-\Statex \textit{Step 2: multiply $C$ by the coefficient vector of $s$}
-\For{$i = 0$ \textbf{to} $n-1$}
-    \State $c_i \gets \displaystyle\sum_{j=0}^{n-1} C_{i,j}\, s_j$ \Comment{this sum is exactly the circular convolution of $a$ and $s$}
-\EndFor
-\State \Return $(c_0,\dots,c_{n-1})$ \Comment{identical to the coefficients of $a(x)s(x)$ reduced mod $x^n-1$}
-\end{algorithmic}
-\end{algorithm}
-
-\section{Why NTT accelerates this}
-
-The convolution theorem states that convolution becomes pointwise multiplication under the right transform. In other words,
-\[
-\mathcal{F}(f*g)=\mathcal{F}(f)\cdot\mathcal{F}(g).
-\]
-
-In the complex setting this is the FFT. In finite fields it becomes the NTT. Therefore, once we recognize that RLWE multiplication is just convolution, we can use NTT to accelerate it dramatically.
-
-\section{Toeplitz matrices and the circulant special case}
-
-There is a broader class of matrices called Toeplitz matrices, where entries are constant along diagonals. A circulant matrix is a special case of a Toeplitz matrix with cyclic wrap-around. The special cyclic structure is what makes the polynomial representation so elegant and what makes NTT possible in practice.
-
-\section{What changes in Module-LWE?}
-
-In Module-LWE, we do not work with a single polynomial. Instead, we work with vectors of polynomials, and the corresponding matrix is a block-circulant structure, where each block is itself a circulant object. This is why Module-LWE is a natural generalization of RLWE. The same underlying convolutional algebra remains in place, just at a larger block level.
-
-\section{Sage experiment: circulant matrix versus polynomial multiplication}
-
-We can verify the equivalence directly in Sage. First define a circulant matrix.
-
-\begin{lstlisting}[language=Python]
-from sage.matrix.special import circulant
-
-c = circulant([1,2,3,4])
-print(c)
-\end{lstlisting}
-
-Then define a vector and multiply.
-
-\begin{lstlisting}[language=Python]
-v = vector([5,6,7,8])
-print(c * v)
-\end{lstlisting}
-
-Now compare the same computation with polynomial multiplication in the quotient ring.
-
-\begin{lstlisting}[language=Python]
-q = 17
-R.<x> = PolynomialRing(GF(q))
-Rq = R.quotient(x^4 + 1)
-a = Rq(1 + 2*x + 3*x^2 + 4*x^3)
-s = Rq(5 + 6*x + 7*x^2)
-print(a*s)
-\end{lstlisting}
-
-The same cyclic structure appears in both viewpoints.
+\chapter{From Convolution to Negacyclic Ring Arithmetic}
+\label{ch:convolution}
 
 \section{Why this chapter matters}
 
-This chapter is foundational for everything that follows. The transition from a matrix to a polynomial, and from matrix multiplication to convolution, is exactly what makes RLWE and Module-LWE efficient, and it is what the NTT (Chapter~\ref{ch:ntt}) accelerates inside ML-KEM. The same algebra also underpins lattice-based fully homomorphic encryption and zero-knowledge proof systems -- topics beyond the scope of this book -- so the transition developed here is worth internalizing before those constructions can look anything but mysterious.
+Polynomial multiplication is the linear operation underlying RLWE and ML-KEM. The important distinction is the modulus: reduction modulo $x^n-1$ gives \emph{cyclic} convolution and ordinary circulant matrices, while reduction modulo $x^n+1$ gives \emph{negacyclic} convolution. ML-KEM uses the latter.
+
+\section{Two kinds of wrap-around}
+
+Let $a(x)=\sum_{i=0}^{n-1}a_i x^i$ and $s(x)=\sum_{j=0}^{n-1}s_j x^j$. Before reduction, the coefficient of $x^k$ is
+\[
+  \sum_{i+j=k} a_i s_j.
+\]
+For example,
+\[
+(1+2x+3x^2)(4+5x)=4+13x+22x^2+15x^3,
+\]
+where $22=2\cdot5+3\cdot4$. This indexing condition, $i+j=k$, is the ordinary convolution rule.
+
+Now choose a quotient modulus.
+\begin{itemize}
+  \item In $\mathbb{F}_q[x]/(x^n-1)$, $x^n=1$. A term that wraps past degree $n-1$ returns with the \emph{same} sign. This is cyclic convolution.
+  \item In $\mathbb{F}_q[x]/(x^n+1)$, $x^n=-1$. A wrapped term returns with the \emph{opposite} sign. This is negacyclic convolution.
+\end{itemize}
+
+Thus the two structures are related but not interchangeable. The quotient ring used by ML-KEM is
+\[
+ R_q=\mathbb{Z}_{3329}[x]/(x^{256}+1),
+\]
+so its polynomial products are negacyclic.
+
+\subsection{A four-coefficient hand calculation}
+
+Take $n=4$ and multiply $a(x)=1+2x+3x^2+4x^3$ by $s(x)=5+6x+7x^2+8x^3$. Before reduction, the product has degree six. The low-degree coefficients are the same in both quotient rings:
+\[
+\begin{aligned}
+[x^0](as)&=1\cdot5=5, & [x^1](as)&=1\cdot6+2\cdot5=16,\\
+[x^2](as)&=1\cdot7+2\cdot6+3\cdot5=34, & [x^3](as)&=1\cdot8+2\cdot7+3\cdot6+4\cdot5=60.
+\end{aligned}
+\]
+The remaining terms are $53x^4+52x^5+32x^6$. Modulo $x^4-1$, they return as $+53,+52x,+32x^2$; modulo $x^4+1$, they return as $-53,-52x,-32x^2$. Hence
+\[
+\begin{array}{rcl}
+as\bmod(x^4-1)&=&58+68x+66x^2+60x^3,\\
+as\bmod(x^4+1)&=&-48-36x+2x^2+60x^3.
+\end{array}
+\]
+The inputs are identical. The sign of the wrap-around is the only change, but it changes the ring operation.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=7mm and 12mm, every node/.style={font=\small}]
+  \node[flownode] (prod) {terms of degree $\geq 4$};
+  \node[flownode, below left=of prod] (cyc) {$x^4=1$\\cyclic: same sign};
+  \node[keynode, below right=of prod] (neg) {$x^4=-1$\\negacyclic: flip sign};
+  \node[below=of cyc, align=center] {$53x^4\mapsto +53$};
+  \node[below=of neg, align=center] {$53x^4\mapsto -53$};
+  \draw[flowarrow] (prod) -- (cyc);
+  \draw[flowarrow] (prod) -- (neg);
+\end{tikzpicture}
+\caption{One wrapped term under the two quotient relations. ML-KEM follows the negacyclic branch.}
+\label{fig:cyclic-vs-negacyclic}
+\end{figure}
+
+\section{Matrix representations}
+
+Multiplication by $a(x)=a_0+a_1x+\cdots+a_{n-1}x^{n-1}$ is a linear map on coefficient vectors. In the cyclic case it is represented by the circulant matrix
+\[
+C(a)_{i,j}=a_{(i-j)\bmod n}.
+\]
+In the negacyclic case, the same wrapped coefficient receives a minus sign:
+\[
+N(a)_{i,j}=\begin{cases}
+ a_{i-j},&i\ge j,\\
+ -a_{n+i-j},&i<j.
+\end{cases}
+\]
+For $n=4$, multiplication by $a_0+a_1x+a_2x^2+a_3x^3$ modulo $x^4+1$ has matrix
+\[
+N(a)=
+\begin{bmatrix}
+a_0&-a_3&-a_2&-a_1\\
+a_1&a_0&-a_3&-a_2\\
+a_2&a_1&a_0&-a_3\\
+a_3&a_2&a_1&a_0
+\end{bmatrix}.
+\]
+It is therefore inaccurate to call ML-KEM multiplication ordinary circulant multiplication. A polynomial still compactly represents a structured linear map, which is the useful connection to linear algebra.
+
+\subsection{Reading the negacyclic matrix}
+
+The first column of $N(a)$ is the coefficient vector of $a(x)$. Moving one column right shifts the entries down, but the coefficient crossing the top boundary is negated. This is precisely $x^4=-1$ written as a matrix. An ordinary circulant matrix has no minus signs in its upper-right corner and represents multiplication modulo $x^4-1$.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+Quotient ring & Wrap-around rule & Matrix structure \\
+\midrule
+$\mathbb{F}_q[x]/(x^n-1)$ & $x^n=1$ & circulant \\
+$\mathbb{F}_q[x]/(x^n+1)$ & $x^n=-1$ & negacyclic / signed circulant \\
+\bottomrule
+\end{tabular}
+\caption{The quotient relation determines both convolution and matrix structure.}
+\end{table}
+
+\section{A reproducible Sage experiment}
+
+The following experiment uses one field, one input vector, and the negacyclic matrix on both sides of the comparison.
+
+\begin{lstlisting}[language=Python]
+q = 17
+F = GF(q)
+a = vector(F, [1, 2, 3, 4])
+s = vector(F, [5, 6, 7, 8])
+
+# Matrix for multiplication by a(x) modulo x^4 + 1.
+N = Matrix(F, [[a[(i-j) % 4] if i >= j else -a[(i-j) % 4]
+                for j in range(4)] for i in range(4)])
+
+R.<x> = PolynomialRing(F)
+Rq = R.quotient(x^4 + 1, 'y')
+y = Rq.gen()
+ap = sum(a[i]*y^i for i in range(4))
+sp = sum(s[i]*y^i for i in range(4))
+
+matrix_product = N * s
+ring_product = vector(F, (ap*sp).lift().list() + [0]*4)[:4]
+print(matrix_product)
+print(ring_product)
+print(matrix_product == ring_product)  # True
+\end{lstlisting}
+
+The sign in the upper-right part of $N$ is the whole difference between this experiment and a circulant one. Changing $x^4+1$ to $x^4-1$ and removing those signs produces the cyclic version.
+
+\subsection{A cyclic comparison}
+
+It is useful to see the conventional circulant case too, provided it is labelled correctly. This version changes both the matrix and the quotient modulus to $x^4-1$:
+
+\begin{lstlisting}[language=Python]
+C = Matrix(F, [[a[(i-j) % 4] for j in range(4)] for i in range(4)])
+Rc = R.quotient(x^4 - 1, 'z')
+z = Rc.gen()
+ac = sum(a[i]*z^i for i in range(4))
+sc = sum(s[i]*z^i for i in range(4))
+cyclic_ring_product = vector(F, (ac*sc).lift().list() + [0]*4)[:4]
+print(C * s == cyclic_ring_product)  # True
+\end{lstlisting}
+
+The two experiments are deliberately parallel. Changing the field, input vector, or quotient modulus would no longer test a mathematical equivalence.
+
+\section{What the NTT accelerates}
+
+Transforms can convert a convolution into multiplication in a different representation, but the representation depends on the quotient ring and on the available roots of unity. A full cyclic NTT diagonalizes multiplication modulo $x^n-1$ when an $n$-th root is available. A full negacyclic NTT that evaluates at $n$ scalar points needs a primitive $2n$-th root. ML-KEM does not have such a root for $n=256$ and $q=3329$; its partial NTT instead produces 128 quadratic components. Chapter~\ref{ch:ntt} develops that construction.
+
+\section{From one polynomial to a module}
+
+RLWE uses ring elements, whereas Module-LWE uses vectors and matrices whose entries lie in $R_q$. For a $k\times k$ polynomial matrix $A$ and a polynomial vector $\mathbf{s}$,
+\[
+(A\mathbf{s})_i=\sum_{j=1}^{k}A_{i,j}(x)s_j(x)\quad\text{in }R_q.
+\]
+Each scalar-looking product is still negacyclic polynomial multiplication. The module structure adds a small matrix layer; it does not turn the ring operation back into ordinary cyclic convolution.
+
+\section{Checks before moving on}
+
+\begin{enumerate}
+  \item Which quotient relation makes a coefficient wrap back with a minus sign?
+  \item Why is the upper-right corner of a negacyclic multiplication matrix signed?
+  \item Why is it invalid to compare a circulant integer-matrix product with a product in $\mathbb{F}_{17}[x]/(x^4+1)$?
+  \item What root-of-unity condition would be needed to represent negacyclic products by scalar evaluations?
+\end{enumerate}
 
 \section{Summary}
 
-The four key ideas to keep in mind are:
-
 \begin{center}
-\begin{tikzpicture}[node distance=6mm and 6mm, every node/.style={font=\scriptsize}]
-  \node[flownode] (a) {polynomial};
-  \node[flownode, right=of a] (b) {circulant\\[-2pt]matrix};
-  \node[flownode, right=of b] (c) {circular\\[-2pt]convolution};
-  \node[keynode, right=of c] (d) {NTT pointwise\\[-2pt]multiplication};
+\begin{tikzpicture}[node distance=7mm and 7mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {$R_q=\mathbb{Z}_q[x]/(x^n+1)$};
+  \node[flownode, right=of a] (b) {negacyclic\\[-2pt]linear map};
+  \node[flownode, right=of b] (c) {partial NTT / CRT};
+  \node[keynode, right=of c] (d) {quadratic\\[-2pt]base products};
   \draw[flowarrow] (a) -- (b);
   \draw[flowarrow] (b) -- (c);
   \draw[flowarrow] (c) -- (d);
 \end{tikzpicture}
 \end{center}
 
-This is the hidden bridge that makes RLWE and Module-LWE practical. It is also the deep reason why the same algebra appears again and again across lattice-based cryptography, from Kyber to fully homomorphic encryption and beyond.
+The ordinary circulant/cyclic-convolution picture is useful background, but ML-KEM follows the negacyclic path shown above.
