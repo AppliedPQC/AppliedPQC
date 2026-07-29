@@ -11,14 +11,14 @@ After reading this chapter, you should be able to:
   \item read the ring $\mathbb{F}_2[x]/(x^n-1)$ as quasi-cyclic blocks, and multiplication in it as cyclic convolution over $\mathbb{F}_2$;
   \item follow the KeyGen / Encapsulate / Decapsulate pipeline and verify the algebraic cancellation $v - u\,y \approx mG$ by hand;
   \item explain why a publicly known, efficiently decodable code $C$ removes the leftover low-weight error and recovers the message;
-  \item place HQC among the post-quantum standards as NIST's code-based backup to the lattice-based ML-KEM.
+  \item place HQC among the schemes selected by NIST for standardization as a code-based complement to ML-KEM.
 \end{itemize}
 
 \section{Why this chapter matters}
 
 The previous chapter built Classic McEliece, the oldest code-based scheme, whose security has survived since 1978. Its drawback is well known: the public key is enormous, hundreds of kilobytes to a megabyte. HQC (\emph{Hamming Quasi-Cyclic}) is a much younger code-based KEM that attacks the same goal -- post-quantum key encapsulation from coding theory -- but from the opposite direction, and with far smaller keys.
 
-The reason this matters beyond efficiency is \emph{diversity}. Nearly all of the first NIST post-quantum standards (Chapter~\ref{ch:quantum}) rest on lattice problems: ML-KEM, ML-DSA, and FN-DSA are all lattice schemes. If a single unexpected advance were to weaken lattice assumptions, the entire deployed base would be at risk at once. A backup built on a genuinely different hard problem is therefore valuable in its own right. In March 2025 NIST selected \textbf{HQC}~\cite{hqc2017} for standardization as an additional key-encapsulation mechanism, to complement ML-KEM with a scheme whose security rests on the hardness of decoding random codes rather than on lattices. It is a deliberate hedge: the same job, a different mathematical bet.
+The reason this matters beyond efficiency is \emph{diversity}. Nearly all of the first published NIST post-quantum standards rest on lattice problems: ML-KEM and ML-DSA are lattice schemes. If a single unexpected advance were to weaken lattice assumptions, a backup built on a genuinely different hard problem would be valuable. In March 2025 NIST selected \textbf{HQC}~\cite{hqc2017} for standardization as an additional key-encapsulation mechanism, to complement ML-KEM with a scheme whose security rests on the hardness of decoding random codes rather than on lattices. At this standards snapshot, the final HQC FIPS has not yet been published; this chapter describes the current submission/specification rather than a final compliance interface.
 
 \section{The key idea: hide the noise, not the code}
 
@@ -187,7 +187,7 @@ Decapsulation succeeds whenever the weight of $e'$ stays within the decoding rad
 
 Everything hinges on $C$ being a fixed, public code that is \emph{efficiently decodable} up to the weight of $e'$. This is the exact opposite of McEliece, where the ability to decode is the closely guarded secret. In HQC there is nothing to hide about $C$: the attacker gains no advantage from knowing how to decode it, because decoding $v - u\,y$ requires first computing $u\,y$, which needs the secret $y$.
 
-The standardized HQC uses a \emph{concatenated} code for $C$: an outer Reed--Solomon code composed with an inner duplicated Reed--Muller code. The concatenation is chosen purely for its decoding performance -- a large, reliable error-correction radius at a good rate -- since $C$ contributes nothing to security. For this chapter the only property that matters is the interface: $C$ has a public generator $G$ (so $mG$ is a codeword) and a public decoder $\textsc{Decode}_C$ that corrects any error of weight up to its radius.
+The current HQC specification uses a \emph{concatenated} code for $C$: an outer Reed--Solomon code composed with an inner duplicated Reed--Muller code. The concatenation is chosen for decoding performance -- a large, reliable error-correction radius at a good rate -- since $C$ contributes nothing to security. For this chapter the only property that matters is the interface: $C$ has a public generator $G$ (so $mG$ is a codeword) and a public decoder $\textsc{Decode}_C$ that corrects any error of weight up to its radius.
 
 \section{From CPA to CCA: the FO transform}
 

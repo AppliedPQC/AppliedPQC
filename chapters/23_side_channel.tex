@@ -98,8 +98,7 @@ signing key, and skipping a bounds check can leak the mask in a scheme like ML-D
 
 \section{Constant-time programming}
 
-The central software defense against the passive families -- timing, cache, power,
-EM -- is \textbf{constant-time programming}. The name is slightly misleading: the
+The central software defense against secret-dependent \emph{timing and cache} leakage is \textbf{constant-time programming}. It is necessary but not sufficient for physical power or EM attacks. The name is slightly misleading: the
 goal is not that the code always takes the same wall-clock time, but that its timing,
 memory-access pattern, and operation sequence \emph{do not depend on secret data}.
 Variation that depends only on public data (the length of a message, the public
@@ -170,10 +169,7 @@ the identical sequence of operations.
   \node[font=\tiny, pqcteal, align=center] at (3.7,-2.0)
        {every input runs the same operations:\\ duration is independent of the secret};
 \end{tikzpicture}
-\caption{Top: a branch on a secret bit takes a short or a long path, so the running
-time (and the power and cache trace) carries the secret. Bottom: the same conditional,
-computed as one fixed sequence of operations ending in a masked select. The result is
-identical, but nothing about the execution depends on the secret.}
+\caption{Top: a branch on a secret bit takes a short or a long path, so the running time and cache trace can carry the secret. Bottom: the same conditional is computed as one fixed sequence of operations ending in a masked select. This removes secret-dependent control flow and memory behaviour, but intermediate values can still correlate with physical power or EM leakage.}
 \label{fig:ct-branch}
 \end{figure}
 
@@ -332,8 +328,7 @@ runs only ``when the coefficient is too large.''
 
 \section{Countermeasures beyond constant-time}
 
-Constant-time coding defeats attacks that read a \emph{single} execution: timing,
-cache, SPA. Differential power and EM analysis are stronger, because they average many
+Constant-time coding primarily addresses timing, cache, and secret-dependent control-flow leakage. Differential power and EM analysis are stronger, because they average many
 traces and can pull out a secret that influences the power draw even when the control
 flow is perfectly uniform. Defeating those needs a further layer.
 
