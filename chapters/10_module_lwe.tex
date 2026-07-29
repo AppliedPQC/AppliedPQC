@@ -145,7 +145,11 @@ S = R.quotient(x^8 + 1)
 Now define a secret as a vector of two polynomials.
 
 \begin{lstlisting}[language=Python]
-s = vector(S, [S.random_element(), S.random_element()])
+from random import choice
+def small_poly():
+    return S([choice([-1, 0, 1]) for _ in range(8)])
+
+s = vector(S, [small_poly(), small_poly()])
 print(s)
 \end{lstlisting}
 
@@ -160,7 +164,8 @@ print(A)
 Create a noise vector.
 
 \begin{lstlisting}[language=Python]
-e = vector(S, [S.random_element(), S.random_element()])
+e = vector(S, [small_poly(), small_poly()])
+assert all(c in [0, 1, 16] for p in list(s) + list(e) for c in p.lift().list())
 \end{lstlisting}
 
 Then compute the public-like value.
@@ -170,7 +175,7 @@ t = A * s + e
 print(t)
 \end{lstlisting}
 
-This already looks very close to the structure used in Kyber.
+This has the algebraic shape of a Module-LWE sample. The public matrix is uniform, while the secret and error use small coefficients; it is still a toy example rather than the FIPS 203 sampler.
 
 \section{The Module-LWE problem}
 
@@ -211,7 +216,7 @@ The values $k=2,3,4$ correspond to different dimensions of the module, and are e
     \item $k=4$ gives Kyber1024.
 \end{itemize}
 
-Increasing $k$ increases the size of the module and therefore increases the security level. The ring dimension and modulus stay fixed; the main change is the module dimension.
+Increasing $k$ increases the size of the module and therefore increases the security level. The ring dimension and modulus stay fixed, but standardized ML-KEM parameter sets use different parameter tuples as well: in particular $\eta_1$ is $3,2,2$ and $(d_u,d_v)$ is $(10,4),(10,4),(11,5)$ for ML-KEM-512, -768, and -1024 respectively~\cite{fips203}.
 
 \section{A complete toy MLWE experiment}
 
@@ -242,7 +247,7 @@ This gives a practical understanding of why Kyber can be seen as a structured ge
 \end{algorithmic}
 \end{algorithm}
 
-Real Kyber runs exactly this procedure with $n=256$ and $k=2,3,4$ for Kyber512, Kyber768, and Kyber1024 respectively; only the module dimension $k$ changes between the three security levels, while the same algorithm shape stays fixed.
+Real ML-KEM has this algorithmic shape with $n=256$ and $k=2,3,4$, but the standardized parameter sets differ in more than $k$; their sampling and compression parameters are specified in FIPS~203.
 
 \section{Summary}
 

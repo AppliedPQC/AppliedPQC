@@ -176,7 +176,7 @@ Signing instantiates exactly that identification transcript, with the module-lat
 
 \begin{enumerate}
   \item \textbf{Commit.} Sample a random short masking vector $\mathbf{y}$ and form $\mathbf{w} = A\mathbf{y}$.
-  \item \textbf{Challenge.} Compute a small challenge polynomial $c$ by hashing the commitment together with the message: $c = H(tr\,\|\,\textsc{HighBits}(\mathbf{w})\,\|\,M)$.
+  \item \textbf{Challenge.} First form the message representative $\mu=H(tr\,\|\,M')$, where $M'$ includes any context or pre-hash formatting. Then compute $\tilde c=H(\mu\,\|\,\mathbf{w}_1)$ with $\mathbf{w}_1=\textsc{HighBits}(\mathbf{w})$, and derive $c=\textsc{SampleInBall}(\tilde c)$.
   \item \textbf{Respond.} Reply with $\mathbf{z} = \mathbf{y} + c\,\mathbf{s}_1$.
 \end{enumerate}
 
@@ -197,7 +197,7 @@ ML-DSA's answer is \textbf{rejection sampling}, also called Fiat--Shamir \emph{w
 \begin{tikzpicture}[node distance=5.5mm and 11mm]
   \node[flownode] (y) {sample mask $\mathbf{y}$};
   \node[flownode, right=of y] (w) {$\mathbf{w}=A\mathbf{y}$};
-  \node[flownode, right=of w] (c) {$c=H(tr\,\|\,\textsc{HighBits}(\mathbf{w})\,\|\,M)$};
+  \node[flownode, right=of w] (c) {$\tilde c=H(\mu\,\|\,\mathbf{w}_1)$};
   \node[flownode, below=of c] (z) {$\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$};
   \node[diamond, draw=pqcorange, thick, fill=white, align=center,
         inner sep=1pt, font=\scriptsize, left=of z] (chk) {$\mathbf{z}$\\safe?};
@@ -222,14 +222,14 @@ Bringing the phases together gives the signing algorithm. Two bounds mark the sa
 \caption{ML-DSA.Sign (teaching form)}
 \label{alg:mldsa-sign}
 \begin{algorithmic}[1]
-\Require Secret key $(\rho,K,tr,\mathbf{t}_0,\mathbf{s}_1,\mathbf{s}_2)$, message $M$
+\Require Secret key $(\rho,K,tr,\mathbf{t}_0,\mathbf{s}_1,\mathbf{s}_2)$, message $M$, 32-byte value $rnd$
 \Ensure Signature $\sigma=(c,\mathbf{z},\mathbf{h})$
-\State $A \gets \textsc{ExpandA}(\rho)$;\quad $\mu \gets H(tr\,\|\,M)$
-\State $\kappa \gets 0$;\quad $\rho'' \gets H(K\,\|\,\mu)$ \Comment{deterministic per-message randomness}
+\State $A \gets \textsc{ExpandA}(\rho)$;\quad $\mu \gets H(tr\,\|\,M')$
+\State $\kappa \gets 0$;\quad $\rho'' \gets H(K\,\|\,rnd\,\|\,\mu)$ \Comment{$rnd=0$ gives the deterministic option}
 \Loop
   \State $\mathbf{y} \gets \textsc{ExpandMask}(\rho'', \kappa)$;\quad $\kappa \gets \kappa+\ell$ \Comment{fresh mask each round}
   \State $\mathbf{w} \gets A\mathbf{y}$;\quad $\mathbf{w}_1 \gets \textsc{HighBits}(\mathbf{w})$
-  \State $c \gets H(\mu\,\|\,\mathbf{w}_1)$ \Comment{Fiat--Shamir challenge}
+  \State $\tilde c \gets H(\mu\,\|\,\mathbf{w}_1)$;\quad $c\gets\textsc{SampleInBall}(\tilde c)$
   \State $\mathbf{z} \gets \mathbf{y} + c\,\mathbf{s}_1$
   \If{$\|\mathbf{z}\|_\infty \ge \gamma_1-\beta$ \textbf{ or } $\|\textsc{LowBits}(\mathbf{w}-c\mathbf{s}_2)\|_\infty \ge \gamma_2-\beta$}
     \State \textbf{continue} \Comment{unsafe: discard and resample}
@@ -289,7 +289,7 @@ Then repeat with several masks and count how often $\|\mathbf{z}\|_\infty$ excee
 The mask $\mathbf{y}$ must be fresh every attempt and large enough to hide $c\,\mathbf{s}_1$. Reusing a mask, or shrinking it to avoid rejections, leaks the secret. This is the whole reason for the abort loop.
 
 \paragraph{Pitfall 2: thinking the abort loop is a timing leak about the secret.}
-The number of iterations depends on the mask, which is fresh randomness, not on the secret in an exploitable way. FIPS 204 further derives the per-message randomness deterministically from $K$ and $M$, so the default signing mode is reproducible.
+The number of iterations depends on the mask, which is fresh randomness, not on the secret in an exploitable way. FIPS~204 derives the mask seed from $K\,\|\,rnd\,\|\,\mu$: choosing a zero $rnd$ gives deterministic signing, while a fresh $rnd$ supports randomized or hedged signing.
 
 \paragraph{Pitfall 3: thinking $A$ is stored in the key.}
 As in ML-KEM, $A$ is regenerated from $\rho$ every time. The public key is only $(\rho,\mathbf{t}_1)$.

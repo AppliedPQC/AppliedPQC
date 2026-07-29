@@ -55,7 +55,7 @@ Full FIPS 203 pipeline & KeyGen / Encaps / Decaps $+$ FO & Chapter~\ref{ch:fips2
 \label{tab:kyber-pieces}
 \end{table}
 
-The three standardized parameter sets ML-KEM-512, ML-KEM-768, and ML-KEM-1024 differ only in the module dimension $k=2,3,4$, trading security for size; ML-KEM-768 is the common default. Their exact parameters appear with the standard in Chapter~\ref{ch:fips203}.
+The three standardized parameter sets ML-KEM-512, ML-KEM-768, and ML-KEM-1024 share the same ring but use different parameter tuples: $k=2,3,4$, $\eta_1=3,2,2$, and $(d_u,d_v)=(10,4),(10,4),(11,5)$ respectively~\cite{fips203}. ML-KEM-768 is a common default; this chapter retains only a stripped-down algebraic skeleton.
 
 \section{Building a toy Kyber}
 
@@ -284,14 +284,14 @@ def decrypt(sk, cipher):
     return value
 \end{lstlisting}
 
-We recover the bit by comparing the decrypted value against a threshold.
+We recover the bit by comparing circular distances to the two encoding centres, $0$ and $\lfloor q/2\rfloor$. In particular, the field element $16$ represents $-1$ and must be recognised as close to encoded zero, not as a message-one value.
 
 \begin{lstlisting}[language=Python]
 def recover_bit(value):
     c = value.list()[0]
-    if c > q // 4:
-        return 1
-    return 0
+    d0 = min(c, q - c)
+    d1 = min((c - q//2) % q, (q//2 - c) % q)
+    return 0 if d0 < d1 else 1
 \end{lstlisting}
 
 \begin{algorithm}[H]
@@ -301,12 +301,9 @@ def recover_bit(value):
 \Require Secret key $s$; ciphertext $(u,v)$
 \Ensure Recovered bit $m' \in \{0,1\}$
 \State $w \gets v - s^{T} u$ \Comment{the $A,s$ terms cancel, leaving noise $+$ message}
-\State $c \gets$ constant coefficient of $w$
-\If{$c > q/4$}
-    \State \Return $1$
-\Else
-    \State \Return $0$
-\EndIf
+\State $c \gets$ constant coefficient of $w$ in $\{0,\ldots,q-1\}$
+\State $d_0 \gets \min(c,q-c)$; \quad $d_1 \gets \min((c-\lfloor q/2\rfloor)\bmod q,(\lfloor q/2\rfloor-c)\bmod q)$
+\State \Return $0$ if $d_0<d_1$, otherwise $1$
 \end{algorithmic}
 \end{algorithm}
 
@@ -344,7 +341,7 @@ After expansion, the terms involving $A$ and $s$ cancel, leaving only a small er
 
 \section{Why the scheme can fail sometimes}
 
-If we run the experiment many times, we may occasionally recover the wrong bit. This happens because the toy noise is too aggressive or too simplistic relative to the tiny toy modulus. In the real Kyber scheme, the parameters are tuned so that the decryption failure probability is extremely small.
+This toy construction can still fail frequently because $q=17$ is tiny and the accumulated error is not bounded as in ML-KEM. It illustrates cancellation and circular decoding, not a reliable encryption scheme. In real ML-KEM, the parameters are tuned so that the decryption failure probability is extremely small.
 
 A simple experiment is to change the noise generator from
 
