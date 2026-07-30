@@ -213,6 +213,94 @@ The address is included in every hash call, so the same byte strings at a
 different layer or node index are domain-separated. That is the small-scale
 version of the address discipline used throughout SLH-DSA.
 
+\section{A complete SageMath implementation}
+\label{sec:fips205-impl}
+
+The Merkle experiment above is a toy in one respect that matters: it uses a
+made-up address format. The companion file
+\texttt{sage/fips205\_slhdsa.sage} implements the real thing -- all
+twenty-five numbered algorithms of FIPS~205, each as its own function
+annotated with its algorithm number, for all twelve approved parameter sets.
+That means both hash families (SHA2 and SHAKE) at all three security levels
+in both the \textbf{s} and \textbf{f} variants, together with the
+WOTS\textsuperscript{+} chains, the XMSS trees, the hypertree, FORS, the pure
+and pre-hash top-level algorithms, and the 32-byte address structure with its
+22-byte compressed form.
+
+The address is a small class carrying the member functions of Table~1 of the
+standard, so the recursive tree walk of Algorithm~9 reads exactly as
+specified:
+
+\begin{lstlisting}[language=Python]
+def xmss_node(self, skseed, i, z, pkseed, adrs):
+    """Algorithm 9. Root of a Merkle subtree of WOTS+ public keys."""
+    if z == 0:
+        adrs.setTypeAndClear(WOTS_HASH)
+        adrs.setKeyPairAddress(i)
+        return self.wots_pkGen(skseed, pkseed, adrs)
+    lnode = self.xmss_node(skseed, 2*i,     z - 1, pkseed, adrs)
+    rnode = self.xmss_node(skseed, 2*i + 1, z - 1, pkseed, adrs)
+    adrs.setTypeAndClear(TREE)
+    adrs.setTreeHeight(z)
+    adrs.setTreeIndex(i)
+    return self._H(pkseed, adrs, lnode + rnode)
+\end{lstlisting}
+
+The hypertree is then just that tree, stacked $d$ deep, with each layer
+signing the root of the layer below:
+
+\begin{lstlisting}[language=Python]
+def ht_sign(self, M, skseed, pkseed, idxtree, idxleaf):
+    """Algorithm 12. A hypertree signature: d chained XMSS signatures."""
+    adrs = ADRS()
+    adrs.setTreeAddress(idxtree)
+    SIGtmp = self.xmss_sign(M, skseed, idxleaf, pkseed, adrs)
+    SIG_HT = SIGtmp
+    root   = self.xmss_pkFromSig(idxleaf, SIGtmp, M, pkseed, adrs)
+    for j in range(1, self.d):
+        idxleaf = idxtree % (1 << self.hp)   # low h' bits
+        idxtree = idxtree >> self.hp
+        adrs.setLayerAddress(j)
+        adrs.setTreeAddress(idxtree)
+        SIGtmp  = self.xmss_sign(root, skseed, idxleaf, pkseed, adrs)
+        SIG_HT += SIGtmp
+        if j < self.d - 1:
+            root = self.xmss_pkFromSig(idxleaf, SIGtmp, root, pkseed, adrs)
+    return SIG_HT
+\end{lstlisting}
+
+\paragraph{What Sage contributes to a scheme with no algebra.}
+SLH-DSA is built from hash functions alone, so unlike ML-KEM and ML-DSA there
+is no ring here for a computer-algebra system to check the code against.
+What Sage supplies instead is exact integer reasoning about the
+combinatorics. The file's \texttt{verify\_parameter\_consistency()}
+re-derives Table~2 from the defining equations for all twelve parameter sets:
+that $h = d\cdot h'$, so the hypertree really has $2^{h}$ leaves; that the
+checksum length $len_2$ produced by Algorithm~1 agrees with the closed form
+$\lfloor \log_w(len_1(w-1)) \rfloor + 1$, computed with Sage's exact integer
+logarithm; that the digest length $m$ is large enough to supply the FORS
+message and both tree indices; and that the published key and signature sizes
+match $2n$ and $(1 + k(1+a) + h + d\cdot len)\,n$ respectively. A parameter
+table is exactly the kind of thing that is easy to transcribe wrongly and
+hard to notice, and this turns it into a test.
+
+\paragraph{Validation.}
+The implementation is checked against NIST's ACVP vectors~\cite{acvp} for FIPS~205 --
+key generation, signature generation, and signature verification, across all
+twelve parameter sets in both the pure and pre-hash forms -- and reproduces
+them byte for byte.
+
+One practical caveat is worth stating plainly, because it is a property of
+the scheme and not of the code. Signing with an \textbf{s} parameter set
+requires rebuilding whole XMSS trees: SLH-DSA-128s traverses on the order of
+a million hash calls per signature, which in Sage takes about sixteen
+seconds, and the 256-bit variants about twice that. The quick test run
+therefore covers signature \emph{generation} only for the \textbf{f} sets,
+and reports how many groups it left out; \texttt{make kat-full} includes
+them. Verification is cheap for every parameter set and is always checked in
+full. This asymmetry is the same one that gives the two variants their
+names.
+
 \section{Pitfalls}
 
 \paragraph{Pitfall 1: reusing a one-time (WOTS\textsuperscript{+}) leaf.}

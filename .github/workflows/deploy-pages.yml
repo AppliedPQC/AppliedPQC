@@ -33,23 +33,24 @@ jobs:
       - name: Prepare Pages site
         run: |
           mkdir -p site
-          cp main.pdf site/main.pdf
+          cp apqc.pdf site/apqc.pdf
+          cp apqc.pdf site/main.pdf   # alias for previously published links
           cat > site/index.html <<'EOF'
           <!doctype html>
           <html lang="en">
             <head>
               <meta charset="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>PQC-101 Book</title>
+              <title>Applied Post-Quantum Cryptography</title>
               <style>
                 body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.6; }
                 a { color: #0b57d0; }
               </style>
             </head>
             <body>
-              <h1>PQC-101 Book</h1>
+              <h1>Applied Post-Quantum Cryptography</h1>
               <p>The latest compiled PDF is available below.</p>
-              <p><a href="main.pdf">Open the book PDF</a></p>
+              <p><a href="apqc.pdf">Open the book PDF</a></p>
             </body>
           </html>
           EOF

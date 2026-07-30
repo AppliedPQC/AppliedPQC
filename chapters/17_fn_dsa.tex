@@ -199,6 +199,113 @@ The last equality is only an algebra check. In a real signature, \textsc{FFSampl
 must choose $(s_1,s_2)$ with the required short Gaussian distribution; choosing
 an arbitrary small $s_2$ as above is not an FN-DSA signing algorithm.
 
+\section{A complete SageMath implementation}
+\label{sec:fips206-impl}
+
+The experiment above stops exactly where the difficulty starts. The
+companion file \texttt{sage/fips206\_fndsa.sage} goes the rest of the way:
+all eighteen numbered algorithms of the Falcon specification, at $n=512$ and
+$n=1024$ -- the FFT over the complex tower, \textsc{NTRUGen} with the
+tower-recursive NTRU solver, the LDL\textsuperscript{$\star$} decomposition
+and the Falcon tree, fast Fourier sampling with the isochronous discrete
+Gaussian sampler, signing, verification, and the compressed signature and key
+encodings.
+
+\paragraph{Which specification the code follows.}
+This matters more here than in the other three chapters. At the book's
+standards snapshot NIST lists FIPS~206 as \emph{in development}: no initial
+public draft has been published, and consequently no ACVP test vectors exist.
+The authoritative specification for FN-DSA is therefore still the round-3
+Falcon submission, and that is what the file implements, using Falcon's
+algorithm numbering. The places most likely to be respecified when the draft
+appears -- the key and signature encodings, and the domain separation of the
+hashed message -- are marked in the source. The lattice machinery below them
+is not expected to change.
+
+\paragraph{Solving the NTRU equation.}
+Key generation's one genuinely hard step is the line that
+Algorithm~\ref{alg:fndsa-keygen} states in five words: \emph{solve
+$fG - gF = q$ for short $F,G$}. The method is a tower recursion. The field
+norm $N$ maps $\mathbb{Z}[x]/(x^n+1)$ down to
+$\mathbb{Z}[x]/(x^{n/2}+1)$; applying it repeatedly reaches $\mathbb{Z}$,
+where the equation is an extended gcd; the multiplicativity of the norm then
+lifts the solution back up, one level at a time.
+
+\begin{lstlisting}[language=Python]
+def NTRUSolve(f, g):
+    """Algorithm 6. Find F, G with f*G - g*F = q in Z[x]/(x^n + 1)."""
+    n = len(f)
+    if n == 1:
+        d, u, v = xgcd(ZZ(int(f[0])), ZZ(int(g[0])))
+        if d != 1:
+            return None, None
+        return [int(-FALCON_q*v)], [int(FALCON_q*u)]
+    fp, gp = field_norm(f), field_norm(g)
+    Fp, Gp = NTRUSolve(fp, gp)              # recurse in the smaller ring
+    if Fp is None:
+        return None, None
+    F = _cyclo_mul(lift(Fp), galois_conjugate(g), n)
+    G = _cyclo_mul(lift(Gp), galois_conjugate(f), n)
+    return Reduce(f, g, F, G)               # shorten F, G against f, g
+\end{lstlisting}
+
+Here \texttt{field\_norm} is $N(a) = a(x)a(-x)$ written in $x^2$,
+\texttt{lift} is $a(x)\mapsto a(x^2)$, and \texttt{galois\_conjugate} is
+$a(x)\mapsto a(-x)$. The lifted $F,G$ come back with enormous coefficients,
+which is what \textsc{Reduce} is for: it repeatedly subtracts the multiple of
+$(f,g)$ nearest to $(F,G)$, rescaling to 53 significant bits each round so
+that the rounding stays exact enough to converge.
+
+\paragraph{Three kinds of arithmetic, three Sage rings.}
+Falcon is unusual in needing exact and inexact arithmetic side by side, and
+the implementation keeps them in separate, explicitly named Sage domains:
+
+\begin{itemize}
+  \item the NTRU solver runs over \texttt{ZZ['x']}, so the trapdoor equation
+        $fG-gF=q$ is established \emph{exactly} rather than up to floating
+        point -- \texttt{verify\_ntru\_equation()} checks it as an identity
+        in $\mathbb{Z}[x]/(x^n+1)$;
+  \item the public key and the verification relation
+        $s_1 = c - s_2 h$ are computed in
+        $\mathbb{F}_{12289}[x]/(x^n+1)$;
+  \item the signing FFT runs over \texttt{CDF}, Sage's complex double field,
+        which \emph{is} the IEEE~754 binary64 arithmetic that Falcon
+        prescribes -- not a higher-precision stand-in that would silently
+        change the sampler's output distribution.
+\end{itemize}
+
+The function \texttt{verify\_fft\_against\_exact\_ring()} closes the loop
+between the first and third of these, checking that pointwise multiplication
+in the FFT domain reproduces the product Sage computes exactly in
+$\mathbb{Z}[x]/(x^n+1)$.
+
+\paragraph{Validation without NIST vectors.}
+Since FIPS~206 has none, FN-DSA is validated against the Falcon
+submission's own known-answer tests~\cite{falcon2020}, in four independent
+ways:
+
+\begin{enumerate}
+  \item \textsc{SamplerZ} reproduces all sixteen test vectors of the Falcon
+        specification's sampler table, byte for byte -- including the cases
+        where rejection sampling iterates twice or \textsc{BerExp} consumes a
+        second random byte;
+  \item for each Falcon KAT key, the private key is decoded, $fG-gF=q$ is
+        verified exactly, and the recomputed $h=g f^{-1}$ re-encodes to the
+        KAT public key byte for byte;
+  \item every Falcon KAT signature verifies, and the same signature over a
+        tampered message is rejected;
+  \item signatures produced by this implementation under a Falcon KAT
+        \emph{private} key verify under the corresponding KAT public key.
+\end{enumerate}
+
+Signing itself cannot be pinned to the KAT byte string, and the reason is
+instructive: Falcon signing is randomized, and the reference KATs were
+generated with the reference implementation's own PRNG chain, so identical
+signatures would test PRNG replication rather than the scheme. Verification
+is deterministic, and it is checked byte-exactly. The gap is precisely the
+Gaussian sampler discussed in the next section -- the part that is hardest to
+specify, hardest to implement, and hardest to test.
+
 \section{Parameter sets}
 
 \begin{table}[H]

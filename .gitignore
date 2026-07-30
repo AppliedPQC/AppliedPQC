@@ -7,3 +7,8 @@
 *.out
 *.pdf
 *.toc
+
+# Downloaded test vectors and specification copies for sage/ (see
+# sage/fetch_vectors.sh); ~90 MB, not kept in the repository.
+sage/vectors/
+sage/specs/

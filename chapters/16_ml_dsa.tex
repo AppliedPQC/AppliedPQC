@@ -299,6 +299,93 @@ assert A*z - c*t == A*y - c*s2
 
 Then repeat with several masks and count how often $\|\mathbf{z}\|_\infty$ exceeds the bound: this is exactly the rejection rate, and it shows why a signature takes a small, variable number of attempts.
 
+\section{A complete SageMath implementation}
+\label{sec:fips204-impl}
+
+The cancellation check above is a fragment. The companion file
+\texttt{sage/fips204\_mldsa.sage} is the whole standard: all forty-nine
+numbered algorithms of FIPS~204, each as its own function annotated with its
+algorithm number, for ML-DSA-44, 65, and 87. That includes the parts this
+chapter has treated as black boxes -- \textsc{ExpandA}, \textsc{ExpandS},
+\textsc{ExpandMask}, \textsc{SampleInBall}, \textsc{Power2Round},
+\textsc{Decompose}, \textsc{MakeHint}, \textsc{UseHint} -- as well as the bit
+packing, the hint encoding, the pre-hash variants \textsc{HashML-DSA}, and
+Montgomery reduction.
+
+As in FIPS~203 the algebra is carried by Sage. Here, though, the standard is
+careful to distinguish the ring $R_q$ from the ring $R$ of integer
+polynomials with a restricted coefficient range, and so is the code:
+quantities reduced modulo $q$ (the secrets $\mathbf{s}_1,\mathbf{s}_2$, the
+mask $\mathbf{y}$, the response $\mathbf{z}$) live in the Sage quotient ring
+$R_q = \mathbb{F}_{8380417}[X]/(X^{256}+1)$, while $\mathbf{t}_1$,
+$\mathbf{w}_1$, $\mathbf{r}_0$, and the hint $\mathbf{h}$ stay integer lists.
+The NTT domain $T_q$ is the direct product $(\mathbb{Z}_q)^{256}$, so
+\textsc{MultiplyNTT} (Algorithm~45) is literally a coordinatewise product.
+
+The rejection loop of Algorithm~\ref{alg:mldsa-sign} then reads almost exactly
+as the standard writes it:
+
+\begin{lstlisting}[language=Python]
+kappa = 0
+while True:
+    y  = self.ExpandMask(rhopp, kappa)
+    yh = [NTT(Rq(p)) for p in y]
+    w  = [NTTInverse(a) for a in MatrixVectorNTT(Ah, yh)]
+    w1 = HighBitsVec(w, self.gamma2)
+
+    ctilde = H(mu + self.w1Encode(w1), self.lam // 4)
+    c      = self.SampleInBall(ctilde)
+    ch     = NTT(Rq(c))
+
+    cs1  = [NTTInverse(MultiplyNTT(ch, a)) for a in s1h]
+    cs2  = [NTTInverse(MultiplyNTT(ch, a)) for a in s2h]
+    z    = [Rq(y[i]) + cs1[i] for i in range(self.ell)]
+    wcs2 = [w[i] - cs2[i] for i in range(self.k)]
+    r0   = LowBitsVec(wcs2, self.gamma2)
+
+    kappa += self.ell
+    if inf_norm_vec(z) >= self.gamma1 - self.beta:      # unsafe: retry
+        continue
+    if inf_norm_ints(r0) >= self.gamma2 - self.beta:
+        continue
+
+    ct0 = [NTTInverse(MultiplyNTT(ch, a)) for a in t0h]
+    h   = MakeHintVec([-p for p in ct0],
+                      [wcs2[i] + ct0[i] for i in range(self.k)],
+                      self.gamma2)
+    if inf_norm_vec(ct0) >= self.gamma2:
+        continue
+    if sum(sum(p) for p in h) > self.omega:
+        continue
+
+    return self.sigEncode(ctilde, [centered(zi) for zi in z], h)
+\end{lstlisting}
+
+Every \texttt{continue} is one of the discarded attempts of
+Figure~\ref{fig:mldsa-abort}; counting them over many signatures reproduces
+the ``repetitions'' row of the parameter table, roughly four for ML-DSA-44.
+Note also that $\kappa$ advances before the checks, so each retry draws a
+genuinely fresh mask.
+
+\paragraph{Checking the transform against the algebra.}
+The file's \texttt{verify\_ntt\_is\_a\_ring\_isomorphism()} uses Sage to
+confirm that $\mathrm{NTT}^{-1}$ inverts $\mathrm{NTT}$; that the $j$-th NTT
+coefficient is the evaluation $w(\zeta^{2\,\mathrm{BitRev8}(j)+1})$, which is
+what makes $T_q$ a direct product; and that \textsc{MultiplyNTT} transports
+multiplication in $R_q$ as Sage computes it. It also checks that
+\textsc{MontgomeryReduce} really returns $a\cdot 2^{-32} \bmod q$.
+
+\paragraph{Validation.}
+The implementation is checked against NIST's ACVP vectors~\cite{acvp} for FIPS~204 --
+key generation, signature generation, and signature verification -- and
+reproduces them byte for byte. The signature-generation vectors are the
+demanding ones, because they cover every combination the standard permits:
+deterministic and hedged signing, the pure and pre-hash message encodings
+across all twelve approved pre-hash functions, the external and internal
+signing interfaces, and the external-$\mu$ mode in which the message
+representative is computed in a separate cryptographic module. Run
+\texttt{make kat} from the \texttt{latex/} directory.
+
 \section{Pitfalls}
 
 \paragraph{Pitfall 1: thinking the mask can be reused or made small.}

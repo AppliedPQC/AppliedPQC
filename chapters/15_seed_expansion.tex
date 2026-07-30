@@ -415,6 +415,106 @@ This is precisely the local multiplication used 128 times by
 use FIPS~203's transform ordering, twiddle factors, reductions, encodings, and
 test vectors.
 
+\section{A complete SageMath implementation}
+\label{sec:fips203-impl}
+
+The experiments above illustrate individual pieces. The companion file
+\texttt{sage/fips203\_mlkem.sage} assembles all of them into a complete,
+byte-exact implementation of FIPS~203: every one of the standard's
+twenty-one numbered algorithms appears as its own function, named after the
+standard and annotated with its algorithm number, for all three parameter
+sets.
+
+The algebraic objects are genuine Sage objects rather than opaque byte
+arrays. The coefficient domain is the quotient ring itself,
+\[
+R_q = \mathbb{Z}_q[X]/(X^{256}+1),
+\]
+and the NTT domain $T_q$ is carried as a Sage vector over $\mathbb{F}_q$:
+
+\begin{lstlisting}[language=Python]
+MLKEM_n, MLKEM_q, MLKEM_zeta = 256, 3329, 17
+
+Fq = GF(MLKEM_q)
+Rx = PolynomialRing(Fq, 'X')
+X  = Rx.gen()
+Rq = Rx.quotient(X^MLKEM_n + 1, 'x')   # coefficient domain
+Tq = VectorSpace(Fq, MLKEM_n)          # NTT domain
+
+ZETA  = [Fq(MLKEM_zeta)^BitRev7(i) for i in range(128)]
+GAMMA = [Fq(MLKEM_zeta)^(2*BitRev7(i) + 1) for i in range(128)]
+\end{lstlisting}
+
+With that in place, the transform is the standard's butterfly network written
+directly over $\mathbb{F}_q$:
+
+\begin{lstlisting}[language=Python]
+def NTT(f):
+    """Algorithm 9. Map f in Rq to its NTT representation in Tq."""
+    fh = _coeffs(f)
+    i, length = 1, 128
+    while length >= 2:
+        for start in range(0, MLKEM_n, 2*length):
+            z = ZETA[i]; i += 1
+            for j in range(start, start + length):
+                t = z * fh[j + length]
+                fh[j + length] = fh[j] - t
+                fh[j]          = fh[j] + t
+        length //= 2
+    return vector(Fq, fh)
+\end{lstlisting}
+
+Key generation is then the seven phases of this chapter, line for line:
+
+\begin{lstlisting}[language=Python]
+def KPKE_KeyGen(self, d):
+    """Algorithm 13. K-PKE.KeyGen(d) -> (ek_PKE, dk_PKE)."""
+    k = self.k
+    rho, sigma = _G(bytes(d) + bytes([k]))   # domain separator k
+    N = 0
+    Ah = self._ExpandA(rho)
+    s = []
+    for _ in range(k):
+        s.append(SamplePolyCBD(self.eta1, _PRF(self.eta1, sigma, N))); N += 1
+    e = []
+    for _ in range(k):
+        e.append(SamplePolyCBD(self.eta1, _PRF(self.eta1, sigma, N))); N += 1
+    sh = [NTT(si) for si in s]
+    eh = [NTT(ei) for ei in e]
+    th = [ntt_vec_dot(Ah[i], sh) + eh[i] for i in range(k)]
+    ek = b"".join(ByteEncode(12, _ints(t)) for t in th) + rho
+    dk = b"".join(ByteEncode(12, _ints(si)) for si in sh)
+    return ek, dk
+\end{lstlisting}
+
+Note the byte \texttt{k} appended to the seed in the very first line: FIPS~203
+domain-separates the three parameter sets so that a seed expanded under the
+wrong one yields an unrelated key.
+
+\paragraph{Why a computer-algebra system earns its place here.}
+Because $R_q$ is a real Sage ring, the hand-rolled transform can be checked
+against the algebra it claims to implement rather than merely against itself.
+The file's \texttt{verify\_ntt\_is\_a\_ring\_isomorphism()} confirms three
+things using Sage's own arithmetic as the oracle: that $\mathrm{NTT}^{-1}$
+inverts $\mathrm{NTT}$; that the $i$-th output coefficient pair really is
+$f \bmod (X^2-\gamma_i)$, so the transform is the Chinese-remainder map onto
+the $128$ quadratic factors of $X^{256}+1$; and that
+\[
+\mathrm{NTT}(f\cdot g) \;=\; \textsc{MultiplyNTTs}\big(\mathrm{NTT}(f),\,\mathrm{NTT}(g)\big),
+\]
+where the left-hand product is computed by Sage in $R_q$. That last identity
+is precisely the statement that the NTT is a ring isomorphism $R_q \to T_q$ --
+the fact Experiment~4 could only gesture at with a single base product.
+
+\paragraph{Validation.}
+Correctness is not argued, it is measured. The test runner
+\texttt{sage/test\_kat.sage} checks the implementation against NIST's ACVP
+test vectors~\cite{acvp}, which carry both the inputs and the expected outputs of every
+case: key generation, encapsulation, decapsulation, and the encapsulation-
+and decapsulation-key validity checks of Sections~7.2 and~7.3. All outputs
+match byte for byte across ML-KEM-512, 768, and 1024. From the book's
+\texttt{latex/} directory, \texttt{make kat} runs it.
+
 \section{Pitfalls}
 
 \paragraph{Pitfall 1: thinking that the matrix $A$ is stored explicitly}
