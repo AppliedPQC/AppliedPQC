@@ -3,6 +3,10 @@ name: Deploy LaTeX book to GitHub Pages
 on:
   push:
     branches: [main]
+  # Pull requests build the book and render the landing page but do not
+  # deploy, so a broken build is caught in review rather than on main.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,8 +15,14 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  # Scope by ref so a pull-request run can never cancel a live deployment.
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pinned so the landing page is rendered by the same pandoc the change
+  # was tested against, independent of what the runner image ships.
+  PANDOC_VERSION: '3.1.3'
 
 jobs:
   build:
@@ -24,7 +34,32 @@ jobs:
       - name: Install TeX Live
         run: |
           sudo apt-get update
-          sudo apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-pictures texlive-science pandoc
+          sudo apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-pictures texlive-science
+
+      - name: Install pandoc
+        run: |
+          set -euo pipefail
+          url="https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz"
+          curl -sSfL --retry 3 --retry-delay 5 -o /tmp/pandoc.tar.gz "$url"
+          tar -xzf /tmp/pandoc.tar.gz -C /tmp
+          sudo install -m 0755 "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc
+
+      - name: Verify build tools
+        run: |
+          set -euo pipefail
+          for tool in pdflatex pandoc; do
+            if ! command -v "$tool" >/dev/null; then
+              echo "::error::$tool is not available on the runner"
+              exit 1
+            fi
+            printf '%-10s %s\n' "$tool" "$(command -v "$tool")"
+          done
+          pandoc --version | head -1
+          # Fail loudly if the pinned version is not what we resolved to.
+          pandoc --version | head -1 | grep -qw "${PANDOC_VERSION}" || {
+            echo "::error::expected pandoc ${PANDOC_VERSION}"
+            exit 1
+          }
 
       - name: Build PDF
         run: |
@@ -32,6 +67,7 @@ jobs:
 
       - name: Prepare Pages site
         run: |
+          set -euo pipefail
           mkdir -p site
           cp apqc.pdf site/apqc.pdf
           cp apqc.pdf site/main.pdf   # alias for previously published links
@@ -47,12 +83,26 @@ jobs:
             --output=site/index.html
           touch site/.nojekyll
 
+      - name: Check the rendered site
+        run: |
+          set -euo pipefail
+          # A silently empty or malformed page would still deploy, so assert
+          # the markers that prove the render actually happened.
+          test -s site/index.html
+          test -s site/apqc.pdf
+          grep -q '<title>Applied Post-Quantum Cryptography</title>' site/index.html
+          grep -q 'href="apqc.pdf"' site/index.html
+          grep -q '<main>' site/index.html
+          echo "landing page: $(wc -c < site/index.html) bytes, PDF: $(wc -c < site/apqc.pdf) bytes"
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
+    # Pull requests validate the build above; only main publishes.
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
