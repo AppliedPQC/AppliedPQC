@@ -10,7 +10,7 @@ Fix an extension field $\mathbb{F}_{2^m}$ of the binary field. A binary Goppa co
 
 \begin{itemize}
   \item A \textbf{support} $L = (\alpha_1,\dots,\alpha_n)$ of $n$ \emph{distinct} elements of $\mathbb{F}_{2^m}$. Since the field has $2^m$ elements, $n \le 2^m$.
-  \item A \textbf{Goppa polynomial} $g(x) \in \mathbb{F}_{2^m}[x]$ of degree $t$, subject to $g(\alpha_j) \neq 0$ for every $j$ -- so that each $x-\alpha_j$ is invertible modulo $g$.
+  \item A \textbf{Goppa polynomial} $g(x) \in \mathbb{F}_{2^m}[x]$ of degree $t$, subject to $g(\alpha_j) \neq 0$ for every $j$ -- so that each $x-\alpha_j$ is invertible modulo $g$. For the Patterson decoder below, assume in addition that $g$ is monic and irreducible, as in Classic McEliece.
 \end{itemize}
 
 The codewords will be binary vectors of length $n$; the field $\mathbb{F}_{2^m}$ is the scaffolding in which the defining constraints live. The number $t$ is the design parameter: it will be the number of errors the code corrects.
@@ -25,7 +25,9 @@ The \emph{binary Goppa code} $\Gamma(L,g)$ is the set of binary vectors whose co
 where each $\dfrac{1}{x-\alpha_j}$ denotes the inverse of $x-\alpha_j$ in the ring $\mathbb{F}_{2^m}[x]/(g)$, which exists because $g(\alpha_j)\neq 0$.
 \end{definition}
 
-The condition is $\mathbb{F}_{2^m}$-linear in $c$, so $\Gamma(L,g)$ is a linear code; and although the constraints are written over $\mathbb{F}_{2^m}$, the codewords are restricted to be \emph{binary}. This restriction is exactly what makes the binary case special, as Section~\ref{sec:goppa-distance} shows.
+The syndrome map is linear over $\mathbb{F}_{2^m}$; restricting its kernel to
+$\mathbb{F}_2^n$ gives an $\mathbb{F}_2$-linear code. This binary restriction is
+exactly what makes the binary case special, as Section~\ref{sec:goppa-distance} shows.
 
 \section{The parity-check matrix}
 
@@ -92,15 +94,15 @@ Decoding is the trapdoor. Given a received word $y=c+e$ with $c\in\Gamma(L,g)$ a
 Write $E=\{\,j: e_j=1\,\}$ for the (unknown) set of error positions and let the \textbf{error-locator polynomial} be $\sigma(x)=\prod_{j\in E}(x-\alpha_j)$; its roots among $L$ are exactly the errors. The algorithm reconstructs $\sigma$ from the syndrome.
 
 \begin{algorithm}[H]
-\caption{Patterson decoding of a binary Goppa code $\Gamma(L,g)$, $\deg g=t$ squarefree}
+\caption{Patterson decoding of a binary Goppa code $\Gamma(L,g)$ with monic irreducible $g$, $\deg g=t$}
 \label{alg:patterson}
 \begin{algorithmic}[1]
-\Require Received word $y\in\mathbb{F}_2^{\,n}$ with at most $t$ errors; secret $L$, $g$
+\Require Received word $y\in\mathbb{F}_2^{\,n}$ with at most $t$ errors; secret $L$, monic irreducible $g$
 \Ensure Error vector $e$ (equivalently the codeword $c=y-e$)
 \State $S(x) \gets \sum_{j=1}^{n} \dfrac{y_j}{x-\alpha_j} \bmod g(x)$ \Comment{syndrome; the codeword part vanishes, so $S\equiv\sum_{j\in E}\frac{1}{x-\alpha_j}$}
 \If{$S \equiv 0$} \State \Return $e=0$ \Comment{$y$ is already a codeword} \EndIf
 \State $T(x) \gets S(x)^{-1} \bmod g(x)$
-\State $R(x) \gets \sqrt{\,T(x)+x\,} \bmod g(x)$ \Comment{unique square root mod $g$, as $g$ is squarefree}
+\State $R(x) \gets \sqrt{\,T(x)+x\,} \bmod g(x)$ \Comment{unique square root in the field $\mathbb{F}_{2^m}[x]/(g)$}
 \State find $a(x),b(x)$ with $a \equiv R\,b \pmod{g}$, \ $\deg a\le\lfloor t/2\rfloor$, \ $\deg b\le\lfloor (t-1)/2\rfloor$
 \Statex \hfill\Comment{one truncated run of the extended Euclidean algorithm on $g$ and $R$}
 \State $\sigma(x) \gets a(x)^2 + x\,b(x)^2$ \Comment{the error locator}
@@ -125,7 +127,10 @@ The whole object is short to build. Take $m=4$, so $\mathbb{F}_{16}$, and a squa
 \begin{lstlisting}[language=Python]
 F.<a> = GF(2^4)
 PR.<x> = F[]
-g = x^2 + x + a                     # squarefree: gcd(g, g') = gcd(g, 1) = 1
+g = x^2 + x + a
+while not g.is_irreducible():
+    g = x^2 + F.random_element()*x + F.random_element()
+assert g.is_irreducible()
 L = [b for b in F if g(b) != 0]     # support: exclude any roots of g
 n = len(L)
 
@@ -135,7 +140,7 @@ print(C)                            # a binary [n, k] Goppa code
 print(C.dimension(), n - g.degree() * F.degree())   # k  vs  n - m t
 \end{lstlisting}
 
-Here $mt = 4\cdot 2 = 8$, so the dimension satisfies $k\ge n-8$, and by Proposition~\ref{prop:goppa-double} the minimum distance is at least $2t+1=5$, so the code corrects $t=2$ errors. Scaling the same recipe to $m\approx 13$, $t\approx 100$ produces the codes Classic McEliece actually uses; the only thing that changes is the size.
+Here $mt = 4\cdot 2 = 8$, so the dimension satisfies $k\ge n-8$, and by Proposition~\ref{prop:goppa-double} the minimum distance is at least $2t+1=5$, so the code corrects $t=2$ errors. This demonstrates the algebraic core only. Engineering-grade Classic McEliece additionally fixes parameter sets, support ordering, systematic-matrix reduction, encoding, KEM behavior, failure handling, and constant-time requirements.
 
 \section{Why Goppa codes, and not others}
 

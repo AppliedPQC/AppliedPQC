@@ -14,7 +14,7 @@ After reading this chapter, you should be able to:
   \item explain, at a high level, what Shor's and Grover's algorithms do;
   \item distinguish what a quantum computer \emph{breaks} from what it merely \emph{weakens};
   \item explain ``harvest now, decrypt later'' and why migration is urgent;
-  \item place the four NIST standards (FIPS 203--206) and the three main problem families in context.
+  \item place the published NIST standards and the main mathematical families in context.
 \end{itemize}
 
 \section{What today's cryptography rests on}
@@ -38,7 +38,7 @@ The consequence is stark: RSA, Diffie--Hellman, ECDSA, and ECDH are \emph{all} b
 
 Symmetric cryptography (block ciphers like AES) and hash functions (like SHA-3) face a milder threat. Grover's algorithm~\cite{grover1996} speeds up \emph{generic search}: finding a marked item among $N$ possibilities takes about $\sqrt{N}$ steps instead of $N$. Against a symmetric key of $b$ bits, this cuts the effective security to roughly $b/2$ bits.
 
-Crucially, this is a \emph{quadratic} speedup, not an exponential one, and it is defeated simply by doubling: AES-256 retains about $128$ bits of security against Grover, and a hash with a $2n$-bit output retains about $n$ bits of collision resistance. Symmetric primitives \emph{survive} -- they just need larger parameters. This distinction is the single most important idea in the chapter.
+Crucially, this is a \emph{quadratic} speedup, not an exponential one. For exhaustive key search, AES-256 therefore retains roughly $128$ bits of generic quantum-search security. Hash properties must be treated separately: for an $m$-bit ideal hash, preimage and second-preimage search have a generic Grover-style cost of about $2^{m/2}$, whereas collision search has different quantum algorithms and cost models. In the quantum-query model, the Brassard--H\o yer--Tapp algorithm finds collisions in about $2^{m/3}$ queries; memory, circuit cost, and concrete security estimates require separate analysis. Symmetric primitives \emph{survive}, but their parameters and security goals must be chosen carefully.
 
 \begin{figure}[H]
 \centering
@@ -64,7 +64,7 @@ Crucially, this is a \emph{quadratic} speedup, not an exponential one, and it is
   \draw[flowarrow, pqcteal] (pqc.east) -- (grov);
   \draw[flowarrow, pqcteal] (grov) -- (survive);
 \end{tikzpicture}
-\caption{The quantum threat, sorted. Shor's algorithm breaks the number-theoretic public-key schemes outright (orange), and no parameter choice saves them. Grover's algorithm only weakens symmetric ciphers, hashes, and the hard problems behind post-quantum schemes (teal), and doubling the parameters restores full security.}
+\caption{The quantum threat, sorted. Shor's algorithm breaks the number-theoretic public-key schemes outright (orange). Grover's algorithm gives generic quadratic speedups for search (teal); its implications for keys, preimages, and collisions are not identical.}
 \label{fig:quantum-threat}
 \end{figure}
 
@@ -78,7 +78,8 @@ RSA & Shor & broken (any key size) \\
 Diffie--Hellman, ECDH & Shor & broken \\
 ECDSA & Shor & broken \\
 AES-128 & Grover & $\approx 64$-bit; use AES-256 \\
-SHA-256 & Grover & weakened; use longer output \\
+SHA-256 preimage & Grover & generic cost $\approx 2^{128}$ \\
+SHA-256 collision & quantum collision algorithms & analyse separately \\
 Lattice / code / hash problems & (none known) & survive \\
 \bottomrule
 \end{tabular}
@@ -87,7 +88,9 @@ Lattice / code / hash problems & (none known) & survive \\
 
 \section{Harvest now, decrypt later}
 
-A natural objection is that large quantum computers do not yet exist, so why migrate today? The answer is \emph{harvest now, decrypt later}. An adversary can record encrypted traffic today and simply store it, then decrypt it years later once a quantum computer is available. Any data that must stay confidential beyond the arrival of quantum computing -- medical records, state secrets, long-lived credentials -- is \emph{already} at risk, even though the attack itself is in the future. The same logic applies to signatures on long-lived artifacts such as firmware and certificates. Migration must happen before the threat materializes, not after.
+A natural objection is that large quantum computers do not yet exist, so why migrate today? The answer is \emph{harvest now, decrypt later}. An adversary can record encrypted traffic today and decrypt it years later once a quantum computer is available. Any data that must remain confidential beyond the arrival of quantum computing is therefore already at risk.
+
+Signatures create a different risk. A future quantum adversary may forge \emph{new} signatures, including signatures on malicious firmware or certificates, and may undermine long-term verification. Whether a historically verified signature remains useful depends on its timestamp, archival evidence, and trust model; it is not a case of ``record now, decrypt later.'' Both risks argue for migration before the threat materializes.
 
 \section{The response: post-quantum standards}
 
@@ -97,10 +100,10 @@ Because Shor's algorithm targets the specific structure of factoring and discret
   \item \textbf{FIPS 203 -- ML-KEM} (Kyber): key encapsulation, based on module lattices~\cite{fips203};
   \item \textbf{FIPS 204 -- ML-DSA} (Dilithium): signatures, based on module lattices~\cite{fips204};
   \item \textbf{FIPS 205 -- SLH-DSA} (SPHINCS\textsuperscript{+}): signatures, based only on hash functions~\cite{fips205};
-  \item \textbf{FIPS 206 -- FN-DSA} (Falcon): signatures, based on NTRU lattices~\cite{fips206} (still in draft as of writing; the other three were finalized in 2024).
+  \item a future FN-DSA standard based on Falcon is tracked separately; any implementation discussion must name the exact draft or specification version it follows.
 \end{itemize}
 
-Post-quantum security does not come from one idea but from \emph{five} independent families of hard problems, each a different bet against the quantum future~\cite{bernstein2009}. A scheme is only as trustworthy as the family it belongs to, so it is worth meeting all five before diving into any one.
+Post-quantum cryptography is commonly organized into \emph{five broad mathematical families} of hard problems, each offering a different route to quantum-resistant public-key cryptography~\cite{bernstein2009}. This is a teaching classification, not a claim that the families are cryptographically independent.
 
 \begin{itemize}
   \item \textbf{Lattice-based} -- short vectors and noisy linear systems in high-dimensional lattices~\cite{micciancioregev2009,peikert2014}. The workhorse of the standards, balancing speed and size; the main subject of this book.
@@ -121,14 +124,14 @@ Family & Hard problem & Standard / leading scheme & Role \\
 \midrule
 Lattice & Module-LWE & FIPS 203 ML-KEM & KEM \\
 Lattice & Module-LWE / SIS & FIPS 204 ML-DSA & signature \\
-Lattice & NTRU & FIPS 206 FN-DSA (draft) & signature \\
+Lattice & NTRU & FN-DSA / Falcon specifications & signature \\
 Hash & preimage / collision & FIPS 205 SLH-DSA & signature \\
 Code & syndrome decoding & Classic McEliece, HQC & KEM \\
 Multivariate & MQ (quadratic systems) & UOV, MAYO (candidates) & signature \\
 Isogeny & supersingular isogeny path & SQIsign (candidate) & signature \\
 \bottomrule
 \end{tabular}
-\caption{The five families of post-quantum cryptography and where the standards sit. FIPS 203--206 implement the lattice and hash families; the code, multivariate, and isogeny families remain unstandardized but active, each a structurally different fallback.}
+\caption{Five commonly discussed mathematical families of post-quantum cryptography. FIPS 203--205 cover lattice- and hash-based schemes; other families remain active areas of research and standardization.}
 \label{tab:pqc-families}
 \end{table}
 
@@ -137,9 +140,9 @@ Isogeny & supersingular isogeny path & SQIsign (candidate) & signature \\
 \begin{itemize}
   \item Today's public-key cryptography (RSA, Diffie--Hellman, ECC) rests on factoring and discrete logarithms.
   \item \textbf{Shor's algorithm} solves both in polynomial time on a quantum computer, breaking these schemes at \emph{any} key size.
-  \item \textbf{Grover's algorithm} only gives a quadratic speedup, so symmetric ciphers and hashes survive with larger parameters.
-  \item ``Harvest now, decrypt later'' makes migration urgent even before quantum computers arrive.
-  \item The answer is to rebuild public-key cryptography on five independent families of hard problems -- lattice, hash, code, multivariate, and isogeny -- the subject of the rest of this book, with FIPS 203--206 as the first standardized implementations.
+  \item \textbf{Grover's algorithm} gives a quadratic generic-search speedup; key search, hash preimages, and hash collisions need separate security analyses.
+  \item Confidentiality has a ``harvest now, decrypt later'' risk; signature migration concerns future forgery and long-term verification.
+  \item The rest of the book surveys five broad mathematical families -- lattice, hash, code, multivariate, and isogeny -- with FIPS 203--205 as published NIST standards at this snapshot.
 \end{itemize}
 
 The remaining chapters start from the ground up: the mathematical objects -- finite fields, vectors, polynomials, and lattices -- on which these new hard problems are built.

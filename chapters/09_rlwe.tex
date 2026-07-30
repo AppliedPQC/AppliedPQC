@@ -36,31 +36,21 @@ If the dimension is $n=1024$, then the matrix $A$ has roughly $1024\times 1024$ 
 
 This is why LWE is beautiful theoretically but unattractive in engineering. The algebra is simple, but the representation is bulky.
 
-\section{Observe the matrix structure}
+\section{Observe the negacyclic matrix structure}
 
-Consider a matrix of the form
+RLWE uses the quotient $x^n+1$, not $x^n-1$. For $a(x)=a_0+a_1x+a_2x^2$, multiplication modulo $x^3+1$ is represented by
 \[
-A =
-\begin{bmatrix}
-1 & 2 & 3 \\
-3 & 1 & 2 \\
-2 & 3 & 1
+N(a)=\begin{bmatrix}
+a_0&-a_2&-a_1\\
+a_1&a_0&-a_2\\
+a_2&a_1&a_0
 \end{bmatrix}.
 \]
+The shifts are structured, but a coefficient crossing the boundary changes sign because $x^3=-1$. This is a \emph{negacyclic} (signed-circulant) matrix, not an ordinary circulant matrix. One polynomial still determines the whole linear map, so the storage benefit remains.
 
-This is not an arbitrary matrix. The second row is a cyclic shift of the first row, and the third row is again a cyclic shift. Such a matrix is called a circulant matrix. Once we know the first row, the rest of the matrix is determined.
+\section{Why negacyclic structure appears}
 
-Therefore, instead of storing all $9$ entries, we only need to store $3$ values. The representation is compressed by a large factor.
-
-\section{Why circulant structure appears}
-
-Now let us move to polynomials. Suppose we have
-\[
-a(x)=1+2x+3x^2,
-\qquad
-s(x)=4+5x+6x^2.
-\]
-When we multiply $a(x)$ and $s(x)$, the coefficients naturally arrange themselves in a cyclic way. After we represent the multiplication in a matrix form, the matrix turns out to be circulant. This is the key insight behind RLWE.
+For $a(x)=1+2x+3x^2$ and $s(x)=4+5x+6x^2$, ordinary multiplication creates terms through degree four. Reducing modulo $x^3+1$ maps $x^3$ to $-1$ and $x^4$ to $-x$. The sign-flipped wrap-around is the key structure behind RLWE; Chapter~\ref{ch:convolution} develops the cyclic and negacyclic cases side by side.
 
 \section{The working ring $R_q$}
 
@@ -76,6 +66,7 @@ We can define a simple quotient ring in Sage.
 
 \begin{lstlisting}[language=Python]
 q = 17
+from random import choice
 R.<x> = PolynomialRing(GF(q))
 S = R.quotient(x^8 + 1)
 
@@ -124,7 +115,7 @@ The mathematics is not fundamentally different, but the representation changes. 
   \node[pqcgray, font=\small] at (7.3,-0.7) {$a(x)\in R_q$};
   \node[pqcgray, font=\scriptsize] at (7.3,-1.15) {one polynomial, $n$ coefficients};
 \end{tikzpicture}
-\caption{RLWE's storage saving in one picture. A general LWE matrix $A\in\mathbb{Z}_q^{n\times n}$ (schematically drawn here as a small $5\times5$ grid of independent entries) is replaced by a single polynomial $a(x)\in R_q$. Because of the circulant structure described above, the $n$ coefficients of $a(x)$ already determine what would otherwise be an entire $n\times n$ matrix -- the same storage cost as just one row of $A$. This compression is exactly why RLWE public keys are so much smaller than plain LWE public keys.}
+\caption{RLWE's storage saving in one picture. A general LWE matrix $A\in\mathbb{Z}_q^{n\times n}$ is replaced by a single polynomial $a(x)\in R_q$. Its coefficients determine a structured negacyclic linear map, so one polynomial replaces an entire unstructured matrix. Concrete size savings depend on the parameter choices and encodings.}
 \label{fig:rlwe-compression}
 \end{figure}
 
@@ -138,7 +129,7 @@ This is one of the central reasons RLWE became attractive for real-world deploym
 
 \section{Fast multiplication via the NTT}
 
-The tool that realizes this $O(n\log n)$ multiplication is the \emph{number-theoretic transform} (NTT) of Chapter~\ref{ch:ntt}: the finite-field analogue of the FFT, it works over $\mathbb{Z}_q$ and turns the cyclic convolution of two polynomials into cheap pointwise multiplication, in the negacyclic form required by the ring $\mathbb{Z}_q[x]/(x^n+1)$ used here. It is precisely this transform -- built earlier as a foundational tool -- that makes RLWE's polynomial products fast enough for practice.
+The NTT of Chapter~\ref{ch:ntt} provides the fast representation. A conventional cyclic NTT diagonalizes cyclic convolution; the $x^n+1$ ring instead needs negacyclic handling. For ML-KEM, the partial NTT maps to 128 quadratic components rather than to unrestricted scalar coordinates. It is this specified transform structure that makes the polynomial products efficient in practice.
 
 \section{Sage experiment: polynomial multiplication}
 
@@ -163,12 +154,17 @@ We can create a small ring and form the analog of an LWE sample.
 
 \begin{lstlisting}[language=Python]
 q = 17
+from random import choice
 R.<x> = PolynomialRing(GF(q))
 S = R.quotient(x^8 + 1)
 
-a = S.random_element()
-s = S.random_element()
-e = S.random_element()
+a = S.random_element()  # uniform public ring element
+
+def small_poly():
+    return S([choice([-1, 0, 1]) for _ in range(8)])
+
+s = small_poly()
+e = small_poly()
 
 b = a*s + e
 print("a =", a)
@@ -177,7 +173,7 @@ print("e =", e)
 print("b =", b)
 \end{lstlisting}
 
-This already resembles the RLWE equation in a compact form. Written independently of any particular computer-algebra system, and using the same names $a$, $s$, $e$, $b$ as the Sage code above, the same construction is Algorithm~\ref{alg:rlwe-sample}. (The proper definition keeps $s$ and $e$ small, unlike the fully random $s$, $e$ used above for simplicity; a later chapter shows how to sample small noise correctly.)
+This is a toy RLWE-style sample: $a$ is uniform, while $s$ and $e$ have visibly small coefficients. Written independently of any particular computer-algebra system, the same construction is Algorithm~\ref{alg:rlwe-sample}.
 
 \begin{algorithm}[H]
 \caption{Generate an RLWE Sample}
@@ -231,11 +227,18 @@ The \textbf{NTRU assumption} is that $h$ looks like a uniformly random ring elem
 
 \begin{lstlisting}[language=Python]
 q = 17
+from random import choice
 R.<x> = PolynomialRing(GF(q))
 S = R.quotient(x^8 + 1)
-f = S([1,-1,0,1,0,0,-1,0])   # short
+def small_unit():
+    f = S([choice([-1,0,1]) for _ in range(8)])
+    while not f.is_unit():
+        f = S([choice([-1,0,1]) for _ in range(8)])
+    return f
+
+f = small_unit()              # short and invertible
 g = S([0,1,-1,0,1,0,0,-1])   # short
-h = g * f^(-1)               # public key: looks random
+h = g * f^(-1)                # public key
 print(h)
 \end{lstlisting}
 
@@ -271,4 +274,4 @@ The evolution is:
 \end{tikzpicture}
 \end{center}
 
-\noindent where the RLWE step is precisely the move to a polynomial ring with cyclic (negacyclic) structure.
+\noindent where the RLWE step is precisely the move to a polynomial ring with negacyclic structure.

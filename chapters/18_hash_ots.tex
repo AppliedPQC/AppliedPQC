@@ -13,7 +13,7 @@ After reading this chapter, you should be able to:
   \item state the three security properties a hash function must provide, and why Grover only mildly weakens them;
   \item construct and verify a Lamport one-time signature, and explain why it is strictly one-time;
   \item explain how Winternitz (WOTS\textsuperscript{+}) trades hashing time for much shorter signatures;
-  \item describe the few-time signature FORS and the sense in which it tolerates limited reuse.
+  \item describe the few-time signature FORS and how its security bound changes with the signature count.
 \end{itemize}
 
 \section{What a secure hash function guarantees}
@@ -101,13 +101,13 @@ To sign the digit $m$, the signer reveals the intermediate point $H^{m}(sk)$; th
 There is a catch a checksum must fix. Revealing $H^m(sk)$ lets anyone hash \emph{forward} to $H^{m'}(sk)$ for any $m'>m$, so an attacker could ``advance'' a digit to a larger value for free. WOTS\textsuperscript{+} appends a short \emph{checksum} of the digits, itself signed by extra chains, arranged so that increasing any message digit forces \emph{decreasing} some checksum digit -- which would require moving a chain \emph{backward}, i.e.\ inverting $H$. The parameter $w$ tunes a trade-off: larger $w$ means fewer, longer chains (shorter signatures, more hashing), smaller $w$ the reverse. Like Lamport, a WOTS\textsuperscript{+} key is safe for exactly one signature.
 
 \section{FORS: a few-time signature}
-One-time keys are unforgiving: a single reuse is catastrophic. The stateless scheme of the next chapters needs something gentler for signing the actual message digest, because it will pick keys pseudorandomly and cannot guarantee no key is ever hit twice. That gentler object is \textbf{FORS} (Forest Of Random Subsets), a \emph{few-time} signature.
+One-time keys are unforgiving: a single reuse is catastrophic. The stateless scheme of the next chapters uses \textbf{FORS} (Forest Of Random Subsets), a \emph{few-time} signature, inside a very large address space. This does not authorize key reuse; it makes the security analysis degrade more gradually under the tiny probability of an accidental address collision.
 
 \begin{definition}[FORS]
 FORS consists of $k$ independent Merkle trees, each of height $a$ (so each has $2^a$ leaves, and each leaf hides a secret value). A message digest is split into $k$ indices, one per tree; the signature reveals, for each tree, the secret at the selected leaf together with its authentication path to that tree's root. The $k$ roots are hashed together into a single FORS public key.
 \end{definition}
 
-Because each tree reveals only the \emph{one} leaf its index selects, signing a second message re-uses a secret only when it happens to select the same leaf in the same tree -- an event that is rare and, spread over $k$ trees, tolerable rather than fatal. FORS therefore degrades gracefully under a bounded number of signatures, which is exactly the property statelessness will rely on. (The Merkle trees it is built from are the subject of the next chapter.)
+Because each tree reveals only the \emph{one} leaf its index selects, the security bound degrades with the number of signatures and with any address collisions. SLH-DSA uses message randomization and a huge address space to make such collisions extremely unlikely. An implementation must never deliberately reuse a FORS or WOTS address; WOTS leaf reuse remains a serious event. (The Merkle trees FORS uses are the subject of the next chapter.)
 
 \section{Summary}
 This chapter built the atoms of hash-based signing:
@@ -116,7 +116,7 @@ This chapter built the atoms of hash-based signing:
   \item security rests only on hash preimage/collision resistance, which Grover weakens merely to $n/2$ bits;
   \item \textbf{Lamport} signs once by revealing one preimage per message bit -- simple but large;
   \item \textbf{WOTS\textsuperscript{+}} replaces bit-pairs with hash chains plus a checksum, keeping one-time security at a fraction of the size;
-  \item \textbf{FORS} is a \emph{few-time} signature that degrades gracefully under limited reuse.
+  \item \textbf{FORS} is a \emph{few-time} signature whose security bound degrades with the number of signatures; address reuse is never an implementation strategy.
 \end{itemize}
 
 Every one of these keys is still usable only once (or a few times). The next chapter removes that limitation: a Merkle tree binds many one-time keys under a single public root, and a hypertree of such trees, addressed by hashing the message, yields a stateless many-time signature.

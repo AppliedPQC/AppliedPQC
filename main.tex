@@ -5,13 +5,16 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tocloft}
 \usepackage{enumitem}
 \usepackage{booktabs}
 \usepackage{listings}
 \usepackage{titlesec}
 \usepackage{xcolor}
 \input{chapters/00_style}
+
+\setlength{\cftsecnumwidth}{3.2em}
 
 \lstset{
   basicstyle=\ttfamily\footnotesize,
@@ -50,6 +53,10 @@
 \begin{document}
 
 \maketitle
+\begin{center}
+\small\textit{Standards snapshot: 29 July 2026. Standards and drafts cited in
+this book are identified by their exact publication or draft version.}
+\end{center}
 \tableofcontents
 
 \part{Foundations}

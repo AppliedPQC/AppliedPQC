@@ -15,10 +15,17 @@ After reading this chapter, you should be able to:
 \end{itemize}
 
 \section{Hybrid cryptography and crypto-agility}
-The safest way to deploy a young algorithm is not to trust it alone. A \emph{hybrid} scheme combines a well-understood classical algorithm with a post-quantum one so that an attacker must break \emph{both} to win.
+The safest way to deploy a young algorithm is not to trust it alone. A \emph{hybrid} scheme combines a well-understood classical algorithm with a post-quantum one through an analysed protocol construction.
 
-\begin{definition}[Hybrid KEM]
-A hybrid key-encapsulation mechanism runs two KEMs in parallel -- a classical one (e.g.\ the elliptic-curve exchange X25519) and a post-quantum one (e.g.\ ML-KEM-768) -- and derives the session key from \emph{both} shared secrets, typically by hashing their concatenation. The result is secure as long as \emph{either} component is.
+\begin{definition}[Hybrid key exchange]
+A hybrid key exchange combines a classical key-agreement contribution (for example
+X25519 ECDHE) with a post-quantum KEM contribution (for example ML-KEM-768) through
+an analysed protocol construction. X25519 is Diffie--Hellman key agreement, not a
+KEM. A robust construction binds algorithm identifiers, peer identities, and the
+handshake transcript in a KDF extract/expand step. Its design goal is to retain
+session-key security when at least one component remains secure, subject to the
+combiner and protocol's required conditions; arbitrary hash concatenation is not a
+general theorem.
 \end{definition}
 
 Hybrid deployment hedges two opposite risks at once: a future quantum computer breaking the classical part, and an as-yet-undiscovered classical weakness in the still-young post-quantum part. It is the mainstream migration strategy precisely because it removes the need to bet everything on one new assumption.
@@ -31,7 +38,7 @@ Hybrids only work if systems can \emph{negotiate} which algorithms they use rath
 TLS 1.3 secures most web traffic, and it is the first place post-quantum cryptography has reached production. Two independent parts of the handshake must be upgraded: the \emph{key exchange} (confidentiality) and the \emph{authentication} (signatures on certificates).
 
 \subsection{Hybrid key exchange}
-The deployed approach carries a classical and a post-quantum key exchange together in a single TLS ``key share'', under a named group such as \texttt{X25519MLKEM768}. The client offers both an X25519 public key and an ML-KEM-768 encapsulation key; the server replies with its X25519 share and an ML-KEM ciphertext; and both sides feed the concatenation of the two shared secrets into the ordinary TLS key schedule.
+As of this book's standards snapshot, TLS hybrid ECDHE--ML-KEM groups are under IETF standardization and are appearing in implementations. A group such as \texttt{X25519MLKEM768} combines an X25519 share with an ML-KEM contribution; the exact wire format, group naming, enablement, and TLS key-schedule binding must follow the applicable IETF specification and implementation release notes.
 
 \begin{figure}[H]
 \centering
@@ -41,15 +48,21 @@ The deployed approach carries a classical and a post-quantum key exchange togeth
   \draw[pqcgray!45, dashed] (1.4,3.1) -- (1.4,0.0);
   \draw[pqcgray!45, dashed] (8.6,3.1) -- (8.6,0.0);
   \draw[flowarrow] (1.4,2.5) -- node[above]{X25519 share $+$ ML-KEM key (encapsulation key)} (8.6,2.5);
-  \draw[flowarrow] (8.6,1.7) -- node[above]{X25519 share $+$ ML-KEM ciphertext $+$ certificate (ML-DSA sig)} (1.4,1.7);
+  \draw[flowarrow] (8.6,1.7) -- node[above]{X25519 share $+$ ML-KEM ciphertext $+$ certificate} (1.4,1.7);
   \node[keynode, align=center] at (5,0.55) {shared secret $=\mathrm{KDF}\big(ss_{\text{X25519}} \,\|\, ss_{\text{ML-KEM}}\big)$};
 \end{tikzpicture}
-\caption{Hybrid key exchange in TLS 1.3 (named group \texttt{X25519MLKEM768}). Both an elliptic-curve share and an ML-KEM encapsulation travel in the handshake; the session key is derived from \emph{both} shared secrets, so it stays secure as long as either primitive does. The server's certificate is authenticated with a post-quantum signature (here ML-DSA).}
+\caption{Illustrative hybrid key exchange in TLS 1.3. Both an elliptic-curve share and an ML-KEM contribution travel in the handshake; an analysed KDF construction binds both secrets and the protocol context. Post-quantum certificate authentication is a separate, draft/experimental deployment track. Specific group names and deployment status are version-dependent.}
 \label{fig:tls-hybrid}
 \end{figure}
 
 \subsection{Post-quantum authentication and its size cost}
-Authentication is upgraded by signing certificates with a post-quantum signature -- typically \textbf{ML-DSA-65} (Chapter~\ref{ch:mldsa}) for its balance of speed and moderate size, or \textbf{SLH-DSA} (Chapter~\ref{ch:slhdsa}) where the most conservative assumption is wanted. The practical obstacle is size: post-quantum public keys and signatures are far larger than the elliptic-curve ones they replace, and a TLS handshake may carry several certificates. The extra kilobytes cost round-trips and can collide with buffer and fragmentation limits.
+Post-quantum certificate authentication is still a separate standardization and
+deployment track. ML-DSA-65 is one plausible illustrative choice for its balance of
+speed and size, while SLH-DSA offers a more conservative assumption at larger sizes.
+The practical obstacle is size: post-quantum public keys and signatures are far larger
+than the elliptic-curve ones they replace, and a TLS handshake may carry several
+certificates. The extra kilobytes cost round-trips and can collide with buffer and
+fragmentation limits.
 
 \begin{table}[H]
 \centering
@@ -59,28 +72,28 @@ Signature scheme & Public key (bytes) & Signature (bytes) \\
 \midrule
 Ed25519 (classical)   & 32   & 64 \\
 ML-DSA-65 (FIPS 204)  & 1952 & 3309 \\
-FN-DSA / Falcon-512 (FIPS 206) & 897 & $\approx 666$ \\
+FN-DSA / Falcon-512 (FIPS 206 in development) & 897 & $\approx 666$ \\
 SLH-DSA-128s (FIPS 205) & 32 & $\approx 7856$ \\
 \bottomrule
 \end{tabular}
-\caption{Approximate sizes of a classical signature versus the three post-quantum standards. Falcon is the most compact but the hardest to implement safely; SLH-DSA has a tiny key but a multi-kilobyte signature. These are the numbers that make post-quantum certificates a handshake-size problem.}
+\caption{Approximate sizes of a classical signature, published PQC standards, and the draft-dependent FN-DSA candidate. Falcon/FN-DSA is not a final FIPS at this standards snapshot.}
 \label{tab:sig-sizes}
 \end{table}
 
-As of writing, hybrid key exchange has shipped in production browsers and servers -- for example Cloudflare's edge, Google Chrome, and OpenSSL 3.5 -- while post-quantum \emph{authentication} is rolling out more cautiously because of these sizes.
+Implementation and deployment status changes rapidly. Before making a production decision, consult the current IETF document and the release notes of the selected browser, TLS library, or service for its supported groups, defaults, and authentication behaviour.
 
 \section{Verifying post-quantum signatures on-chain}
 \label{sec:onchain}
 A very different deployment target is the blockchain, where a smart contract may need to \emph{verify} a post-quantum signature -- for a quantum-resistant wallet, or a cross-chain bridge. Here the constraint is not bandwidth but \emph{gas}: every operation the Ethereum Virtual Machine (EVM) executes costs money, and a lattice verifier does a great deal of modular arithmetic.
 
-The dominant cost is the NTT (Chapter~\ref{ch:ntt}) that ML-DSA and Falcon verification rely on. Hand-optimized implementations -- reported under the names \textbf{ETHDILITHIUM} and \textbf{ETHFALCON}, written at the EVM's low-level \texttt{Yul} layer -- have driven verification cost down by more than an order of magnitude, from roughly $20$ million gas to about $1.5$ million, largely by making the NTT cheap.
+Direct verification of a post-quantum signature can be expensive in an EVM-like environment because it requires substantial hashing and modular arithmetic. The cost depends on the scheme, parameter set, contract implementation, chain, hard-fork gas schedule, and available precompiles. Claims about a dominant operation or a gas figure require a reproducible benchmark with those details.
 
 When even that is too expensive, an alternative is to avoid running the verifier on-chain at all.
 
 \begin{itemize}
-  \item \textbf{Direct verification}: run the full verifier in the contract. Simplest and trust-minimal, but the most gas.
-  \item \textbf{ZK proof of verification}: prove off-chain, in zero knowledge, that ``I know a signature that verifies,'' and check the succinct proof on-chain. Cheap to verify but expensive to prove, and heavy machinery.
-  \item \textbf{Naysayer proofs}: post the signature \emph{optimistically} assuming it is valid, and let any challenger submit a cheap fraud proof that pinpoints one failing check if it is not. Reported to be markedly cheaper than full ZK for practical EVM deployment, at the cost of a challenge window.
+  \item \textbf{Direct verification}: run the full verifier in the contract. It is conceptually simple and minimizes added trust assumptions, but may be expensive.
+  \item \textbf{ZK proof of verification}: prove off-chain that a signature verifies, then check a succinct proof on-chain. This moves work to the prover and introduces proof-system assumptions and costs.
+  \item \textbf{Optimistic or fraud-proof designs}: accept a claim subject to a challenge procedure. Their cost and trust trade-offs depend on the exact challenge game and security model.
 \end{itemize}
 
 \begin{figure}[H]
@@ -88,12 +101,11 @@ When even that is too expensive, an alternative is to avoid running the verifier
 \begin{tikzpicture}[node distance=5mm and 10mm, every node/.style={font=\scriptsize}]
   \node[flownode] (direct) {direct on-chain verify\\[-2pt]\scriptsize highest gas, simplest};
   \node[flownode, right=of direct] (zk) {ZK proof of verify\\[-2pt]\scriptsize cheap check, costly prove};
-  \node[keynode, right=of zk] (nay) {naysayer / optimistic\\[-2pt]\scriptsize cheapest, needs challenge window};
+  \node[keynode, right=of zk] (nay) {optimistic / fraud proof\\[-2pt]\scriptsize needs challenge design};
   \draw[flowarrow] (direct) -- (zk);
   \draw[flowarrow] (zk) -- (nay);
-  \node[pqcgray, below=1mm of zk] {decreasing on-chain cost $\longrightarrow$};
 \end{tikzpicture}
-\caption{Three ways to get a post-quantum signature verified on-chain, from most expensive and most trust-minimal (run the verifier directly) to cheapest (assume validity and allow a cheap challenge). Optimizing the NTT-heavy verifier itself, as in the ETHDILITHIUM/ETHFALCON work, attacks the leftmost option; naysayer proofs sidestep it.}
+\caption{Three broad designs for on-chain post-quantum signature verification. They trade direct execution cost against prover work, challenge mechanisms, and security assumptions; there is no universal cost ordering without a specified benchmark and protocol.}
 \label{fig:onchain-verify}
 \end{figure}
 
@@ -108,15 +120,21 @@ Scheme & Role & Public key & Ciphertext / signature \\
 \midrule
 ML-KEM-768 (FIPS 203) & KEM & 1184 & 1088 \\
 ML-DSA-65 (FIPS 204)  & signature & 1952 & 3309 \\
-FN-DSA / Falcon-512 (FIPS 206) & signature & 897 & $\approx 666$ \\
+FN-DSA / Falcon-512 (FIPS 206 in development) & signature & 897 & $\approx 666$ \\
 SLH-DSA-128s (FIPS 205) & signature & 32 & $\approx 7856$ \\
 \bottomrule
 \end{tabular}
-\caption{Approximate sizes (in bytes) of the standardized schemes. There is no universally best choice: Falcon minimizes bytes but is the most delicate to implement, SLH-DSA minimizes assumptions but maximizes signature size, and ML-DSA sits in between and is the general-purpose default.}
+\caption{Approximate sizes (in bytes) of published standards and the draft-dependent FN-DSA candidate. There is no universally best choice: SLH-DSA minimizes assumptions but has large signatures, while ML-DSA is a general-purpose published standard.}
 \label{tab:scheme-sizes}
 \end{table}
 
-Two constraints cut across all of these. First, every deployed implementation must be \emph{constant-time} (Chapter~\ref{ch:sidechannel}); a reference implementation that is correct but variable-time is not deployable, and Falcon's floating-point sampler makes this genuinely hard. Second, the sizes in Table~\ref{tab:scheme-sizes} are not academic -- they determine whether a scheme fits in a TLS handshake, a certificate chain, or a smart-contract call, and they are often the deciding factor.
+Two constraints cut across all of these. First, operations that handle secret keys,
+ephemeral secrets, or secret-dependent sampling -- especially key generation, signing,
+and decapsulation -- require side-channel review against the applicable threat model
+(Chapter~\ref{ch:sidechannel}). Public-input verification has different confidentiality
+requirements, though it still needs robustness and denial-of-service review. Second,
+the sizes in Table~\ref{tab:scheme-sizes} are not academic -- they determine whether a
+scheme fits in a TLS handshake, a certificate chain, or a smart-contract call.
 
 \section{Pitfalls}
 
@@ -137,9 +155,9 @@ The mathematics of the previous parts defeats Shor's algorithm, but that is wher
 
 \begin{itemize}
   \item \textbf{hybrid} classical-plus-postquantum deployment, with \textbf{crypto-agility}, is the mainstream migration strategy;
-  \item \textbf{TLS 1.3} already ships hybrid key exchange (X25519 $+$ ML-KEM-768); post-quantum certificates follow, gated by signature sizes;
-  \item verifying signatures \textbf{on-chain} is dominated by the NTT, attacked either by low-level optimization (ETHDILITHIUM / ETHFALCON) or by optimistic naysayer proofs;
-  \item scheme choice is a trade-off among size, speed, and assumption strength, and every deployment must be constant-time.
+  \item \textbf{TLS 1.3} hybrid key exchange is under standardization and deployment; protocol and implementation versions must be checked at the time of use;
+  \item verifying signatures \textbf{on-chain} has scheme- and environment-dependent costs, with direct, proof-based, and optimistic designs offering different trade-offs;
+  \item scheme choice is a trade-off among size, speed, and assumption strength, with side-channel controls scoped to the secrets and threat model of each operation.
 \end{itemize}
 
 Post-quantum cryptography is no longer a paper exercise: the standards exist, and the migration is under way. Real security will arrive only when these schemes are deployed correctly, agilely, and side-channel-safely across the protocols and systems that the world already depends on. The next chapter turns to one of the hardest cases of all -- the blockchains, where the funds themselves are secured by exactly the signatures now at risk.

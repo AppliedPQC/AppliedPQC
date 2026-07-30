@@ -104,16 +104,24 @@ The same seed always yields the same matrix. This is a crucial compression trick
 For a teaching implementation, we can first simulate the expansion by using a simple deterministic pseudo-random generator.
 
 \begin{lstlisting}[language=Python]
-import random
+from random import Random
+from sage.all import GF, Matrix, PolynomialRing
+
+q = 17
+n = 8
+k = 2
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^n + 1)
 
 
 def expand_A(seed):
-    random.seed(seed)
+    rng = Random(str(seed))
     return Matrix(
         Rq,
         k,
         k,
-        [Rq.random_element() for _ in range(k * k)]
+        [Rq([rng.randrange(q) for _ in range(n)])
+         for _ in range(k * k)]
     )
 \end{lstlisting}
 
@@ -150,33 +158,13 @@ e \leftarrow \mathrm{CBD}(\sigma).
 
 The exact detail depends on the parameter set, but the conceptual point is the same: the noise is derived from a short seed through a deterministic sampling procedure.
 
-\section{Phase 5: compute the public key}
+\section{Phase 5: compute the public key in the NTT domain}
 
-The next step is the familiar LWE-style computation:
-
+FIPS~203 samples the secret and error in coefficient form, then transforms them. \textsc{ExpandA} already produces the matrix in the NTT representation. The public vector is computed as
 \[
-t = A\cdot s + e.
+\hat t=\hat A\circ\hat s+\hat e,
 \]
-
-This step is conceptually the same as in the toy construction. The difference is that the inputs are now produced by deterministic expansion from the initial seed rather than by direct sampling from a random source.
-
-\section{Phase 6: move into the NTT domain}
-
-The next important difference from the toy version is that the real ML-KEM implementation does not operate only in the ordinary coefficient domain. In the real standard, the relevant objects are transformed into the NTT domain before the main arithmetic begins.
-
-Thus we may write schematically:
-
-\[
-\hat{s} = \mathrm{NTT}(s), \qquad \hat{e} = \mathrm{NTT}(e), \qquad \hat{A} = \mathrm{NTT}(A).
-\]
-
-Then the computation is conceptually expressed as
-
-\[
-\hat{t} = \hat{A}\cdot \hat{s} + \hat{e}.
-\]
-
-In the full standard, this is implemented with careful attention to the ring representation and to the specific NTT parameters. The key point here is that the algebraic structure is much richer than the toy version and is designed for efficient implementation.
+where $\circ$ uses the specified \textsc{MultiplyNTTs} operation: 128 quadratic base products, not unrestricted coordinate-wise scalar multiplication. The PKE public key encodes $(\hat t,\rho)$ and the PKE secret key encodes $\hat s$; an inverse NTT is used later where coefficient-domain values are required. This is the data flow of FIPS~203, Sections~4.3.1 and~5.1.
 
 \section{Phase 7: encode the public key}
 
@@ -204,12 +192,12 @@ The whole process can be summarized as follows:
   \node[flownode] (g) at (5,8.2) {$G(d) = \mathrm{SHA3\text{-}512}(d)$};
   \node[flownode] (rho) at (2.3,6.8) {$\rho$};
   \node[flownode] (sigma) at (7.7,6.8) {$\sigma$};
-  \node[flownode] (expandA) at (2.3,5.4) {ExpandA$(\rho)=A$};
+  \node[flownode] (expandA) at (2.3,5.4) {ExpandA$(\rho)=\hat A$};
   \node[flownode] (cbd) at (7.7,5.4) {CBD$(\sigma)$};
-  \node[flownode] (s) at (6.4,4.0) {$s$};
-  \node[flownode] (e) at (9.0,4.0) {$e$};
-  \node[flownode] (mult) at (5,2.6) {$t = A\,s + e$};
-  \node[keynode] (pk) at (5,1.1) {Public key $(\rho,t)$};
+  \node[flownode] (s) at (6.4,4.0) {$s\to\hat s$};
+  \node[flownode] (e) at (9.0,4.0) {$e\to\hat e$};
+  \node[flownode] (mult) at (5,2.6) {$\hat t = \hat A\circ\hat s + \hat e$};
+  \node[keynode] (pk) at (5,1.1) {Public key $(\rho,\hat t)$};
 
   \draw[flowarrow] (d) -- (g);
   \draw[flowarrow] (g) -- (rho);
@@ -224,25 +212,25 @@ The whole process can be summarized as follows:
   \draw[flowarrow] (mult) -- (pk);
   \draw[flowarrow] (rho.west) -- ++(-1.3,0) |- (pk.west);
 \end{tikzpicture}
-\caption{The complete KeyGen data flow. A single random seed $d$ deterministically expands into everything else; the public key stores only $\rho$ (from which $A$ can always be regenerated) and $t$, never $A$ itself.}
+\caption{The K-PKE KeyGen data flow. The seed $d$ expands into $\rho$ and the sampling seed; \textsc{ExpandA} produces $\hat A$, while sampled coefficient-domain vectors are transformed before the NTT-domain multiplication. The public key stores $\rho$ and $\hat t$, never $A$ itself.}
 \label{fig:keygen-flow}
 \end{figure}
 
 This flow should be remembered because it reappears inside encapsulation and decapsulation below. Written as pseudocode, the seven phases above collapse into a single short algorithm:
 
 \begin{algorithm}[H]
-\caption{K-PKE.KeyGen (FIPS 203~\cite{fips203,kyber2018}, teaching form)}
+\caption{K-PKE.KeyGen (FIPS 203~\cite{fips203}, teaching form)}
 \label{alg:kpke-keygen}
 \begin{algorithmic}[1]
 \Require Random seed $d \in \{0,1\}^{256}$
-\Ensure Public key $(\rho, t)$; secret key $s$
+\Ensure Encoded public key $(\rho,\hat t)$; encoded secret key $\hat s$
 \State $(\rho,\sigma) \gets G(d)$ \Comment{Phase 1: seed expansion, $G=\mathrm{SHA3\text{-}512}$}
-\State $A \gets \textsc{ExpandA}(\rho)$ \Comment{Phase 2: deterministic matrix, $A \in R_q^{k\times k}$}
+\State $\hat A \gets \textsc{ExpandA}(\rho)$ \Comment{NTT representation of the deterministic matrix}
 \State $s \gets \textsc{CBD}_{\eta_1}(\sigma)$ \Comment{Phase 3: secret vector}
 \State $e \gets \textsc{CBD}_{\eta_1}(\sigma)$ \Comment{Phase 4: error vector}
-\State $t \gets A \cdot s + e$ \Comment{Phase 5: public value}
-\State $\hat s,\hat e,\hat A \gets \mathrm{NTT}(s),\mathrm{NTT}(e),\mathrm{NTT}(A)$ \Comment{Phase 6: NTT domain (implementation only)}
-\State \Return $\big((\rho,t),\ s\big)$ \Comment{Phase 7: encode public key as $(\rho,t)$, not $(A,t)$}
+\State $\hat s,\hat e \gets \mathrm{NTT}(s),\mathrm{NTT}(e)$
+\State $\hat t \gets \hat A\circ\hat s+\hat e$ \Comment{use \textsc{MultiplyNTTs} for every ring product}
+\State \Return $\big((\rho,\hat t),\ \hat s\big)$ \Comment{encode the NTT-domain values as specified}
 \end{algorithmic}
 \end{algorithm}
 
@@ -260,11 +248,10 @@ and the \textbf{Fujisaki--Okamoto (FO) transform} turns them into a \emph{CCA-se
 \caption{ML-KEM.KeyGen (teaching form)}
 \label{alg:mlkem-keygen}
 \begin{algorithmic}[1]
-\Require Random seed $d \in \{0,1\}^{256}$
+\Require Independent random values $d,z \in \{0,1\}^{256}$
 \Ensure Encapsulation key $ek$; decapsulation key $dk$
 \State $\big((\rho,t),\ dk_{\mathrm{PKE}}\big) \gets \textsc{K-PKE.KeyGen}(d)$ \Comment{Algorithm~\ref{alg:kpke-keygen}}
 \State $ek \gets (\rho, t)$
-\State $z \gets \{0,1\}^{256}$ \Comment{secret ``implicit rejection'' value}
 \State \Return $ek,\ \ dk \gets \big(dk_{\mathrm{PKE}},\ ek,\ H(ek),\ z\big)$
 \end{algorithmic}
 \end{algorithm}
@@ -339,16 +326,16 @@ The subtlety is the \texttt{else} branch. A naive KEM would return an \emph{erro
 \section{Parameter sets}
 \begin{table}[H]
 \centering
-\begin{tabular}{lccc}
+\begin{tabular}{lccccc}
 \toprule
-Scheme & $k$ & NIST level & Comparable to \\
+Scheme & $k$ & $\eta_1$ & $(d_u,d_v)$ & NIST level & Comparable to \\
 \midrule
-ML-KEM-512  & 2 & 1 & AES-128 \\
-ML-KEM-768  & 3 & 3 & AES-192 \\
-ML-KEM-1024 & 4 & 5 & AES-256 \\
+ML-KEM-512  & 2 & 3 & $(10,4)$ & 1 & AES-128 \\
+ML-KEM-768  & 3 & 2 & $(10,4)$ & 3 & AES-192 \\
+ML-KEM-1024 & 4 & 2 & $(11,5)$ & 5 & AES-256 \\
 \bottomrule
 \end{tabular}
-\caption{The three ML-KEM parameter sets, all sharing $n=256$ and $q=3329$; only the module dimension $k$ changes. ML-KEM-768 is the common default.}
+\caption{The three ML-KEM parameter sets share $n=256$ and $q=3329$, but differ in their full parameter tuples. ML-KEM-768 is a common default.}
 \label{tab:mlkem-params}
 \end{table}
 
@@ -372,7 +359,12 @@ Then verify that \(A_1 = A_2\). Now change the seed and observe that the matrix 
 Generate many samples from the CBD distribution and check that the average is close to zero.
 
 \begin{lstlisting}[language=Python]
-# toy example
+from random import randint
+
+def cbd(eta):
+    return sum(randint(0, 1) for _ in range(eta)) - \
+           sum(randint(0, 1) for _ in range(eta))
+
 samples = [cbd(2) for _ in range(10000)]
 print(sum(samples) / len(samples))
 \end{lstlisting}
@@ -383,7 +375,7 @@ Observe how the variance changes when \(\eta\) changes.
 
 Finally, write a function
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}
 pk, sk = keygen(seed)
 \end{lstlisting}
 
@@ -395,6 +387,33 @@ and test the following properties:
 \end{itemize}
 
 This gives a first impression of how modern public-key cryptography is built from deterministic pseudo-random procedures.
+
+\paragraph{Experiment 4: one \textsc{MultiplyNTTs} base product}
+
+The NTT-domain multiplication in FIPS~203 is not 256 independent scalar
+products. Each coordinate pair is multiplied modulo a quadratic relation. The
+following check implements one such pair; it tests the algebraic base case, not
+the full standardized transform or its serialization.
+
+\begin{lstlisting}[language=Python]
+q = 3329
+
+def multiply_ntt_pair(a, b, gamma):
+    a0, a1 = a
+    b0, b1 = b
+    return ((a0*b0 + gamma*a1*b1) % q,
+            (a0*b1 + a1*b0) % q)
+
+# (1 + 2X)(3 + 4X) modulo X^2 - gamma, with gamma = 17.
+got = multiply_ntt_pair((1, 2), (3, 4), 17)
+assert got == ((3 + 17*8) % q, (4 + 6) % q)
+print("one ML-KEM quadratic base product:", got)
+\end{lstlisting}
+
+This is precisely the local multiplication used 128 times by
+\textsc{MultiplyNTTs}; a conforming ML-KEM implementation must additionally
+use FIPS~203's transform ordering, twiddle factors, reductions, encodings, and
+test vectors.
 
 \section{Pitfalls}
 

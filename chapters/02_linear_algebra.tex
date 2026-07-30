@@ -208,10 +208,14 @@ In particular, a square matrix $A\in\mathbb{F}^{n\times n}$ is invertible if and
 F = GF(17)
 for _ in range(10):
     A = random_matrix(F, 4, 4)
-    print(A.rank())   # 4 (invertible) almost always over a field
+    print(A.rank())
 \end{lstlisting}
 
-Over a finite field a random square matrix is invertible with high probability, so a random $A$ almost always has full rank.
+For a uniformly random $n\times n$ matrix over $\mathbb{F}_q$, the invertibility probability is
+\[
+\prod_{i=1}^{n}(1-q^{-i}).
+\]
+Thus the claim depends on $q$: for this $4\times4$ example over $\mathbb{F}_{17}$ it is high, while over $\mathbb{F}_2$ it is only about $30.8\%$.
 
 \section{Solving linear systems, and the leap to LWE}
 Given $A$ and $\mathbf{b}$, the equation $A\mathbf{x}=\mathbf{b}$ is solved by \emph{Gaussian elimination}: row operations reduce $A$ to echelon form, and back-substitution recovers $\mathbf{x}$.
@@ -220,14 +224,14 @@ Given $A$ and $\mathbf{b}$, the equation $A\mathbf{x}=\mathbf{b}$ is solved by \
 Over a field, Gaussian elimination solves an $n\times n$ system $A\mathbf{x}=\mathbf{b}$ (or reports that no solution exists) using $O(n^3)$ field operations. If $A$ is invertible the solution is unique.
 \end{proposition}
 
-This efficiency is precisely why a plain linear system carries \emph{no} cryptographic value: anyone who sees $A$ and $\mathbf{b}=A\mathbf{s}$ can recover the secret $\mathbf{s}$ in cubic time. The entire idea of lattice cryptography is to break this by adding a small, structured error. Given samples
+This efficiency is precisely why a plain linear system carries \emph{no} cryptographic value: anyone who sees $A$ and $\mathbf{b}=A\mathbf{s}$ can recover the secret $\mathbf{s}$ in cubic time. LWE changes the setting. Given a public, typically rectangular random matrix $A\in\mathbb{Z}_q^{m\times n}$ with $m>n$, a secret $\mathbf{s}$ drawn from a prescribed small distribution, and an independent small error vector $\mathbf{e}$, one observes samples
 \[
 \mathbf{b} = A\mathbf{s} + \mathbf{e},
 \]
-with $\mathbf{e}$ short, the equation is no longer exactly consistent, Gaussian elimination no longer applies, and recovering $\mathbf{s}$ becomes the \emph{Learning With Errors} problem (Chapter~\ref{ch:lwe}) -- believed hard even for quantum computers. The whole difficulty is manufactured by the single step of replacing an exact equation with an approximate one.
+with arithmetic modulo $q$. Unlike an invertible square system, this overdetermined system will generally have no exact solution for a nonzero random error. Gaussian elimination can detect inconsistency, but it does not recover the planted secret from the noisy samples. Recovering $\mathbf{s}$ is the \emph{Learning With Errors} problem (Chapter~\ref{ch:lwe}).
 
 \begin{remark}
-It is worth pausing on how little changes on the page and how much changes in difficulty. The map $\mathbf{s}\mapsto A\mathbf{s}$ is linear and invertible; the map $\mathbf{s}\mapsto A\mathbf{s}+\mathbf{e}$ is not even a function of $\mathbf{s}$ alone. Cryptographic hardness lives in that gap.
+It is worth pausing on how little changes on the page and how much changes in difficulty. For an invertible square matrix, $\mathbf{s}\mapsto A\mathbf{s}$ is easy to invert. With many noisy samples, the observed value also depends on independently sampled error; cryptographic hardness lives in distinguishing and exploiting that structure.
 \end{remark}
 
 \section{Experiments}
@@ -239,19 +243,22 @@ V = VectorSpace(F, 4)
 for _ in range(5): print(V.random_element())
 
 # 2. a matrix acting on a vector
-A = random_matrix(F, 4, 4); v = random_vector(F, 4)
+A = random_matrix(F, 6, 4); v = random_vector(F, 4)
 print(A * v)
 
 # 3. exact solve is easy; try recovering s from b = A*s
 s = random_vector(F, 4); b = A * s
-print(A.solve_right(b) == s)   # True: Gaussian elimination recovers s
+print(A.solve_right(b) == s)   # True when A has full column rank
 
-# 4. now perturb by a small error and watch exact recovery fail
-e = vector(F, [1, 0, 16, 0])   # 16 == -1 mod 17
-print(A.solve_right(b + e) == s)  # almost always False
+# 4. perturb an overdetermined system: it normally becomes inconsistent
+e = vector(F, [1, 0, 0, 16, 0, 0])   # 16 == -1 mod 17
+try:
+    A.solve_right(b + e)
+except ValueError:
+    print("no exact solution: noisy samples are inconsistent")
 \end{lstlisting}
 
-Experiment~4 is the whole book in miniature: a one-line perturbation turns a solvable system into one whose exact solution no longer reveals the secret.
+The experiment is a toy illustration only: real LWE specifies the dimensions and the secret and error distributions precisely.
 
 \section{Connection to the next chapter}
 The next chapter, \emph{Polynomial Rings}, keeps the linear-algebraic viewpoint but changes the scalars-and-vectors picture into a single richer object. A structured (circulant) matrix will be encoded by one polynomial, matrix--vector multiplication will become polynomial multiplication, and the vector space $\mathbb{F}_q^n$ will be upgraded to the quotient ring

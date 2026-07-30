@@ -3,13 +3,13 @@
 
 \section{From exact linear algebra to a noisy problem}
 
-Solving a system of linear equations over a field is one of the oldest solved problems in mathematics. Given a matrix $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$ and a vector $\mathbf{b}\in\mathbb{Z}_q^{m}$, Gaussian elimination recovers any $\mathbf{s}$ with $\mathbf{A}\mathbf{s}=\mathbf{b}$ in $O(n^3)$ field operations. Because the problem is this easy, an \emph{exact} linear system carries no cryptographic hardness whatsoever: whatever the secret $\mathbf{s}$ encodes, an adversary reads it off directly.
+Solving a system of linear equations over a field is one of the oldest solved problems in mathematics. Given $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$ and $\mathbf{b}\in\mathbb{Z}_q^{m}$, Gaussian elimination recovers $\mathbf{s}$ from $\mathbf{A}\mathbf{s}=\mathbf{b}$ when $\mathbf{A}$ has full column rank and the system is consistent. Its usual cost is $O(mn^2)$ field operations (or $O(n^3)$ for a square $n\times n$ system). Because the problem is this easy, an \emph{exact} full-rank linear system carries no cryptographic hardness: an adversary can recover the secret directly.
 
 The Learning With Errors (LWE) problem, introduced by Regev~\cite{regev2009}, makes a single, deliberate change to this picture: it perturbs each equation by a small additive error. The observed system is
 \[
 \mathbf{b} = \mathbf{A}\mathbf{s} + \mathbf{e} \pmod q,
 \]
-where $\mathbf{e}$ is a short noise vector drawn from a prescribed distribution. Gaussian elimination is now useless -- it amplifies the noise catastrophically -- and the problem of recovering $\mathbf{s}$ becomes, as far as is known, exponentially hard. This chapter develops LWE as a formal object: its distribution, its two decision problems, the geometry that explains its hardness, and the worst-case reduction that makes it a trustworthy foundation. It is the assumption on which ML-KEM (Chapter~\ref{ch:fips203}) and ML-DSA (Chapter~\ref{ch:mldsa}) ultimately rest.
+where $\mathbf{e}$ is a short noise vector drawn from a prescribed distribution. Ordinary exact elimination no longer solves this noisy modular system: it can detect inconsistency, but it does not identify the planted secret. LWE hardness is a parameterized cryptographic assumption about recovering that secret from many finite-modulus, small-error samples; it is not a claim that every noisy regression problem is hard. This chapter develops LWE as a formal object: its distribution, its two decision problems, the geometry that explains its hardness, and the worst-case reduction that makes it a trustworthy foundation. It is the assumption on which ML-KEM (Chapter~\ref{ch:fips203}) and ML-DSA (Chapter~\ref{ch:mldsa}) ultimately rest.
 
 \section{The LWE distribution}
 
@@ -160,17 +160,17 @@ is exactly the LWE image lattice seen there.
   \]
   SIS lives on the dual of the lattice on which LWE lives -- this is the literal source of the name.
   \item \textbf{Dual problem types.} On that pair, the two are the archetypal lattice problems, themselves a dual pair: LWE is bounded-distance decoding (find the lattice point near $\mathbf{b}$), while SIS is a shortest-vector search (find a short $\mathbf{z}\in\Lambda_q^{\perp}(\mathbf{A})$). Short vectors in the dual lattice are precisely what let one decode in the primal.
-  \item \textbf{A dual solution breaks the primal.} An SIS solution \emph{is} an LWE distinguisher. For a short $\mathbf{z}$ with $\mathbf{A}\mathbf{z}=\mathbf{0}$,
+  \item \textbf{A possible dual attack.} A sufficiently short SIS vector can support an LWE distinguisher. For a short $\mathbf{z}$ with $\mathbf{A}\mathbf{z}=\mathbf{0}$,
   \[
   \langle \mathbf{z},\mathbf{b}\rangle
   = \mathbf{z}^{\mathsf T}\!\left(\mathbf{A}^{\mathsf T}\mathbf{s}+\mathbf{e}\right)
   = (\mathbf{A}\mathbf{z})^{\mathsf T}\mathbf{s} + \langle \mathbf{z},\mathbf{e}\rangle
   = \langle \mathbf{z},\mathbf{e}\rangle \pmod q,
   \]
-  which is \emph{small} because $\mathbf{z}$ and $\mathbf{e}$ are both short, whereas $\langle\mathbf{z},\mathbf{u}\rangle$ for a uniform $\mathbf{u}$ is spread over all of $\mathbb{Z}_q$. That gap decides Decision-LWE, and it is the engine of the dual attack of Section~\ref{sec:lwe-cryptanalysis}; conversely, an LWE (BDD) oracle yields short dual vectors, so each problem solves the other.
+  which can be concentrated when $\mathbf{z}$ and $\mathbf{e}$ are sufficiently short, whereas $\langle\mathbf{z},\mathbf{u}\rangle$ for a uniform $\mathbf{u}$ is spread over $\mathbb{Z}_q$. This observation motivates dual attacks, but it is not a general search-problem equivalence: the concentration depends on the parameters, and reductions between LWE and SIS require substantially more than this displayed identity.
 \end{itemize}
 
-Both problems also reduce to worst-case lattice problems -- SIS to the worst case of SIVP~\cite{ajtai1996}, as LWE does through Theorem~\ref{thm:regev} -- which is why breaking either is hard for the same underlying reason. We will meet SIS again directly: in ML-DSA / Dilithium (Chapter~\ref{ch:mldsa}), forging a signature amounts to producing a short vector satisfying a public equation, which is precisely an SIS instance.
+Both problems have their own worst-case lattice reductions -- SIS to the worst case of SIVP~\cite{ajtai1996}, and LWE through Theorem~\ref{thm:regev}. They are closely related geometric assumptions, but should not be treated as interchangeable problems. We will meet SIS again directly: in ML-DSA / Dilithium (Chapter~\ref{ch:mldsa}), forging a signature amounts to producing a short vector satisfying a public equation, which is precisely an SIS instance.
 
 \section{Concrete security and cryptanalysis}
 \label{sec:lwe-cryptanalysis}
@@ -197,17 +197,18 @@ The modulus ties the preceding threads together. It must be large enough that th
 The quickest route to intuition is to build a small instance by hand and watch the error convert an easy system into a hard one. Fix a modulus and dimension.
 
 \begin{lstlisting}[language=Python]
+from sage.all import *
+
 q = 17
-n = 3
 F = GF(q)
+dimension = 3
 \end{lstlisting}
 
 Choose a secret vector and a batch of random rows.
 
 \begin{lstlisting}[language=Python]
-from sage.all import *
-s = random_vector(F, n)
-A = random_matrix(F, 8, n)
+s = random_vector(F, dimension)
+A = random_matrix(F, 8, dimension)
 print("secret =", s)
 \end{lstlisting}
 

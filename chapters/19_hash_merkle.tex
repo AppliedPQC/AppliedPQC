@@ -105,7 +105,7 @@ The last idea is how the leaf is chosen. Instead of a counter that must be remem
 \[
 (R,\ \text{tree index},\ \text{leaf index},\ \text{FORS indices}) \;\longleftarrow\; H(R \,\|\, PK \,\|\, M).
 \]
-Two different messages almost never land on the same leaves, because the hypertree is enormous; and on the rare occasion that a bottom key is reused, FORS -- being \emph{few-time} rather than one-time -- absorbs the overlap. No index is ever recorded, so there is no state to corrupt.
+Two different messages almost never land on the same addresses because the hypertree is enormous and the message randomizer is included in the selection hash. This is a probability statement, not permission to reuse keys: implementations must never deliberately reuse a WOTS or FORS address. FORS security degrades with the number of signatures and any accidental collisions, while WOTS leaf reuse remains serious. No index is ever recorded, so there is no state to corrupt.
 
 \begin{remark}[The role of the public seed]
 One subtlety carries over to the standard. Every hash in the tree is tweaked by a public seed and by an \emph{address} identifying the node's position, so that structurally identical nodes in different trees hash differently. Without this, an attacker could attack many positions at once (a multi-target attack). The seed is public but essential, and we return to it in the next chapter.
@@ -118,7 +118,7 @@ This chapter completed the ladder from one-time keys to a practical many-time si
   \item a \textbf{Merkle tree} binds $2^h$ one-time keys under a single root, authenticated by an $h$-node path;
   \item using each leaf once gives a \emph{stateful} scheme (XMSS), whose safety is fragile in deployment;
   \item a \textbf{hypertree} of $d$ layers multiplies the key supply to $2^{dh}$ without building tall trees;
-  \item \textbf{hashing the message} to select the path removes the state entirely, with FORS absorbing the rare reuse.
+  \item \textbf{hashing the message} and message randomization select the path without signer state, while the enormous address space makes accidental collisions negligible; intentional address reuse is forbidden.
 \end{itemize}
 
 Everything is now in place. The next chapter assembles these pieces exactly as the FIPS 205 standard specifies them, deriving all secrets deterministically from a handful of seeds and addresses.

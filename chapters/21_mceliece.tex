@@ -235,7 +235,7 @@ ML-KEM-768                        & $1184$\,B          & $1088$\,B & Module-LWE 
 \end{table}
 
 \paragraph{Status.}
-Classic McEliece competed in the NIST post-quantum project as a key-encapsulation candidate and advanced into the fourth round dedicated to additional KEMs. It is \emph{not} one of the four FIPS 203--206 standards; NIST selected the lattice scheme ML-KEM as its primary KEM and, from the round-4 alternatives, chose the code-based scheme HQC of the next chapter as the additional KEM to standardize -- largely on the strength of HQC's far smaller keys. Classic McEliece continues toward standardization through other bodies, and it retains a distinctive role in practice: because its underlying assumption has survived more than forty years of concentrated attack, it is widely deployed as a \emph{conservative hedge}, often in hybrid combination with a lattice KEM, so that a future break of one component still leaves the other standing. Conservatism, not efficiency, is what it sells, and for high-value long-lived keys that is exactly the desired property.
+Classic McEliece competed in the NIST post-quantum project as a key-encapsulation candidate and advanced into the fourth round dedicated to additional KEMs. It is not a published NIST FIPS, and NIST IR~8545 selected HQC rather than Classic McEliece for the additional-KEM standardization path. Classic McEliece nevertheless has a long public cryptanalytic record; that record is a stable reason to study it, without making unsupported claims about present deployment or other standardization activity.
 
 \section{Pitfalls}
 
