@@ -4,7 +4,7 @@ A LaTeX book that builds post-quantum cryptography from the ground up, by
 Stephen Duan and Wei Li.
 
 - Repository: https://github.com/AppliedPQC/AppliedPQC
-- Live PDF: https://appliedpqc.github.io/AppliedPQC/apqc.pdf
+- Live PDF: https://appliedpqc.io/apqc.pdf
 
 ## About the book
 
@@ -33,7 +33,6 @@ the compiled PDF.
 The simplest way is the provided Makefile:
 
 ```bash
-cd /data/stephen/pqc/latex
 make          # compiles apqc.tex into apqc.pdf
 make clean    # remove generated files
 ```
@@ -44,7 +43,6 @@ cross-references and the (manual) bibliography -- no BibTeX pass is needed.
 ### Manual build
 
 ```bash
-cd /data/stephen/pqc/latex
 pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
 pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
 ```
@@ -59,12 +57,14 @@ Every push to `main` triggers `.github/workflows/deploy-pages.yml`, which
 builds the PDF and publishes it via GitHub Actions. The site is served at:
 
 ```text
-https://appliedpqc.github.io/AppliedPQC/          # landing page
-https://appliedpqc.github.io/AppliedPQC/apqc.pdf  # the book
+https://appliedpqc.io/          # landing page
+https://appliedpqc.io/apqc.pdf  # the book
 ```
 
 Pages must be enabled once, with its source set to "GitHub Actions", in the
-repository settings.
+repository settings. The site is served from the custom domain
+`appliedpqc.io`, with HTTPS enforced; the old
+`appliedpqc.github.io/AppliedPQC/` address redirects to it.
 
 ## SageMath implementations of FIPS 203-206
 
@@ -87,7 +87,6 @@ and is validated against Falcon's own known-answer tests instead. See
 `sage/README.md` for the details.
 
 ```bash
-cd /data/stephen/pqc/latex
 make kat        # download the test vectors and run the quick check
 make kat-full   # every available test vector
 ```
