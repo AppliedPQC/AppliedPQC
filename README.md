@@ -1,10 +1,10 @@
-# Post-Quantum Cryptography 101
+# Applied Post-Quantum Cryptography
 
 A LaTeX book that builds post-quantum cryptography from the ground up, by
-Stephen Duan, Lin Zhong, and Wei Li.
+Stephen Duan and Wei Li.
 
-- Repository: https://github.com/eigmax/PQC-101
-- Live PDF: https://eigmax.github.io/PQC-101/main.pdf
+- Repository: https://github.com/AppliedPQC/AppliedPQC
+- Live PDF: https://appliedpqc.github.io/AppliedPQC/apqc.pdf
 
 ## About the book
 
@@ -24,7 +24,9 @@ TLS 1.3, certificates, and on-chain verification).
 
 Every chapter follows the same style: worked SageMath experiments, TikZ
 figures, formal definitions and algorithm blocks, and a reference list. The
-full table of contents lives in the compiled PDF.
+four standards chapters are backed by complete, test-vector-verified SageMath
+implementations in `sage/` (see below). The full table of contents lives in
+the compiled PDF.
 
 ## Build the PDF
 
@@ -32,7 +34,7 @@ The simplest way is the provided Makefile:
 
 ```bash
 cd /data/stephen/pqc/latex
-make          # compiles main.tex into main.pdf
+make          # compiles apqc.tex into apqc.pdf
 make clean    # remove generated files
 ```
 
@@ -43,8 +45,8 @@ cross-references and the (manual) bibliography -- no BibTeX pass is needed.
 
 ```bash
 cd /data/stephen/pqc/latex
-pdflatex -interaction=nonstopmode -halt-on-error main.tex
-pdflatex -interaction=nonstopmode -halt-on-error main.tex
+pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
+pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
 ```
 
 The document uses TikZ, pgfplots, and the algorithm packages, so a fairly
@@ -57,23 +59,39 @@ Every push to `main` triggers `.github/workflows/deploy-pages.yml`, which
 builds the PDF and publishes it via GitHub Actions. The site is served at:
 
 ```text
-https://eigmax.github.io/PQC-101/          # landing page
-https://eigmax.github.io/PQC-101/main.pdf  # the book
+https://appliedpqc.github.io/AppliedPQC/          # landing page
+https://appliedpqc.github.io/AppliedPQC/apqc.pdf  # the book
 ```
 
 Pages must be enabled once, with its source set to "GitHub Actions", in the
 repository settings.
 
-## Local SageMath environment (optional)
+## SageMath implementations of FIPS 203-206
 
-The code experiments are written for SageMath. To run them locally:
+Alongside the chapters, `sage/` holds complete, byte-exact SageMath
+implementations of all four NIST post-quantum standards. Every numbered
+algorithm of each standard appears as its own function, named after the
+standard and annotated with its algorithm number.
+
+| File | Standard | Scheme | Algorithms | Parameter sets |
+| --- | --- | --- | --- | --- |
+| `sage/fips203_mlkem.sage` | FIPS 203 | ML-KEM (Kyber) | 21 of 21 | 512, 768, 1024 |
+| `sage/fips204_mldsa.sage` | FIPS 204 | ML-DSA (Dilithium) | 49 of 49 | 44, 65, 87 |
+| `sage/fips205_slhdsa.sage` | FIPS 205 | SLH-DSA (SPHINCS+) | 25 of 25 | all 12 |
+| `sage/fips206_fndsa.sage` | FIPS 206 | FN-DSA (Falcon) | 18 of 18 | 512, 1024 |
+
+FIPS 203, 204 and 205 are checked against NIST's ACVP test vectors and
+reproduce them byte for byte. FIPS 206 is still in development at NIST -- no
+public draft, no vectors -- so FN-DSA follows the round-3 Falcon submission
+and is validated against Falcon's own known-answer tests instead. See
+`sage/README.md` for the details.
 
 ```bash
 cd /data/stephen/pqc/latex
-python3 -m venv .venv-sage
-source .venv-sage/bin/activate
-sage
+make kat        # download the test vectors and run the quick check
+make kat-full   # every available test vector
 ```
 
-If `sage` is not on your PATH, invoke the executable directly from its
-install location.
+`make kat` needs `sage` on your PATH; override it with `make kat SAGE=/path/to/sage`.
+These are teaching implementations: readable and standards-exact, but not
+constant-time and not for production use.
