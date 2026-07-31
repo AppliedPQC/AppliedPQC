@@ -368,7 +368,9 @@ Note also that $\kappa$ advances before the checks, so each retry draws a
 genuinely fresh mask.
 
 \paragraph{Checking the transform against the algebra.}
-The file's \texttt{verify\_ntt\_is\_a\_ring\_isomorphism()} uses Sage to
+The function \texttt{verify\_ntt\_is\_a\_ring\_isomorphism()} at the end of
+\texttt{sage/fips204\_mldsa.sage} -- a namesake of the ML-KEM check of
+Chapter~\ref{ch:fips203}, but over a different ring -- uses Sage to
 confirm that $\mathrm{NTT}^{-1}$ inverts $\mathrm{NTT}$; that the $j$-th NTT
 coefficient is the evaluation $w(\zeta^{2\,\mathrm{BitRev8}(j)+1})$, which is
 what makes $T_q$ a direct product; and that \textsc{MultiplyNTT} transports

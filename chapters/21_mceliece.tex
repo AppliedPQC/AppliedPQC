@@ -249,7 +249,8 @@ The decoder $\mathcal{D}_g$ corrects \emph{up to} $t$ errors and no more. Encaps
 The security rests on the scrambled code being \emph{indistinguishable} from random. Several families that offered efficient decoders (such as certain algebraic and low-density codes) were shown to leak their structure through the disguise and were broken. Binary Goppa codes are used precisely because, so far, they do not.
 
 \paragraph{Pitfall 4: skipping the chosen-ciphertext hardening.}
-The bare scheme in the algorithm boxes is only passively secure. Real deployments must bind the ciphertext into the key and use implicit rejection, exactly as the lattice KEMs apply a Fujisaki--Okamoto-style transform. Omitting it exposes reaction attacks that learn the secret from whether decoding succeeds.
+The bare scheme in the algorithm boxes is only passively secure. Real deployments must bind the ciphertext into the key and use implicit rejection, exactly as the lattice KEMs apply a Fujisaki--Okamoto-style transform
+(Section~\ref{sec:fo}). Omitting it exposes reaction attacks that learn the secret from whether decoding succeeds.
 
 \section{Summary}
 
