@@ -8,6 +8,10 @@ The code is not copied into this page. Each cell fetches the `.sage` sources
 straight from [the repository](https://github.com/AppliedPQC/AppliedPQC/tree/main/sage),
 so what runs here is exactly the code the book documents.
 
+This page covers the four standards. Every other code listing in the book —
+the lattices, LWE, NTT and toy-Kyber experiments the chapters build up from —
+is runnable too: see **[code from the book](book-code.html)**.
+
 Execution happens on the free [SageMath Cell](https://sagecell.sagemath.org/)
 service, which allows **30 seconds per run**. Nearly everything fits; the few
 operations that do not are noted below, with the command to run them locally.

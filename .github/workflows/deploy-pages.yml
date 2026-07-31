@@ -93,6 +93,12 @@ jobs:
             --include-in-header=.github/pages/playground-head.html \
             --include-before-body=.github/pages/playground-before-body.html \
             --output=site/playground.html
+          # One page per chapter, every book listing a runnable cell.  These
+          # are written directly as HTML, not via pandoc: a quarter of the
+          # listings contain a blank line, which ends a CommonMark raw-HTML
+          # block and would silently shred the cell into paragraph tags.
+          python3 sage/playground/extract_listings.py --check
+          python3 .github/pages/build_book_pages.py site
           touch site/.nojekyll
 
       - name: Check the rendered site
@@ -127,6 +133,21 @@ jobs:
           test "$(grep -c 'sage/playground.py' site/playground.html)" -ge 8
           echo "landing page: $(wc -c < site/index.html) bytes, PDF: $(wc -c < site/apqc.pdf) bytes"
           echo "playground: $(wc -c < site/playground.html) bytes, $cells cells"
+          # The book pages: every listing must have survived as a live cell.
+          test -s site/book-code.html
+          pages="$(ls site/playground-*.html | wc -l)"
+          book="$(cat site/playground-*.html | grep -c 'type="text/x-sage"')"
+          expected="$(python3 -c "import json;d=json.load(open('sage/playground/book_listings.json'));print(sum(1 for c in d['chapters'] for l in c['listings'] if l['runnable']))")"
+          test "$book" = "$expected" || {
+            echo "::error::$book book cells rendered, expected $expected"
+            exit 1
+          }
+          # A shredded cell shows up as book code leaking into a <p>.
+          if grep -lq '<p>[a-z_]* = ' site/playground-*.html; then
+            echo "::error::a listing was mangled out of its cell"
+            exit 1
+          fi
+          echo "book pages: $pages chapters, $book runnable cells"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

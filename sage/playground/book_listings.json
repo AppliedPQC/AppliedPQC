@@ -1,0 +1,850 @@
+{
+ "_generated_by": "sage/playground/extract_listings.py",
+ "chapters": [
+  {
+   "listings": [
+    {
+     "code": "a = 3\nb = 4\na + b",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = Integer(3)\nb = Integer(4)\na + b",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "type(a)",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "ZZ",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = ZZ(10)\na",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = ZZ(10)\nb = ZZ(3)\na + b",
+     "n": 6,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "10/3",
+     "n": 7,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "10//3",
+     "n": 8,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "10 % 3",
+     "n": 9,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = QQ(1)/3\na",
+     "n": 10,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "RR\nCC",
+     "n": 11,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "sqrt(2)\nRR(sqrt(2))\nCC(1 + 2*I)",
+     "n": 12,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(7)\nF",
+     "n": 13,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = F(3)\na",
+     "n": 14,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = F(6)\na + F(3)",
+     "n": 15,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = F(3)\na.inverse()",
+     "n": 16,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(7)\nA = Matrix(F, [[1, 2], [3, 4]])\nA",
+     "n": 17,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "A.inverse()",
+     "n": 18,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "A * A.inverse()",
+     "n": 19,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "v = vector(F, [1, 2])\nv",
+     "n": 20,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "A * v",
+     "n": 21,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(7)\nR.<x> = PolynomialRing(F)",
+     "n": 22,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "f = x^3 + 2*x + 1\nf",
+     "n": 23,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "f + f\nf * f",
+     "n": 24,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "S.<x> = QuotientRing(R, R.ideal(x^3 + 1))",
+     "n": 25,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(17)\nfor i in range(1, 17):\n    a = F(i)\n    print(i, a.inverse() * a)",
+     "n": 26,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "q = 17\nF = GF(q)\nA = random_matrix(F, 3, 3)\ns = random_vector(F, 3)\nb = A * s\nA\ns\nb",
+     "n": 27,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "01_sagemath_basics",
+   "title": "SageMath Basics for Post-Quantum Cryptography"
+  },
+  {
+   "listings": [
+    {
+     "code": "F = GF(17)\nv = vector(F, [1, 2, 3])\nv",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = vector(F, [1, 2, 3])\nb = vector(F, [5, 6, 7])\na + b        # (6, 8, 10)\n3 * a        # (3, 6, 9)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "A = Matrix(GF(17), [[1, 2], [2, 4]])\nA.rank()      # 1: only one independent direction",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "B1 = Matrix(GF(17), [[1, 0], [0, 1]])\nB2 = Matrix(GF(17), [[2, 1], [1, 1]])\n# both have rank 2, so each is a basis of GF(17)^2\nprint(B1.rank(), B2.rank())",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(17)\nA = Matrix(F, [[1, 2], [3, 4]])\nv = vector(F, [5, 6])\nA * v",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(17)\nfor _ in range(10):\n    A = random_matrix(F, 4, 4)\n    print(A.rank())",
+     "n": 6,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "F = GF(17)\n# 1. random vectors\nV = VectorSpace(F, 4)\nfor _ in range(5): print(V.random_element())\n\n# 2. a matrix acting on a vector\nA = random_matrix(F, 6, 4); v = random_vector(F, 4)\nprint(A * v)\n\n# 3. exact solve is easy; try recovering s from b = A*s\ns = random_vector(F, 4); b = A * s\nprint(A.solve_right(b) == s)   # True when A has full column rank\n\n# 4. perturb an overdetermined system: it normally becomes inconsistent\ne = vector(F, [1, 0, 0, 16, 0, 0])   # 16 == -1 mod 17\ntry:\n    A.solve_right(b + e)\nexcept ValueError:\n    print(\"no exact solution: noisy samples are inconsistent\")",
+     "n": 7,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "02_linear_algebra",
+   "title": "Linear Algebra Foundations"
+  },
+  {
+   "listings": [
+    {
+     "code": "F = GF(17)\nR.<x> = PolynomialRing(F)\nf = 3*x^4 + 2*x^2 + 5\nprint(f.degree())        # 4\nprint(f.list())          # [5, 0, 2, 0, 3]: the coefficient vector\nprint((x+1)*(x+2))       # x^2 + 3*x + 2",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "R.<x> = PolynomialRing(GF(17))\nS.<y> = R.quotient(x^4 + 1)\nprint(y^4)     # 16 == -1 mod 17: the relation x^4 = -1\nprint(y^5)     # 16*y == -y",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "R.<x> = PolynomialRing(GF(17))\nS.<y> = R.quotient(x^4 + 1)\n\n# 1. the quotient relation and its powers\nprint(y^4, y^5, y^8)          # -1, -y, 1\n\n# 2. negacyclic wrap-around by hand: multiply by y\nc = 2 + 3*y + 4*y^2 + 5*y^3\nprint(y * c)                   # top coeff returns to slot 0 negated\n\n# 3. a quotient element is a length-4 coefficient vector\nprint((3*y^3 + y + 2).lift().list())",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "03_polynomial_ring",
+   "title": "Polynomial Rings"
+  },
+  {
+   "listings": [
+    {
+     "code": "b1 = vector(ZZ, [2, 1])\nb2 = vector(ZZ, [1, 3])\npoints = []\nfor i in range(-5, 6):\n    for j in range(-5, 6):\n        points.append(i * b1 + j * b2)\npoints[:10]",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "B1 = matrix(ZZ, [[1, 0], [0, 1]])\nB2 = matrix(ZZ, [[2, 1], [1, 1]])",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "B = matrix(ZZ, [[2, 1], [1, 3]])\nB.det()",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "from sage.modules.free_module_integer import IntegerLattice\n\nB = matrix(ZZ, [[2, 1], [1, 3]])\nL = IntegerLattice(B)\nL",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "L.shortest_vector()",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "b1 = vector(ZZ, [2, 1])\nb2 = vector(ZZ, [1, 3])\npts = [i * b1 + j * b2 for i in range(-4, 5) for j in range(-4, 5)]\npts",
+     "n": 6,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "B = matrix(ZZ, [[2, 1], [1, 3]])\nU = matrix(ZZ, [[1, 0], [1, 1]])          # unimodular: det U = 1\nprint(abs(B.det()), abs((U * B).det()))   # identical",
+     "n": 7,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "good = matrix(ZZ, [[1, 0], [0, 1]])       # orthonormal basis of Z^2\nbad  = matrix(ZZ, [[1, 7], [0, 1]])       # a sheared basis of the same Z^2",
+     "n": 8,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "from sage.modules.free_module_integer import IntegerLattice\nB1 = matrix(ZZ, [[2, 1], [1, 3]])\nB2 = matrix(ZZ, [[3, 4], [4, 7]])          # = U*B1, U unimodular: same lattice\nfor B in [B1, B2]:\n    print(IntegerLattice(B).shortest_vector())   # identical length",
+     "n": 9,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "04_lattice",
+   "title": "Lattices"
+  },
+  {
+   "listings": [
+    {
+     "code": "u = vector(QQ, [1, 0])\nv = vector(QQ, [0, 1])\nu.dot_product(v)",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "B = matrix(QQ, [[2, 1], [1, 3]])\nB.gram_schmidt()",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "u = vector(QQ, [2, 1])\nv = vector(QQ, [-1, 2])\nu.dot_product(v)",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "u = vector(QQ, [1, 0])\nv = vector(QQ, [0, 1])\nu.dot_product(v)",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "u = vector(QQ, [100, 99])\nv = vector(QQ, [101, 100])\nu.dot_product(v)",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "B = random_matrix(QQ, 3)\nB.gram_schmidt()",
+     "n": 6,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "05_lll",
+   "title": "Gram--Schmidt Orthogonalization and the LLL Algorithm"
+  },
+  {
+   "listings": [
+    {
+     "code": "from sage.modules.free_module_integer import IntegerLattice\n\nB = matrix(ZZ, [[2, 1], [1, 3]])\nL = IntegerLattice(B)\nprint(L.shortest_vector())\nprint(L.shortest_vector().norm())",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "06_svp",
+   "title": "Shortest Vector Problem (SVP)"
+  },
+  {
+   "listings": [
+    {
+     "code": "from sage.all import *\n\nq = 17\nF = GF(q)\ndimension = 3",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "s = random_vector(F, dimension)\nA = random_matrix(F, 8, dimension)\nprint(\"secret =\", s)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "b = A * s\nprint(A.solve_right(b) == s)   # True: exact recovery",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "noise   = vector(F, [1, 0, 16, 1, 0, 0, 16, 1])\nb_noisy = A * s + noise",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "08_lwe",
+   "title": "Learning With Errors (LWE)"
+  },
+  {
+   "listings": [
+    {
+     "code": "q = 17\nfrom random import choice\nR.<x> = PolynomialRing(GF(q))\nS = R.quotient(x^8 + 1)\n\na = S(x^3 + 2*x + 1)\nb = S(x^2 + 3)\nprint(a*b)",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "R.<x> = PolynomialRing(GF(17))\nf = 1 + 2*x + x^2\ng = 3 + x\nprint(f*g)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "q = 17\nfrom random import choice\nR.<x> = PolynomialRing(GF(q))\nS = R.quotient(x^8 + 1)\n\na = S.random_element()  # uniform public ring element\n\ndef small_poly():\n    return S([choice([-1, 0, 1]) for _ in range(8)])\n\ns = small_poly()\ne = small_poly()\n\nb = a*s + e\nprint(\"a =\", a)\nprint(\"s =\", s)\nprint(\"e =\", e)\nprint(\"b =\", b)",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "q = 17\nfrom random import choice\nR.<x> = PolynomialRing(GF(q))\nS = R.quotient(x^8 + 1)\ndef small_unit():\n    f = S([choice([-1,0,1]) for _ in range(8)])\n    while not f.is_unit():\n        f = S([choice([-1,0,1]) for _ in range(8)])\n    return f\n\nf = small_unit()              # short and invertible\ng = S([0,1,-1,0,1,0,0,-1])   # short\nh = g * f^(-1)                # public key\nprint(h)",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "09_rlwe",
+   "title": "Ring-LWE (RLWE)"
+  },
+  {
+   "listings": [
+    {
+     "code": "q = 17\nR.<x> = PolynomialRing(GF(q))\nS = R.quotient(x^8 + 1)",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "from random import choice\ndef small_poly():\n    return S([choice([-1, 0, 1]) for _ in range(8)])\n\ns = vector(S, [small_poly(), small_poly()])\nprint(s)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "A = Matrix(S, [[S.random_element(), S.random_element()],\n               [S.random_element(), S.random_element()]])\nprint(A)",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "e = vector(S, [small_poly(), small_poly()])\nassert all(c in [0, 1, 16] for p in list(s) + list(e) for c in p.lift().list())",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "t = A * s + e\nprint(t)",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "10_module_lwe",
+   "title": "Module-LWE (MLWE)"
+  },
+  {
+   "listings": [
+    {
+     "code": "q = 17\nF = GF(q)\na = vector(F, [1, 2, 3, 4])\ns = vector(F, [5, 6, 7, 8])\n\n# Matrix for multiplication by a(x) modulo x^4 + 1.\nN = Matrix(F, [[a[(i-j) % 4] if i >= j else -a[(i-j) % 4]\n                for j in range(4)] for i in range(4)])\n\nR.<x> = PolynomialRing(F)\nRq = R.quotient(x^4 + 1, 'y')\ny = Rq.gen()\nap = sum(a[i]*y^i for i in range(4))\nsp = sum(s[i]*y^i for i in range(4))\n\nmatrix_product = N * s\nring_product = vector(F, (ap*sp).lift().list() + [0]*4)[:4]\nprint(matrix_product)\nprint(ring_product)\nprint(matrix_product == ring_product)  # True",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "C = Matrix(F, [[a[(i-j) % 4] for j in range(4)] for i in range(4)])\nRc = R.quotient(x^4 - 1, 'z')\nz = Rc.gen()\nac = sum(a[i]*z^i for i in range(4))\nsc = sum(s[i]*z^i for i in range(4))\ncyclic_ring_product = vector(F, (ac*sc).lift().list() + [0]*4)[:4]\nprint(C * s == cyclic_ring_product)  # True",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "11_circulant_convolution",
+   "title": "From Convolution to Negacyclic Ring Arithmetic"
+  },
+  {
+   "listings": [
+    {
+     "code": "F = GF(17)\ng = F.multiplicative_generator()\nomega = g^2\nprint(omega.multiplicative_order())  # 8",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "q = 17\nF = GF(q)\nn = 8\ng = F.multiplicative_generator()\nomega = g^((q - 1)//n)\nassert omega.multiplicative_order() == n\n\ndef ntt(a):\n    return [sum(a[j] * omega^(i*j) for j in range(n)) for i in range(n)]\n\ndef intt(A):\n    n_inv = F(n)^(-1)\n    return [n_inv * sum(A[i] * omega^(-i*j) for i in range(n))\n            for j in range(n)]\n\na = vector(F, [1, 2, 3, 0, 0, 0, 0, 0])\nb = vector(F, [4, 5, 0, 0, 0, 0, 0, 0])\nA, B = ntt(a), ntt(b)\nc = vector(F, intt([A[i]*B[i] for i in range(n)]))\nprint(c)                 # (4, 13, 5, 15, 0, 0, 0, 0)  (22 = 5 in GF(17))\nprint(intt(ntt(a)) == list(a))  # True",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "12_ntt",
+   "title": "Number Theoretic Transform (NTT)"
+  },
+  {
+   "listings": [
+    {
+     "code": "from random import randint\n\nq = 17\nn = 8\nk = 2",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "R.<x> = PolynomialRing(GF(q))\nRq = R.quotient(x^n + 1)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "a = Rq.random_element()\nb = Rq.random_element()\nprint(a)\nprint(b)\nprint(a*b)",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def rand_poly():\n    return Rq.random_element()\n\ndef rand_vector():\n    return vector(Rq, [rand_poly() for _ in range(k)])\n\ndef rand_matrix():\n    return Matrix(Rq, k, k, [rand_poly() for _ in range(k*k)])",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def small_poly():\n    coeffs = []\n    for _ in range(n):\n        c = randint(-1, 1)\n        coeffs.append(c % q)\n    return Rq(coeffs)\n\ndef small_vector():\n    return vector(Rq, [small_poly() for _ in range(k)])",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def keygen():\n    A = rand_matrix()\n    s = small_vector()\n    e = small_vector()\n    t = A * s + e\n    return (A, t), s",
+     "n": 6,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "(pk, sk) = keygen()\nA, t = pk\nprint(\"A =\")\nprint(A)\nprint(\"\\nSecret:\")\nprint(sk)\nprint(\"\\nPublic:\")\nprint(t)",
+     "n": 7,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def encode_bit(bit):\n    if bit == 0:\n        return Rq(0)\n    else:\n        return Rq(q // 2)",
+     "n": 8,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def encrypt(pk, bit):\n    A, t = pk\n    r = small_vector()\n    e1 = small_vector()\n    e2 = small_poly()\n    u = A.transpose() * r + e1\n    m = encode_bit(bit)\n    v = t.dot_product(r) + e2 + m\n    return (u, v)",
+     "n": 9,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def decrypt(sk, cipher):\n    u, v = cipher\n    value = v - sk.dot_product(u)\n    return value",
+     "n": 10,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def recover_bit(value):\n    c = value.list()[0]\n    d0 = min(c, q - c)\n    d1 = min((c - q//2) % q, (q//2 - c) % q)\n    return 0 if d0 < d1 else 1",
+     "n": 11,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "# Key generation\n(pk, sk) = keygen()\n\n# Encryption\nbit = 1\ncipher = encrypt(pk, bit)\n\n# Decryption\nvalue = decrypt(sk, cipher)\nprint(\"decrypted value =\", value)\nprint(\"recovered bit =\", recover_bit(value))",
+     "n": 12,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "randint(-1, 1)",
+     "n": 13,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "randint(-2, 2)",
+     "n": 14,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "randint(-5, 5)",
+     "n": 15,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "13_toy_mlkem",
+   "title": "Introduction to Kyber (ML-KEM)"
+  },
+  {
+   "listings": [
+    {
+     "code": "from random import randint\n\n\ndef cbd(eta):\n    a = 0\n    b = 0\n\n    for _ in range(eta):\n        a += randint(0, 1)\n\n    for _ in range(eta):\n        b += randint(0, 1)\n\n    return a - b",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "for _ in range(20):\n    print(cbd(2))",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "samples = [cbd(2) for _ in range(100000)]",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "from collections import Counter\nimport matplotlib.pyplot as plt\n\nsamples = [cbd(2) for _ in range(100000)]\ncnt = Counter(samples)\n\nplt.bar(cnt.keys(), cnt.values())\nplt.show()",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def small_poly(n):\n    coeff = []\n    for _ in range(n):\n        coeff.append(cbd(2))\n    return coeff",
+     "n": 5,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "14_cbd",
+   "title": "Centered Binomial Distribution (CBD) -- Why Kyber does not use Gaussian"
+  },
+  {
+   "listings": [
+    {
+     "code": "from random import Random\nfrom sage.all import GF, Matrix, PolynomialRing\n\nq = 17\nn = 8\nk = 2\nR.<x> = PolynomialRing(GF(q))\nRq = R.quotient(x^n + 1)\n\n\ndef expand_A(seed):\n    rng = Random(str(seed))\n    return Matrix(\n        Rq,\n        k,\n        k,\n        [Rq([rng.randrange(q) for _ in range(n)])\n         for _ in range(k * k)]\n    )",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "A1 = expand_A(1234)\nA2 = expand_A(1234)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "from random import randint\n\ndef cbd(eta):\n    return sum(randint(0, 1) for _ in range(eta)) - \\\n           sum(randint(0, 1) for _ in range(eta))\n\nsamples = [cbd(2) for _ in range(10000)]\nprint(sum(samples) / len(samples))",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "q = 3329\n\ndef multiply_ntt_pair(a, b, gamma):\n    a0, a1 = a\n    b0, b1 = b\n    return ((a0*b0 + gamma*a1*b1) % q,\n            (a0*b1 + a1*b0) % q)\n\n# (1 + 2X)(3 + 4X) modulo X^2 - gamma, with gamma = 17.\ngot = multiply_ntt_pair((1, 2), (3, 4), 17)\nassert got == ((3 + 17*8) % q, (4 + 6) % q)\nprint(\"one ML-KEM quadratic base product:\", got)",
+     "n": 4,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "MLKEM_n, MLKEM_q, MLKEM_zeta = 256, 3329, 17\n\nFq = GF(MLKEM_q)\nRx = PolynomialRing(Fq, 'X')\nX  = Rx.gen()\nRq = Rx.quotient(X^MLKEM_n + 1, 'x')   # coefficient domain\nTq = VectorSpace(Fq, MLKEM_n)          # NTT domain\n\nZETA  = [Fq(MLKEM_zeta)^BitRev7(i) for i in range(128)]\nGAMMA = [Fq(MLKEM_zeta)^(2*BitRev7(i) + 1) for i in range(128)]",
+     "n": 5,
+     "note": "",
+     "requires": [
+      "fips203"
+     ],
+     "runnable": true
+    },
+    {
+     "code": "def NTT(f):\n    \"\"\"Algorithm 9. Map f in Rq to its NTT representation in Tq.\"\"\"\n    fh = _coeffs(f)\n    i, length = 1, 128\n    while length >= 2:\n        for start in range(0, MLKEM_n, 2*length):\n            z = ZETA[i]; i += 1\n            for j in range(start, start + length):\n                t = z * fh[j + length]\n                fh[j + length] = fh[j] - t\n                fh[j]          = fh[j] + t\n        length //= 2\n    return vector(Fq, fh)",
+     "n": 6,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def KPKE_KeyGen(self, d):\n    \"\"\"Algorithm 13. K-PKE.KeyGen(d) -> (ek_PKE, dk_PKE).\"\"\"\n    k = self.k\n    rho, sigma = _G(bytes(d) + bytes([k]))   # domain separator k\n    N = 0\n    Ah = self._ExpandA(rho)\n    s = []\n    for _ in range(k):\n        s.append(SamplePolyCBD(self.eta1, _PRF(self.eta1, sigma, N))); N += 1\n    e = []\n    for _ in range(k):\n        e.append(SamplePolyCBD(self.eta1, _PRF(self.eta1, sigma, N))); N += 1\n    sh = [NTT(si) for si in s]\n    eh = [NTT(ei) for ei in e]\n    th = [ntt_vec_dot(Ah[i], sh) + eh[i] for i in range(k)]\n    ek = b\"\".join(ByteEncode(12, _ints(t)) for t in th) + rho\n    dk = b\"\".join(ByteEncode(12, _ints(si)) for si in sh)\n    return ek, dk",
+     "n": 7,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "15_seed_expansion",
+   "title": "Complete Implementation of ML-KEM (FIPS 203)"
+  },
+  {
+   "listings": [
+    {
+     "code": "# Toy sizes; real ML-DSA uses n=256, q=8380417.\nfrom random import Random\nfrom sage.all import GF, Matrix, PolynomialRing, vector\n\nq = 8380417\nR.<x> = PolynomialRing(GF(q))\nRq = R.quotient(x^8 + 1)  # toy ring\nrng = Random(\"mldsa-cancellation\")\n\ndef small_poly():\n    return Rq([rng.choice([-1, 0, 1]) for _ in range(8)])\n\ndef uniform_poly():\n    return Rq([rng.randrange(q) for _ in range(8)])\n\nA = Matrix(Rq, 2, 2, [uniform_poly() for _ in range(4)])\ns1 = vector(Rq, [small_poly(), small_poly()])\ns2 = vector(Rq, [small_poly(), small_poly()])\nt = A * s1 + s2\ny = vector(Rq, [uniform_poly(), uniform_poly()])\nc = small_poly()\n# For a mask y and challenge c, check the verifier's identity:\n#   A*z - c*t  ==  A*y - c*s2   (should hold exactly)\nz = y + c*s1\nassert A*z - c*t == A*y - c*s2",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "kappa = 0\nwhile True:\n    y  = self.ExpandMask(rhopp, kappa)\n    yh = [NTT(Rq(p)) for p in y]\n    w  = [NTTInverse(a) for a in MatrixVectorNTT(Ah, yh)]\n    w1 = HighBitsVec(w, self.gamma2)\n\n    ctilde = H(mu + self.w1Encode(w1), self.lam // 4)\n    c      = self.SampleInBall(ctilde)\n    ch     = NTT(Rq(c))\n\n    cs1  = [NTTInverse(MultiplyNTT(ch, a)) for a in s1h]\n    cs2  = [NTTInverse(MultiplyNTT(ch, a)) for a in s2h]\n    z    = [Rq(y[i]) + cs1[i] for i in range(self.ell)]\n    wcs2 = [w[i] - cs2[i] for i in range(self.k)]\n    r0   = LowBitsVec(wcs2, self.gamma2)\n\n    kappa += self.ell\n    if inf_norm_vec(z) >= self.gamma1 - self.beta:      # unsafe: retry\n        continue\n    if inf_norm_ints(r0) >= self.gamma2 - self.beta:\n        continue\n\n    ct0 = [NTTInverse(MultiplyNTT(ch, a)) for a in t0h]\n    h   = MakeHintVec([-p for p in ct0],\n                      [wcs2[i] + ct0[i] for i in range(self.k)],\n                      self.gamma2)\n    if inf_norm_vec(ct0) >= self.gamma2:\n        continue\n    if sum(sum(p) for p in h) > self.omega:\n        continue\n\n    return self.sigEncode(ctilde, [centered(zi) for zi in z], h)",
+     "n": 2,
+     "note": "the body of Sign_internal, quoted from the companion file -- it refers to self and returns, so it only runs as a method",
+     "requires": [],
+     "runnable": false
+    }
+   ],
+   "stem": "16_ml_dsa",
+   "title": "Complete Implementation of ML-DSA (FIPS 204)"
+  },
+  {
+   "listings": [
+    {
+     "code": "from random import Random\nfrom sage.all import GF, PolynomialRing\n\nq = 17\nn = 8\nrng = Random(\"fndsa-ntru-relation\")\nR.<x> = PolynomialRing(GF(q))\nRq = R.quotient(x^n + 1)\n\ndef small_poly():\n    return Rq([rng.choice([-1, 0, 1]) for _ in range(n)])\n\ndef small_unit():\n    f = small_poly()\n    while not f.is_unit():\n        f = small_poly()\n    return f\n\nf = small_unit()\ng = small_poly()\nh = g * f^(-1)                 # public NTRU value\nassert f * h == g               # f h = g in Rq\n\nc = Rq([rng.randrange(q) for _ in range(n)])\ns2 = small_poly()\ns1 = c - s2*h                  # verifier's reconstruction rule\nassert s1 + s2*h == c\nprint(\"NTRU public relation and verification equation hold\")",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def NTRUSolve(f, g):\n    \"\"\"Algorithm 6. Find F, G with f*G - g*F = q in Z[x]/(x^n + 1).\"\"\"\n    n = len(f)\n    if n == 1:\n        d, u, v = xgcd(ZZ(int(f[0])), ZZ(int(g[0])))\n        if d != 1:\n            return None, None\n        return [int(-FALCON_q*v)], [int(FALCON_q*u)]\n    fp, gp = field_norm(f), field_norm(g)\n    Fp, Gp = NTRUSolve(fp, gp)              # recurse in the smaller ring\n    if Fp is None:\n        return None, None\n    F = _cyclo_mul(lift(Fp), galois_conjugate(g), n)\n    G = _cyclo_mul(lift(Gp), galois_conjugate(f), n)\n    return Reduce(f, g, F, G)               # shorten F, G against f, g",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "17_fn_dsa",
+   "title": "FN-DSA (Falcon): Draft-Oriented Walkthrough"
+  },
+  {
+   "listings": [
+    {
+     "code": "from hashlib import sha256\nfrom operator import xor\n\nn = 16\npk_seed = b\"public seed for a toy tree\"\n\ndef H(label, address, data=b\"\"):\n    return sha256(pk_seed + label + address + data).digest()[:n]\n\ndef leaf(index):\n    return H(b\"leaf\", int(index).to_bytes(4, \"big\"))\n\ndef parent(left, right, level, index):\n    address = (int(level).to_bytes(1, \"big\") +\n               int(index).to_bytes(4, \"big\"))\n    return H(b\"node\", address, left + right)\n\nlevels = [[leaf(i) for i in range(8)]]\nfor level in range(3):\n    previous = levels[-1]\n    levels.append([parent(previous[2*i], previous[2*i + 1], level, i)\n                   for i in range(len(previous)//2)])\nroot = levels[-1][0]\n\nleaf_index = 5\nauth = [levels[level][xor(int(leaf_index >> level), 1)]\n        for level in range(3)]\n\ndef root_from_path(node, index, path):\n    for level, sibling in enumerate(path):\n        parent_index = index >> 1\n        node = (parent(node, sibling, level, parent_index)\n                if index % 2 == 0 else\n                parent(sibling, node, level, parent_index))\n        index >>= 1\n    return node\n\nassert root_from_path(leaf(leaf_index), leaf_index, auth) == root\nbad_auth = list(auth)\nbad_auth[0] = bytes([xor(bad_auth[0][0], 1)]) + bad_auth[0][1:]\nassert root_from_path(leaf(leaf_index), leaf_index, bad_auth) != root\nprint(\"addressed Merkle path accepts intact data and rejects a tampered path\")",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def xmss_node(self, skseed, i, z, pkseed, adrs):\n    \"\"\"Algorithm 9. Root of a Merkle subtree of WOTS+ public keys.\"\"\"\n    if z == 0:\n        adrs.setTypeAndClear(WOTS_HASH)\n        adrs.setKeyPairAddress(i)\n        return self.wots_pkGen(skseed, pkseed, adrs)\n    lnode = self.xmss_node(skseed, 2*i,     z - 1, pkseed, adrs)\n    rnode = self.xmss_node(skseed, 2*i + 1, z - 1, pkseed, adrs)\n    adrs.setTypeAndClear(TREE)\n    adrs.setTreeHeight(z)\n    adrs.setTreeIndex(i)\n    return self._H(pkseed, adrs, lnode + rnode)",
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    },
+    {
+     "code": "def ht_sign(self, M, skseed, pkseed, idxtree, idxleaf):\n    \"\"\"Algorithm 12. A hypertree signature: d chained XMSS signatures.\"\"\"\n    adrs = ADRS()\n    adrs.setTreeAddress(idxtree)\n    SIGtmp = self.xmss_sign(M, skseed, idxleaf, pkseed, adrs)\n    SIG_HT = SIGtmp\n    root   = self.xmss_pkFromSig(idxleaf, SIGtmp, M, pkseed, adrs)\n    for j in range(1, self.d):\n        idxleaf = idxtree % (1 << self.hp)   # low h' bits\n        idxtree = idxtree >> self.hp\n        adrs.setLayerAddress(j)\n        adrs.setTreeAddress(idxtree)\n        SIGtmp  = self.xmss_sign(root, skseed, idxleaf, pkseed, adrs)\n        SIG_HT += SIGtmp\n        if j < self.d - 1:\n            root = self.xmss_pkFromSig(idxleaf, SIGtmp, root, pkseed, adrs)\n    return SIG_HT",
+     "n": 3,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "20_slh_dsa",
+   "title": "SLH-DSA (SPHINCS+, FIPS 205): Algorithm Walkthrough"
+  },
+  {
+   "listings": [
+    {
+     "code": "F.<a> = GF(2^4)\nPR.<x> = F[]\ng = x^2 + x + a\nwhile not g.is_irreducible():\n    g = x^2 + F.random_element()*x + F.random_element()\nassert g.is_irreducible()\nL = [b for b in F if g(b) != 0]     # support: exclude any roots of g\nn = len(L)\n\nfrom sage.coding.goppa_code import GoppaCode\nC = GoppaCode(g, L)\nprint(C)                            # a binary [n, k] Goppa code\nprint(C.dimension(), n - g.degree() * F.degree())   # k  vs  n - m t",
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true
+    }
+   ],
+   "stem": "28_goppa_appendix",
+   "title": "Binary Goppa Codes"
+  }
+ ]
+}
