@@ -1,0 +1,44 @@
+<!-- Sage Cell embed.  Loaded only on the playground page. -->
+<script src="https://sagecell.sagemath.org/static/embedded_sagecell.js"></script>
+<script>
+  // The script defers its own jQuery setup, so wait for the DOM either way.
+  (function () {
+    function init() {
+      if (typeof sagecell === "undefined") { return; }
+      sagecell.makeSagecell({
+        inputLocation: "div.sage",
+        evalButtonText: "Run",
+        hide: ["permalink"]
+      });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+</script>
+<style>
+  /* Keep the injected editors inside the site's column and colour scheme. */
+  div.sage { margin: 1.25rem 0; }
+  div.sage .CodeMirror {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    font-size: 14px;
+    height: auto;
+  }
+  .sagecell_evalButton {
+    background: var(--accent) !important;
+    color: var(--accent-fg) !important;
+    border: 0 !important;
+    border-radius: 6px !important;
+    padding: 0.4rem 1rem !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+  }
+  .sagecell_output_elements pre, .sagecell_sessionOutput {
+    background: var(--code-bg);
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+</style>

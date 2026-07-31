@@ -60,6 +60,59 @@ places most likely to be respecified by FIPS 206 — the key and signature
 encodings, and the domain separation of the hashed message — are marked
 `FIPS 206 note` in the source.
 
+## Installing SageMath
+
+The quickest option is not to install anything: every implementation runs in a
+browser at <https://appliedpqc.io/playground.html>. A local Sage is needed only
+for the test suite and for the parameter sets too slow for a sandbox — Falcon
+key generation and signing under the SLH-DSA `s` sets.
+
+### conda-forge — any platform, recommended
+
+```bash
+conda create -n sage -c conda-forge sage
+conda activate sage
+```
+
+This installs SageMath 10.9 and takes about two minutes. The package is named
+`sage`; there is no `sagemath-standard` package on conda-forge.
+
+### Docker — nothing installed on the host
+
+```bash
+docker run --rm --entrypoint bash \
+    -v "$PWD:/home/sage/work" -w /home/sage/work \
+    sagemath/sagemath:10.9 -lc 'sage test_kat.sage'
+```
+
+Two things bite here, and both fail quietly rather than loudly:
+
+* the image sets an `ENTRYPOINT`, so **without `--entrypoint bash` you land in
+  the interactive REPL** and the script never runs;
+* the mount must be **writable** — `sage foo.sage` writes a preparsed
+  `foo.sage.py` beside the source, so a `:ro` mount produces no output and no
+  error.
+
+The full suite passes in this image: 462 checks, 0 failures, about five
+minutes.
+
+### Distribution and platform packages
+
+```bash
+sudo apt install sagemath      # Debian, Ubuntu -- Sage 9.5
+brew install --cask sage       # macOS -- Sage 10.9
+```
+
+Debian and Ubuntu ship Sage 9.5, released in 2022 and well behind
+conda-forge's 10.9. All four implementations were checked against 9.5 and work,
+so the distribution package is fine if you prefer it. On Windows, install WSL2
+and use conda-forge or `apt` inside the Linux environment.
+
+### Minimum version
+
+SageMath **9.5 or newer**. The code has been run on 9.5, on 10.8 (the version
+behind the browser playground) and on 10.9.
+
 ## Running the tests
 
 ```bash

@@ -203,13 +203,15 @@ an arbitrary small $s_2$ as above is not an FN-DSA signing algorithm.
 \label{sec:fips206-impl}
 
 The experiment above stops exactly where the difficulty starts. The
-companion file \texttt{sage/fips206\_fndsa.sage} goes the rest of the way:
+companion file \sagefile{fips206\_fndsa.sage} goes the rest of the way:
 all eighteen numbered algorithms of the Falcon specification, at $n=512$ and
 $n=1024$ -- the FFT over the complex tower, \textsc{NTRUGen} with the
 tower-recursive NTRU solver, the LDL\textsuperscript{$\star$} decomposition
 and the Falcon tree, fast Fourier sampling with the isochronous discrete
 Gaussian sampler, signing, verification, and the compressed signature and key
 encodings.
+
+\playground{the sampler and FFT checks, and signing and verification from a stored key; only \textsc{NTRUGen} is too slow for a sandbox}
 
 \paragraph{Which specification the code follows.}
 This matters more here than in the other three chapters. At the book's
@@ -264,7 +266,7 @@ the implementation keeps them in separate, explicitly named Sage domains:
   \item the NTRU solver runs over \texttt{ZZ['x']}, so the trapdoor equation
         $fG-gF=q$ is established \emph{exactly} rather than up to floating
         point -- \texttt{verify\_ntru\_equation()}, at the end of
-        \texttt{sage/fips206\_fndsa.sage}, checks it as an identity
+        \sagefile{fips206\_fndsa.sage}, checks it as an identity
         in $\mathbb{Z}[x]/(x^n+1)$;
   \item the public key and the verification relation
         $s_1 = c - s_2 h$ are computed in

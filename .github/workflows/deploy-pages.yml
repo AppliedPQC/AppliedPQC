@@ -82,6 +82,17 @@ jobs:
             --include-in-header=.github/pages/head.html \
             --include-before-body=.github/pages/before-body.html \
             --output=site/index.html
+          # The runnable playground.  Same template and chrome; the extra
+          # header include pulls in the Sage Cell embed.
+          pandoc .github/pages/playground.md \
+            --from=gfm --to=html5 --standalone \
+            --template=.github/pages/template.html \
+            --variable=pagetitle="Playground -- Applied Post-Quantum Cryptography" \
+            --variable=lang=en \
+            --include-in-header=.github/pages/head.html \
+            --include-in-header=.github/pages/playground-head.html \
+            --include-before-body=.github/pages/playground-before-body.html \
+            --output=site/playground.html
           touch site/.nojekyll
 
       - name: Check the rendered site
@@ -101,7 +112,21 @@ jobs:
             exit 1
           fi
           test "$(grep -c 'name=\"viewport\"' site/index.html)" = "1"
+          grep -q 'href="playground.html"' site/index.html
+          # The playground is worthless if the Sage Cell embed or the cells
+          # themselves fail to render, so assert both.
+          test -s site/playground.html
+          grep -q 'embedded_sagecell.js' site/playground.html
+          cells="$(grep -c 'type="text/x-sage"' site/playground.html)"
+          test "$cells" -ge 8 || {
+            echo "::error::only $cells Sage cells rendered; raw HTML was mangled"
+            exit 1
+          }
+          # Every cell bootstraps from raw.githubusercontent.com; a cell that
+          # lost that line would silently fail for every visitor.
+          test "$(grep -c 'sage/playground.py' site/playground.html)" -ge 8
           echo "landing page: $(wc -c < site/index.html) bytes, PDF: $(wc -c < site/apqc.pdf) bytes"
+          echo "playground: $(wc -c < site/playground.html) bytes, $cells cells"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

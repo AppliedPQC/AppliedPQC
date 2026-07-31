@@ -61,3 +61,14 @@
            {\MakeUppercase{\ifnum \c@secnumdepth >\m@ne \@chapapp\ \thechapter.\ \fi #1}}%
 }
 \makeatother
+
+% Reference to a companion Sage file, hyperlinked to the repository.
+\newcommand{\sagerepo}{https://github.com/AppliedPQC/AppliedPQC/blob/main/sage}
+\newcommand{\sagefile}[1]{\href{\sagerepo/#1}{\texttt{sage/#1}}}
+
+% Pointer to the browser-runnable version of the companion Sage code.
+\newcommand{\playgroundurl}{https://appliedpqc.io/playground.html}
+\newcommand{\playground}[1]{%
+  \smallskip\noindent\emph{Run it in a browser:} #1. See
+  \href{\playgroundurl}{appliedpqc.io/playground.html} --- nothing to install.}
+
