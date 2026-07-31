@@ -263,7 +263,8 @@ the implementation keeps them in separate, explicitly named Sage domains:
 \begin{itemize}
   \item the NTRU solver runs over \texttt{ZZ['x']}, so the trapdoor equation
         $fG-gF=q$ is established \emph{exactly} rather than up to floating
-        point -- \texttt{verify\_ntru\_equation()} checks it as an identity
+        point -- \texttt{verify\_ntru\_equation()}, at the end of
+        \texttt{sage/fips206\_fndsa.sage}, checks it as an identity
         in $\mathbb{Z}[x]/(x^n+1)$;
   \item the public key and the verification relation
         $s_1 = c - s_2 h$ are computed in
@@ -274,7 +275,8 @@ the implementation keeps them in separate, explicitly named Sage domains:
         change the sampler's output distribution.
 \end{itemize}
 
-The function \texttt{verify\_fft\_against\_exact\_ring()} closes the loop
+The function \texttt{verify\_fft\_against\_exact\_ring()}, in the same file,
+closes the loop
 between the first and third of these, checking that pointwise multiplication
 in the FFT domain reproduces the product Sage computes exactly in
 $\mathbb{Z}[x]/(x^n+1)$.

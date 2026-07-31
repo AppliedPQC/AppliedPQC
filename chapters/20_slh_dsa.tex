@@ -273,7 +273,8 @@ def ht_sign(self, M, skseed, pkseed, idxtree, idxleaf):
 SLH-DSA is built from hash functions alone, so unlike ML-KEM and ML-DSA there
 is no ring here for a computer-algebra system to check the code against.
 What Sage supplies instead is exact integer reasoning about the
-combinatorics. The file's \texttt{verify\_parameter\_consistency()}
+combinatorics. The function \texttt{verify\_parameter\_consistency()} at the
+end of \texttt{sage/fips205\_slhdsa.sage}
 re-derives Table~2 from the defining equations for all twelve parameter sets:
 that $h = d\cdot h'$, so the hypertree really has $2^{h}$ leaves; that the
 checksum length $len_2$ produced by Algorithm~1 agrees with the closed form
