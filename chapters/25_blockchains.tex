@@ -1,4 +1,4 @@
-\chapter{Post-Quantum Migration of Bitcoin, Ethereum and Cosmos}
+\chapter{Post-Quantum Migration of Blockchains}
 \label{ch:blockchains}
 \chaptermark{Post-Quantum Migration of Blockchains}
 
@@ -11,6 +11,8 @@ After reading this chapter, you should be able to:
 \begin{itemize}
   \item explain which blockchain primitives a quantum computer breaks (Shor) versus merely weakens (Grover), and the public-key-exposure principle;
   \item describe Bitcoin's exposure by output type and the current draft proposals (BIP-360, BIP-361);
+  \item inventory the cryptographic surfaces of a layer 2 by \emph{who can fix each one};
+  \item explain why a hash-based or symmetric layer does not make a system post-quantum, and what to ask instead;
   \item describe Ethereum's exposure and its two-front plan: an emergency hard fork and account-abstraction-based migration;
   \item weigh the central controversy -- whether to freeze quantum-vulnerable coins -- and the honest uncertainty in the timeline.
 \end{itemize}
@@ -75,6 +77,7 @@ must distinguish blob retention from commitment binding, proof verification, and
 consensus dependencies; blob pruning alone does not make the risk mild.
 
 \subsection{The two-front plan}
+\label{sec:eth-two-front}
 Ethereum's response has an emergency track and a structural track; nothing post-quantum has yet shipped to mainnet.
 
 \paragraph{The quantum-emergency hard fork.}
@@ -171,6 +174,114 @@ breaks at the moment of upgrade, only later, when a connection that used to
 carry packets stops doing so. Any multi-chain migration plan needs a sequencing
 story, and no published one yet covers a large IBC graph.
 
+
+\section{Layer 2s: the composition problem}
+\label{sec:l2-composition}
+
+The three chains above each migrate one system. A \emph{layer 2} does not have
+that luxury. A rollup or sidechain that settles to Bitcoin is a composition of
+systems designed separately, migrating on separate timelines, owned by separate
+parties: it settles to a base layer it cannot change, usually borrows a
+consensus stack from a third ecosystem, and operates a bridge whose trust root
+is cryptography of its own choosing~\cite{btcl2pqc}.
+
+That composition changes the question. For a single chain one may sensibly ask
+``when will it be post-quantum?'' For a layer 2 the only answerable question is
+\emph{which surfaces do we own, and what is the residual risk on the rest?}
+Table~\ref{tab:l2-surfaces} is the inventory that question needs.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{3.6cm}p{4.3cm}p{2.0cm}p{3.6cm}@{}}
+\toprule
+Surface & Typical scheme & Shor? & Who can fix it \\
+\midrule
+L1 settlement outputs & secp256k1 / Schnorr & yes & \textbf{base layer only} \\
+Bridge operator keys & secp256k1, Schnorr, BLS & yes & the L2 \\
+Bridge proof system & Groth16/PLONK, or STARK & \emph{check inside} & the L2, often with upstream \\
+Bridge commitments & Merkle, Winternitz & \textbf{no} & already safe \\
+L2 consensus keys & ed25519, BLS12-381 & yes & the L2's consensus stack \\
+EVM crypto precompiles & \texttt{ecrecover}, BN254 pairing, KZG & yes & \textbf{upstream; unmigratable} \\
+\bottomrule
+\end{tabular}
+\caption{Cryptographic surfaces of a Bitcoin layer 2, keyed on \emph{who can fix each one}. The ownership column, not the scheme column, is what determines a migration plan.}
+\label{tab:l2-surfaces}
+\end{table}
+
+\subsection{Symmetric plumbing does not make a system post-quantum}
+The most useful lesson from auditing such a stack is a negative one, and it
+generalizes well beyond blockchains: \textbf{a hash-based or symmetric layer
+protects only what it carries.}
+
+Three instances of the same mistake, all from one real bridge:
+\begin{itemize}
+  \item Bitcoin-side bit commitments implemented as \textbf{Winternitz one-time
+        signatures} (Chapter~\ref{ch:hashots}) --- hash-based, and genuinely
+        post-quantum --- were committing the elements of a \emph{Groth16 proof
+        over a pairing-friendly curve}. The commitment survives Shor; the thing
+        committed does not.
+  \item A \textbf{garbled-circuit} evaluator, built from AES and a hash
+        function and therefore symmetric throughout, was garbling a
+        \emph{Groth16 verifier}. Garbling changes how the verifier executes, not
+        what it asserts.
+  \item A \textbf{FRI-based STARK}, whose polynomial commitment is hash-based,
+        used an \emph{elliptic-curve multiset hash} for its offline
+        memory-consistency argument. A quantum adversary never attacks FRI; it
+        forges the memory check~\cite{ziren276}.
+\end{itemize}
+
+In each case a correct statement --- ``this layer is hash-based'' --- supported a
+false conclusion. The habit to build is to ask what a layer \emph{carries}, and
+to keep asking until the answer is a hardness assumption rather than a
+primitive.
+
+\subsection{``It is a STARK'' is not an answer}
+The third instance deserves emphasis because it is the least obvious. A proof
+system is not one assumption but several, and the headline commitment scheme is
+only the most visible. Permutation arguments, lookup arguments and offline
+memory checks are all places where an elliptic-curve accumulator can sit inside
+an otherwise hash-based system.
+
+The concrete example is a zkVM whose multiset hash mapped memory values to
+curve points, so that soundness of the memory argument rested explicitly on
+discrete log --- documented by the project itself, with the fix being a
+lattice-based multiset hash (LtHash) in the sense of~\cite{zisklthash}, and a
+working prototype~\cite{ziren276}. The encouraging part of that story is that
+the fix is a \emph{primitive swap inside an existing argument}, not an
+architectural change. The cautionary part is that the exposure was visible only
+in the project's own issue tracker, not in its dependency list.
+
+\subsection{The exposure that cannot be migrated}
+One row of Table~\ref{tab:l2-surfaces} behaves unlike the others. An account can
+adopt a new signature scheme because its owner opts in. A \emph{precompile}
+cannot: on an EVM chain the elliptic-curve and pairing precompiles
+(\texttt{ecrecover}, the BN254 group and pairing operations, the BLS12-381 suite,
+KZG point evaluation) are consensus rules, and the contracts that call them are
+immutable bytecode. Every on-chain SNARK verifier calls the pairing precompile;
+that code cannot be upgraded, and generally nobody has the authority to upgrade
+it.
+
+So this exposure is fixed at deployment time. After a chain is live, the only
+available action is an \emph{inventory} --- which deployed contracts depend on
+which precompile, and which of those are consensus- or bridge-critical --- and
+that inventory is worth doing early, because an immutable caller can be
+identified now but never migrated later.
+
+\subsection{Aggregation is the hardest thing to replace}
+A bridge or consensus layer that aggregates signatures gets a large constant
+factor from BLS: many signatures verify as one. No standardized post-quantum
+signature aggregates. ML-DSA and SLH-DSA have no aggregation, so a naive
+replacement turns one signature into $N$, each one to two orders of magnitude
+larger than what it replaced --- for a committee of twenty ML-DSA-65 signers,
+tens of kilobytes where there were tens of bytes.
+
+This is the same wall Ethereum hit at the consensus layer, and the reason its
+answer is a hash-based signature scheme aggregated inside a zkVM rather than a
+drop-in replacement (Section~\ref{sec:eth-two-front}). Any system whose design
+depends on aggregation should expect its post-quantum migration to be an
+architectural project, not a key-type change.
+
 \section{Timelines and honest uncertainty}
 No quantum computer capable of breaking secp256k1 or BLS12-381 exists as of mid-2026.
 A 2026 arXiv preprint, not a consensus survey, gives one set of model-dependent
@@ -196,7 +307,11 @@ Blockchains sharpen the quantum threat and complicate the response:
   \item the danger is to signatures (Shor), not hashing (Grover); an exposed public key on an immutable ledger is a permanent, ``store now, steal later'' liability;
   \item \textbf{Bitcoin} proposes a new quantum-hardened output type (BIP-360) and a contested legacy-signature sunset (BIP-361), both draft soft forks;
   \item \textbf{Ethereum} pairs an emergency hard fork with STARK-based hash-preimage recovery and an account-abstraction migration path (EIP-7702 shipped, EIP-8141 draft), targeting first-layer post-quantum infrastructure around 2029;
-  \item the timeline is uncertain but the required lead time is long, which is why both communities are debating the transition years before any quantum computer can execute the attack.
+  \item \textbf{Cosmos} has gone furthest in shipped code, registering ML-DSA-65 as an opt-in validator consensus key type, at $60\times$ the key size and $50\times$ the signature size of ed25519;
+  \item a \textbf{layer 2} inherits all of these at once and can fix only some of them, so its plan must be organized by \emph{ownership} of each surface rather than by scheme;
+  \item a symmetric or hash-based layer protects only what it \emph{carries}: Winternitz commitments, garbled circuits and FRI commitments have all been found wrapping elliptic-curve assertions, and a proof system can hide a discrete-log dependency in an argument that is not its headline commitment scheme;
+  \item some exposures cannot be migrated at all --- an EVM pairing precompile has immutable callers, so it can be inventoried but never upgraded --- and aggregation has no post-quantum drop-in, which is why replacing BLS is an architectural project;
+  \item the timeline is uncertain but the required lead time is long, which is why these communities are debating the transition years before any quantum computer can execute the attack.
 \end{itemize}
 
 This is where cryptographic theory meets the messiest realities of deployment -- immutable history, decentralized governance, and irreversible loss -- and it is a fitting place to close: the mathematics is ready, and the harder work of migrating the systems that depend on it has only begun.
