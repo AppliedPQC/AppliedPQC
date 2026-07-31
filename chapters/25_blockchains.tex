@@ -1,9 +1,9 @@
-\chapter{Post-Quantum Migration of Bitcoin and Ethereum}
+\chapter{Post-Quantum Migration of Bitcoin, Ethereum and Cosmos}
 \label{ch:blockchains}
 \chaptermark{Post-Quantum Migration of Blockchains}
 
 \section{Why this chapter matters}
-Blockchains are one of the hardest post-quantum migration problems in existence, for two reasons the previous chapter only touched. First, the funds are secured by \emph{signatures} whose public keys are, sooner or later, \emph{permanently public} on an immutable ledger -- so ``harvest now, decrypt later'' becomes a much sharper ``store now, steal later.'' Second, there is no administrator: changing the rules of Bitcoin or Ethereum is a governance problem settled by rough consensus and forks, not a software update pushed to servers. This chapter looks at how the two largest chains are actually approaching the transition, as of mid-2026. Everything here is a moving target: the concrete proposals are drafts, not deployed consensus, and the reader should treat dates and statuses as a snapshot.
+Blockchains are one of the hardest post-quantum migration problems in existence, for two reasons the previous chapter only touched. First, the funds are secured by \emph{signatures} whose public keys are, sooner or later, \emph{permanently public} on an immutable ledger -- so ``harvest now, decrypt later'' becomes a much sharper ``store now, steal later.'' Second, there is no administrator: changing the rules of Bitcoin or Ethereum is a governance problem settled by rough consensus and forks, not a software update pushed to servers. This chapter looks at how three ecosystems are actually approaching the transition, as of mid-2026: Bitcoin and Ethereum, the two largest, and Cosmos, which is furthest along in shipped code. Everything here is a moving target: the concrete proposals are drafts, not deployed consensus, and the reader should treat dates and statuses as a snapshot.
 
 \section{Learning goals}
 After reading this chapter, you should be able to:
@@ -81,7 +81,7 @@ Ethereum's response has an emergency track and a structural track; nothing post-
 Vitalik Buterin's proposal ``How to hard-fork to save most users' funds in a quantum emergency''~\cite{buterinquantum2024} is the contingency plan. On evidence of large-scale theft, the chain would revert to the last pre-theft block, freeze legacy ECDSA accounts, and let users recover funds through a new transaction type carrying a \emph{STARK proof} that the sender knows the hash preimage secret behind their address -- authenticating by knowledge of a hash preimage rather than by an ECDSA signature. Because most users' recovery secret was never exposed on chain, this protects the majority, at the cost of a wallet-software update. Buterin notes the infrastructure could in principle be built now.
 
 \paragraph{Account abstraction as the migration vehicle.}
-The structural plan is to let accounts choose their own signature scheme. \textbf{EIP-7702} (``Set Code for EOAs,'' \emph{Final}, shipped in the 2025 Pectra upgrade)~\cite{eip7702} lets an externally-owned account delegate to contract code, turning it into a smart account with arbitrary verification logic -- although 7702 authorizations are themselves secp256k1-signed, so it is a stepping stone, not itself a post-quantum migration. The dedicated vehicle is \textbf{EIP-8141} (``Frame Transaction,'' \emph{Draft}, 2026, co-authored by Buterin)~\cite{eip8141}, which explicitly describes native account abstraction as ``a native off-ramp \dots{} to post-quantum secure systems,'' supporting a slot for an arbitrary (custom, post-quantum) signature scheme alongside the classical ones. At the consensus layer, the plan is to replace BLS aggregation with a hash-based signature of the XMSS/Winternitz family (Chapter~\ref{ch:hashots}), aggregated inside a STARK-based zero-knowledge virtual machine, and to move KZG commitments to STARK- or lattice-based alternatives; the Ethereum Foundation's stated assessment targets first-layer post-quantum infrastructure around 2029~\cite{ethpqroadmap}.
+The structural plan is to let accounts choose their own signature scheme. \textbf{EIP-7702} (``Set Code for EOAs,'' \emph{Final}, shipped in the 2025 Pectra upgrade)~\cite{eip7702} lets an externally-owned account delegate to contract code, turning it into a smart account with arbitrary verification logic -- although 7702 authorizations are themselves secp256k1-signed, so it is a stepping stone, not itself a post-quantum migration. The dedicated vehicle is \textbf{EIP-8141} (``Frame Transaction,'' \emph{Draft}, 2026, co-authored by Buterin)~\cite{eip8141}, which explicitly describes native account abstraction as ``a native off-ramp \dots{} to post-quantum secure systems,'' supporting a slot for an arbitrary (custom, post-quantum) signature scheme alongside the classical ones. At the consensus layer, the plan is to replace BLS aggregation with a hash-based signature of the XMSS/Winternitz family (Chapter~\ref{ch:hashots}), aggregated inside a purpose-built zero-knowledge virtual machine. Both pieces exist as public prototypes: \texttt{leanVM}, which describes itself as a ``minimal hash-based zkVM, for a Post-Quantum Ethereum,'' and \texttt{leanSig}, a Rust implementation of the proposed signature scheme whose README states plainly that it is unaudited and not for production~\cite{leanvm}, and to move KZG commitments to STARK- or lattice-based alternatives; the Ethereum Foundation's stated assessment targets first-layer post-quantum infrastructure around 2029~\cite{ethpqroadmap}.
 
 \subsection{On-chain verification, revisited}
 The structural migration path may introduce post-quantum signature verification on
@@ -93,21 +93,83 @@ details, including code commit and measurement date, before comparing gas figure
 \begin{table}[H]
 \centering
 \small
-\begin{tabular}{@{}p{2.9cm}p{4.7cm}p{5.6cm}@{}}
+\begin{tabular}{@{}p{2.5cm}p{3.6cm}p{4.0cm}p{4.0cm}@{}}
 \toprule
- & \textbf{Bitcoin} & \textbf{Ethereum} \\
+ & \textbf{Bitcoin} & \textbf{Ethereum} & \textbf{Cosmos} \\
 \midrule
-Fund-securing signature & ECDSA / Schnorr (secp256k1) & ECDSA (accounts); BLS12-381 (consensus) \\
-Exposed today & P2PK, reused P2PKH, Taproot key-path & any account that has sent a transaction \\
-Migration vehicle & new PQ output type (BIP-360) & account abstraction (EIP-7702, EIP-8141) \\
-Emergency plan & legacy-signature sunset (BIP-361) & emergency hard fork with STARK recovery \\
-Fork style & soft fork & protocol upgrades / emergency hard fork \\
-Status (mid-2026) & Draft BIPs, not activated & research; one AA piece shipped; PQ infra $\sim$2029 \\
+Hardest constraint & governance & signature size at validator scale & heterogeneity across chains \\
+Fund-securing signature & ECDSA / Schnorr (secp256k1) & ECDSA (accounts); BLS12-381 (consensus) & ed25519 (consensus) \\
+Exposed today & P2PK, reused P2PKH, Taproot key-path & any account that has sent a transaction & validator keys; account keys \\
+PQ scheme chosen & \textbf{none yet} & hash-based (XMSS/Winternitz family) & \textbf{ML-DSA-65} (FIPS 204) \\
+Migration vehicle & new output type (BIP-360) & account abstraction; zkVM aggregation & opt-in key type $+$ key rotation \\
+Emergency plan & legacy-signature sunset (BIP-361) & emergency hard fork with STARK recovery & per-chain governance \\
+Fork style & soft fork & protocol upgrades / emergency hard fork & per-chain, genesis parameter \\
+Status (mid-2026) & Draft BIPs, not activated & prototypes, unaudited; PQ infra $\sim$2029 & \textbf{shipped in SDK v0.55}, off by default \\
 \bottomrule
 \end{tabular}
-\caption{Bitcoin and Ethereum post-quantum migration at a glance, as of mid-2026. Both chains face the same exposure principle but respond with different mechanisms and governance styles, and in both cases the concrete post-quantum proposals are drafts rather than deployed consensus.}
+\caption{Post-quantum migration at a glance, as of mid-2026. The three ecosystems share one physical fact -- post-quantum signatures are one to two orders of magnitude larger than what they replace -- but their binding constraints differ, and so do their mechanisms. Note that progress inverts exposure: Bitcoin, with the sharpest exposure, has specified no post-quantum signature scheme, while Cosmos has one in shipped code.}
 \label{tab:chain-migration}
 \end{table}
+
+
+\section{Cosmos}
+
+Bitcoin and Ethereum are the chains the quantum discussion usually names, and on
+both of them the post-quantum work is still a proposal. It is therefore worth
+looking at the ecosystem that has gone furthest in shipped code, because it is
+not either of them.
+
+\subsection{An opt-in post-quantum consensus key}
+Cosmos SDK v0.55 registers \textbf{ML-DSA-65} (FIPS~204, Chapter~\ref{ch:mldsa})
+as a supported validator consensus key type~\cite{cosmossdkpq}. This is code in
+the tree, not a draft: the \texttt{cosmos.crypto.mldsa65} proto package, the
+Amino routes, and an \texttt{x/auth} signature-verification cost parameter all
+ship enabled, and the \texttt{init} and \texttt{testnet} commands accept
+\texttt{-{}-consensus-key-algo ml\_dsa\_65}.
+
+What ships enabled is the \emph{capability}, not the change.
+\texttt{genesis.consensus\_params.validator.pub\_key\_types} still defaults to
+\texttt{["ed25519"]}, so an existing chain is unaffected until its own
+governance adds the new type. Because validator consensus key \emph{rotation}
+ships in the same release, an existing chain can adopt post-quantum keys by
+adding the type and having validators rotate, rather than by starting a new
+genesis. That is a materially gentler migration path than a flag day.
+
+\subsection{What the size actually costs}
+The operational consequences are stated plainly, and they are the same physical
+fact that shapes every roadmap in this chapter: an ML-DSA-65 public key is
+\textbf{1952 bytes} against ed25519's 32, and a signature is \textbf{3309 bytes}
+against 64 -- roughly $60\times$ and $50\times$. CometBFT's maximum signature
+size and per-validator commit-signature budget had to be raised to fit them, and
+chains enabling the type are told to revisit their block size and gossip framing
+limits. Every validator signs every block, so this lands squarely on the
+consensus hot path.
+
+These two numbers are exactly what FIPS~204 prescribes for ML-DSA-65, and the
+reader can confirm them rather than take them on trust: the implementation of
+Chapter~\ref{ch:mldsa} derives both from the parameter set,
+\[
+|pk| = 32 + 32k(\mathrm{bitlen}(q-1) - d) = 1952,
+\]
+with the signature length following from $\lambda$, $\ell$, $\gamma_1$, $\omega$
+and $k$ in the same way.
+
+\subsection{The interoperability hazard}
+Cosmos surfaces a migration problem that a single monolithic chain never
+encounters, and it is the most transferable lesson in this chapter. IBC light
+clients on a \emph{counterparty} chain verify your validator set's commit
+signatures using the counterparty's own compiled-in cryptography. If validators
+holding sufficient voting power start signing with a key type a counterparty
+cannot verify, headers fail verification there, packet flow with that chain
+stops, and the light client eventually expires~\cite{cosmossdkpq}. The
+counterparty needs only the verification code, not the key type itself -- but it
+does need it, \emph{first}.
+
+In an interoperable ecosystem, then, post-quantum migration is a coordination
+problem before it is a cryptographic one, and its failure mode is quiet: nothing
+breaks at the moment of upgrade, only later, when a connection that used to
+carry packets stops doing so. Any multi-chain migration plan needs a sequencing
+story, and no published one yet covers a large IBC graph.
 
 \section{Timelines and honest uncertainty}
 No quantum computer capable of breaking secp256k1 or BLS12-381 exists as of mid-2026.
