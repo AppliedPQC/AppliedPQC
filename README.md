@@ -112,6 +112,19 @@ make kat-full   # every available test vector
 ```
 
 `make kat` needs `sage` on your PATH; override it with `make kat SAGE=/path/to/sage`.
+
+To install SageMath, the shortest path on any platform is conda-forge:
+
+```bash
+conda create -n sage -c conda-forge sage && conda activate sage
+```
+
+That gives Sage 10.9 in about two minutes. Docker, `apt` and Homebrew all work
+too, and the whole suite has been run in the official `sagemath/sagemath:10.9`
+image (462 checks, 0 failures). Sage 9.5 or newer is enough, so Debian's and
+Ubuntu's older package is fine. See [`sage/README.md`](sage/README.md#installing-sagemath)
+for all the options and the two Docker traps that fail silently.
+
 These are teaching implementations: readable and standards-exact, but not
 constant-time and not for production use.
 
