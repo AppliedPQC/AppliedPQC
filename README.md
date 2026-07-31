@@ -94,3 +94,12 @@ make kat-full   # every available test vector
 `make kat` needs `sage` on your PATH; override it with `make kat SAGE=/path/to/sage`.
 These are teaching implementations: readable and standards-exact, but not
 constant-time and not for production use.
+
+## More from Applied PQC
+
+- **[awesome-pqc](https://github.com/AppliedPQC/awesome-pqc)** — an
+  implementation-first, link-verified list of post-quantum cryptography
+  resources: standards, conformance test vectors, libraries, and deployment.
+  Every link is checked on a schedule, so the list does not quietly rot.
+
+Everything lives under [github.com/AppliedPQC](https://github.com/AppliedPQC).
