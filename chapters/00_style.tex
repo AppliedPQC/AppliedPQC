@@ -61,3 +61,7 @@
            {\MakeUppercase{\ifnum \c@secnumdepth >\m@ne \@chapapp\ \thechapter.\ \fi #1}}%
 }
 \makeatother
+
+% Reference to a companion Sage file, hyperlinked to the repository.
+\newcommand{\sagerepo}{https://github.com/AppliedPQC/AppliedPQC/blob/main/sage}
+\newcommand{\sagefile}[1]{\href{\sagerepo/#1}{\texttt{sage/#1}}}

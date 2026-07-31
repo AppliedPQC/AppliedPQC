@@ -303,7 +303,7 @@ Then repeat with several masks and count how often $\|\mathbf{z}\|_\infty$ excee
 \label{sec:fips204-impl}
 
 The cancellation check above is a fragment. The companion file
-\texttt{sage/fips204\_mldsa.sage} is the whole standard: all forty-nine
+\sagefile{fips204\_mldsa.sage} is the whole standard: all forty-nine
 numbered algorithms of FIPS~204, each as its own function annotated with its
 algorithm number, for ML-DSA-44, 65, and 87. That includes the parts this
 chapter has treated as black boxes -- \textsc{ExpandA}, \textsc{ExpandS},
@@ -369,7 +369,7 @@ genuinely fresh mask.
 
 \paragraph{Checking the transform against the algebra.}
 The function \texttt{verify\_ntt\_is\_a\_ring\_isomorphism()} at the end of
-\texttt{sage/fips204\_mldsa.sage} -- a namesake of the ML-KEM check of
+\sagefile{fips204\_mldsa.sage} -- a namesake of the ML-KEM check of
 Chapter~\ref{ch:fips203}, but over a different ring -- uses Sage to
 confirm that $\mathrm{NTT}^{-1}$ inverts $\mathrm{NTT}$; that the $j$-th NTT
 coefficient is the evaluation $w(\zeta^{2\,\mathrm{BitRev8}(j)+1})$, which is

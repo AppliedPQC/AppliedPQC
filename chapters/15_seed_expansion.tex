@@ -600,7 +600,7 @@ test vectors.
 \label{sec:fips203-impl}
 
 The experiments above illustrate individual pieces. The companion file
-\texttt{sage/fips203\_mlkem.sage} assembles all of them into a complete,
+\sagefile{fips203\_mlkem.sage} assembles all of them into a complete,
 byte-exact implementation of FIPS~203: every one of the standard's
 twenty-one numbered algorithms appears as its own function, named after the
 standard and annotated with its algorithm number, for all three parameter
@@ -676,7 +676,7 @@ wrong one yields an unrelated key.
 Because $R_q$ is a real Sage ring, the hand-rolled transform can be checked
 against the algebra it claims to implement rather than merely against itself.
 The function \texttt{verify\_ntt\_is\_a\_ring\_isomorphism()}, defined at the
-end of \texttt{sage/fips203\_mlkem.sage}, confirms three
+end of \sagefile{fips203\_mlkem.sage}, confirms three
 things using Sage's own arithmetic as the oracle: that $\mathrm{NTT}^{-1}$
 inverts $\mathrm{NTT}$; that the $i$-th output coefficient pair really is
 $f \bmod (X^2-\gamma_i)$, so the transform is the Chinese-remainder map onto
@@ -691,7 +691,7 @@ gesture at.
 
 \paragraph{Validation.}
 Correctness is not argued, it is measured. The test runner
-\texttt{sage/test\_kat.sage} checks the implementation against NIST's ACVP
+\sagefile{test\_kat.sage} checks the implementation against NIST's ACVP
 test vectors~\cite{acvp}, which carry both the inputs and the expected outputs of every
 case: key generation, encapsulation, decapsulation, and the encapsulation-
 and decapsulation-key validity checks of Sections~7.2 and~7.3. All outputs

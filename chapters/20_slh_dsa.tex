@@ -218,7 +218,7 @@ version of the address discipline used throughout SLH-DSA.
 
 The Merkle experiment above is a toy in one respect that matters: it uses a
 made-up address format. The companion file
-\texttt{sage/fips205\_slhdsa.sage} implements the real thing -- all
+\sagefile{fips205\_slhdsa.sage} implements the real thing -- all
 twenty-five numbered algorithms of FIPS~205, each as its own function
 annotated with its algorithm number, for all twelve approved parameter sets.
 That means both hash families (SHA2 and SHAKE) at all three security levels
@@ -274,7 +274,7 @@ SLH-DSA is built from hash functions alone, so unlike ML-KEM and ML-DSA there
 is no ring here for a computer-algebra system to check the code against.
 What Sage supplies instead is exact integer reasoning about the
 combinatorics. The function \texttt{verify\_parameter\_consistency()} at the
-end of \texttt{sage/fips205\_slhdsa.sage}
+end of \sagefile{fips205\_slhdsa.sage}
 re-derives Table~2 from the defining equations for all twelve parameter sets:
 that $h = d\cdot h'$, so the hypertree really has $2^{h}$ leaves; that the
 checksum length $len_2$ produced by Algorithm~1 agrees with the closed form
