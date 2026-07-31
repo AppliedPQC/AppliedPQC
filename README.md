@@ -66,6 +66,26 @@ repository settings. The site is served from the custom domain
 `appliedpqc.io`, with HTTPS enforced; the old
 `appliedpqc.github.io/AppliedPQC/` address redirects to it.
 
+## Run it in your browser
+
+Every implementation runs at **https://appliedpqc.io/playground.html** with
+nothing to install. The page fetches the `.sage` sources straight from this
+repository, so what runs there is exactly the code the book documents.
+
+| Standard | In the browser |
+| --- | --- |
+| ML-KEM (FIPS 203) | key generation, encapsulation, decapsulation at all three parameter sets |
+| ML-DSA (FIPS 204) | key generation, signing, verification at ML-DSA-44, 65, 87 |
+| SLH-DSA (FIPS 205) | the `f` sets end to end; the `s` sets verified against NIST's ACVP signatures |
+| FN-DSA (FIPS 206) | sampler and FFT checks, plus signing and verification from a stored key |
+
+Execution is on the free [SageMath Cell](https://sagecell.sagemath.org/)
+service, which allows 30 seconds per run. Three things do not fit in that
+budget -- Falcon key generation, anything at FN-DSA-1024, and signing under
+the SLH-DSA `s` parameter sets -- so the playground refuses those up front and
+prints the command to run locally instead. Everything else finishes in under
+twelve seconds.
+
 ## SageMath implementations of FIPS 203-206
 
 Alongside the chapters, `sage/` holds complete, byte-exact SageMath
