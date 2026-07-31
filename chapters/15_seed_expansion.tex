@@ -281,6 +281,96 @@ u = A^{T} y + e_1, \qquad v = t^{T} y + e_2 + \mathrm{Encode}(m).
 \]
 The shared secret $K$ itself never travels on the wire; only $c$ does, and the recipient reconstructs $K$ from it.
 
+\section{From CPA to CCA: the Fujisaki--Okamoto transform}
+\label{sec:fo}
+
+Everything built so far -- the toy scheme of Chapter~\ref{ch:toymlkem}, the real
+noise of Chapter~\ref{ch:cbd}, and K-PKE above -- is a \emph{public-key
+encryption} scheme secure only against a passive eavesdropper. One more layer is
+needed before any of it is safe to deploy, and FIPS 203 is blunt that the layer
+is not optional: K-PKE ``is not IND-CCA2-secure and shall not be used as a
+stand-alone scheme''~\cite{fips203}. This section explains what that missing
+property is and how the \textbf{Fujisaki--Okamoto (FO) transform}~\cite{fo1999}
+supplies it. The same transform reappears in every other KEM in this book --
+Classic McEliece (Chapter~\ref{ch:mceliece}), HQC (Chapter~\ref{ch:hqc}), and
+SIKE (Chapter~\ref{ch:isogeny}) -- so it is worth meeting properly once.
+
+\paragraph{Two attack models.}
+Security notions for encryption differ in what the attacker may \emph{do}, not
+in what they are trying to learn. Under both notions the attacker picks two
+messages, is given an encryption of one of them, and must say which:
+
+\begin{itemize}
+  \item \textbf{IND-CPA} -- indistinguishability under \emph{chosen-plaintext}
+    attack. The attacker holds the public key and so can encrypt anything they
+    wish. This models a passive eavesdropper.
+  \item \textbf{IND-CCA2} -- indistinguishability under \emph{adaptive
+    chosen-ciphertext} attack. The attacker may additionally submit ciphertexts
+    of their own construction to the honest key holder and observe the result,
+    both before and after seeing the challenge; only decrypting the challenge
+    itself is barred.
+\end{itemize}
+
+The distance between the two is the distance between an attacker who
+\emph{listens} and one who \emph{interacts}. Real protocols grant the second
+kind of access almost by definition: a server decrypts whatever arrives on the
+wire, and what it does next -- an error, a timing difference, a retry -- is
+visible to whoever sent it.
+
+\paragraph{Why the passive scheme breaks.}
+The failure is concrete rather than theoretical. A K-PKE ciphertext is a pair
+$(\mathbf{u}, v)$ in which the message bits are carried by $v$, each scaled by
+$\lceil q/2 \rceil$. Arithmetic is coordinatewise, so an attacker who intercepts
+$(\mathbf{u}, v)$ and forwards $(\mathbf{u},\ v + \lceil q/2 \rceil)$ hands the
+receiver a perfectly valid ciphertext that decrypts to the \emph{complement} of
+the original message -- without knowing the secret key and without ever learning
+the message. This is \textbf{malleability}: ciphertexts can be edited into
+related ciphertexts. The linearity that makes lattice encryption fast is exactly
+what makes it malleable.
+
+The decryption oracle leaks, too. Feed the key holder a stream of slightly
+malformed ciphertexts and record which decrypt cleanly; each answer is one
+inequality constraining the secret, and enough of them recover it. This is why a
+passively secure lattice scheme must never be exposed directly.
+
+\paragraph{The key idea: make encryption deterministic.}
+Malleability survives only because a ciphertext carries no evidence of how it
+was built. Encryption is randomized -- $\textsc{Encrypt}(ek, m; r)$ for a fresh
+random $r$ -- so a message has \emph{many} valid ciphertexts and the receiver
+cannot tell an honest one from a doctored one.
+
+FO removes the freedom. Rather than sampling $r$, \emph{derive} it from the
+message: $r = G(m)$. Encryption becomes a function of the message alone, so each
+message now has exactly \emph{one} valid ciphertext -- and that makes ciphertexts
+checkable. The receiver decrypts to a candidate $m'$, recomputes the ciphertext
+that $m'$ \emph{must} have produced, and compares. An honest ciphertext matches;
+anything the attacker altered does not.
+
+The KEM setting is what makes this painless. Because a KEM transports a
+\emph{random} secret rather than a chosen message (Chapter~\ref{ch:toymlkem}),
+deriving the randomness from the message costs nothing -- the message was never
+the point. Encapsulation samples a random $m$ and hashes it into both the shared
+key and the encryption randomness, which is precisely what
+Algorithm~\ref{alg:mlkem-encaps} does with $(K, r) \gets G(m \,\|\, h)$.
+
+\paragraph{The transform in two steps.}
+The modern presentation, due to Hofheinz, H\"ovelmanns, and Kiltz~\cite{hhk2017}
+and cited by FIPS 203 itself, splits FO into two independent pieces:
+
+\begin{itemize}
+  \item the \textbf{$T$ transform} derandomizes, turning an IND-CPA encryption
+    scheme into a \emph{deterministic} one whose ciphertexts can be validated by
+    re-encryption;
+  \item the \textbf{$U$ transform} wraps that deterministic scheme into a KEM,
+    deriving the shared secret by hashing and deciding what to do when the
+    re-encryption check fails.
+\end{itemize}
+
+Separating the two is what lets the security proof be assembled from parts, and
+it is why the literature speaks of a \emph{family} of FO variants rather than one
+algorithm. ML-KEM uses one specific member of that family, which the next section
+spells out.
+
 \section{Decapsulation and the Fujisaki--Okamoto transform}
 
 Decapsulation must recover $K$ from $c$ using $dk$, and -- this is the entire point of the FO transform -- it must do so in a way that gives an attacker \emph{no} usable signal from submitting malformed ciphertexts. The mechanism is \emph{re-encrypt and compare}: decrypt to a candidate message, deterministically re-run encapsulation from it, and check that the ciphertext that \emph{would} have been produced matches the one received.
@@ -322,6 +412,97 @@ Decapsulation must recover $K$ from $c$ using $dk$, and -- this is the entire po
 \end{figure}
 
 The subtlety is the \texttt{else} branch. A naive KEM would return an \emph{error} on a bad ciphertext -- but that error is an oracle: by observing whether decapsulation succeeds, an attacker can mount a chosen-ciphertext attack and, over many queries, extract the secret. \textbf{Implicit rejection} closes this door: on a mismatch, ML-KEM returns a \emph{pseudorandom} key $J(z\,\|\,c)$ derived from the secret $z$, of exactly the same form as a real key. Success and failure become indistinguishable to the caller, so there is no oracle. This is what lifts K-PKE from CPA to \emph{IND-CCA2} security; it is why the comparison $c'=c$ must run in constant time (Chapter~\ref{ch:sidechannel}); and it is the same mechanism the code-based KEM HQC uses (Chapter~\ref{ch:hqc}).
+
+\paragraph{Explicit versus implicit rejection.}
+The two ways of handling a failed comparison name the two branches of the FO
+family. \emph{Explicit} rejection returns a distinguished error symbol $\bot$;
+\emph{implicit} rejection returns a pseudorandom key, as ML-KEM does. Implicit
+rejection is the more conservative choice on three counts: it removes the error
+signal outright instead of trusting every caller to handle $\bot$ safely; it
+keeps decapsulation a single straight-line computation, which is far easier to
+make constant-time; and it is the variant for which the tightest security proofs
+against quantum adversaries are known (Section~\ref{sec:qrom}).
+
+One detail of ML-KEM's particular variant is easy to miss. The hash $h = H(ek)$
+of the encapsulation key is fed into $G$ alongside the message, binding the
+shared secret to the public key it was produced under. FIPS 203 also departs
+here from the third-round Kyber submission: encapsulation no longer hashes the
+ciphertext into the shared secret~\cite{fips203}. That change is safe precisely
+because the re-encryption check already ties the ciphertext to the message.
+
+\section{Decryption failures}
+
+Re-encrypt-and-compare assumes decryption returns the message that was
+encrypted. For lattice schemes that is only \emph{almost} always true. The noise
+of Chapter~\ref{ch:cbd} can, with small probability, push a coefficient past a
+rounding boundary and flip a bit of $m'$; the recomputed ciphertext then fails to
+match and decapsulation returns the wrong key. This is a correctness failure,
+not an attack, and FIPS 203 tabulates its probability~\cite{fips203}:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter set} & \textbf{Decapsulation failure rate} \\
+\midrule
+ML-KEM-512  & $2^{-138.8}$ \\
+ML-KEM-768  & $2^{-164.8}$ \\
+ML-KEM-1024 & $2^{-174.8}$ \\
+\bottomrule
+\end{tabular}
+\caption{Decapsulation failure rates for ML-KEM, from Table 1 of FIPS 203. The
+figures hold under the same random-oracle heuristic discussed in
+Section~\ref{sec:qrom}.}
+\label{tab:mlkem-failure}
+\end{table}
+
+These numbers are not merely about reliability. A decryption failure is a
+\emph{leak}: it happens only for ciphertexts whose noise correlates with the
+secret key, so an attacker able to find failing ciphertexts learns something
+about $\mathbf{s}$, and the FO security bound degrades as the failure rate
+climbs. That is why the rate is driven far below anything a user would ever
+notice, and why parameter selection treats it as a security quantity rather than
+an engineering tolerance.
+
+\section{The random oracle model, and its quantum version}
+\label{sec:qrom}
+
+The FO proof rests on an assumption worth stating plainly, not least because
+FIPS 203 states it too: the analysis holds ``under the heuristic assumption that
+hash functions and XOFs behave like uniformly random functions''~\cite{fips203}.
+This is the \textbf{random oracle model} (ROM). In it, $G$, $H$, and $J$ are
+replaced by genuinely random functions that every party -- honest or hostile --
+can only query as a black box. The model is a heuristic, and knowingly so:
+SHA3-512 is a fixed public algorithm, not a random function. But proofs in it
+have been a reliable guide in practice, and no break of a deployed scheme has
+yet been traced to the gap.
+
+For post-quantum cryptography the heuristic needs a second look, and here the
+story becomes specific to this book's subject. A quantum attacker does not query
+SHA3 as a black box. The function is public, so the attacker can \emph{build the
+circuit} and evaluate it on a superposition of inputs, extracting information
+about many outputs at once. Modelling that faithfully requires the
+\textbf{quantum random oracle model} (QROM), introduced by Boneh and
+co-authors~\cite{qrom2011}, in which oracle queries may themselves be
+superpositions.
+
+The distinction is not pedantry, because classical ROM proofs do not
+automatically survive the move. A great many of them work by \emph{watching} the
+attacker's queries and reading off the useful one -- the reduction simply
+observes which $m$ the attacker hashed. Against superposition queries that step
+is illegitimate: measuring a quantum query disturbs it. Re-establishing FO
+security in the QROM was therefore a research programme in its own right,
+beginning with the modular analysis of Hofheinz, H\"ovelmanns, and
+Kiltz~\cite{hhk2017} and continuing through a line of increasingly tight bounds
+for the implicit-rejection variant~\cite{sxy2018}.
+
+This is the honest reason FIPS 203 claims only that ML-KEM ``is believed to
+satisfy so-called IND-CCA2 security''~\cite{fips203}. The lattice assumption is
+one source of doubt; the random oracle heuristic, in its quantum form, is a
+second and quite independent one. If a reader takes one thing from this section,
+it should be that ``provably secure'' always carries a model with it -- and that
+for every KEM in this book, that model includes a hash function idealized in a
+way no real hash function is.
 
 \section{Parameter sets}
 \begin{table}[H]

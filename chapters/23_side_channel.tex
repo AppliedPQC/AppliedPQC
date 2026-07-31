@@ -275,7 +275,8 @@ attacker-chosen) ciphertext. If decapsulation ever behaved differently on succes
 versus failure -- returned an error, took longer, or drew different power -- the
 attacker would gain a \emph{decryption-failure} or \emph{plaintext-checking} oracle,
 querying malformed ciphertexts and using the yes/no answers to peel the secret apart.
-The Fujisaki--Okamoto (FO) transform~\cite{fo1999} closes this door with \textbf{implicit
+The Fujisaki--Okamoto (FO) transform~\cite{fo1999}, developed in
+Section~\ref{sec:fo}, closes this door with \textbf{implicit
 rejection}. Decapsulation re-encrypts the recovered message and compares the result to
 the received ciphertext in constant time. On a match it returns the real shared key;
 on a mismatch it returns a \emph{pseudorandom} key derived from a secret seed and the
