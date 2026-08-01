@@ -1,9 +1,0 @@
-[
-  {
-    "slug": "bitcoin-l2-post-quantum",
-    "date": "2026-07-31",
-    "repo": "pqc-research",
-    "path": "bitcoin-l2-pq-migration.md",
-    "summary": "A Bitcoin layer 2 settles to a base layer it cannot change, borrows consensus from a third ecosystem, and runs a bridge whose trust root is cryptography of its own choosing. Where the post-quantum exposure actually sits, and who can fix each part."
-  }
-]
