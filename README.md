@@ -82,8 +82,8 @@ https://appliedpqc.io/blog.html      # notes and research
 The page templates, stylesheets and build scripts live in the publishing
 repository, under
 [`pages/`](https://github.com/AppliedPQC/AppliedPQC.github.io/tree/main/pages).
-This repository supplies what they render: the PDF, the listing data generated
-from the chapters, and the blog content. Its CI checks out `pages/` and runs the
+This repository supplies what they render from the book: the PDF and the listing
+data generated from the chapters. Its CI checks out `pages/` and runs the
 same build and the same checks on every pull request, so a chapter change that
 would break a page is caught in review rather than after publishing.
 
@@ -92,11 +92,12 @@ README: a hero, card grids and section bands need more structure than linear
 Markdown can express. Its figures — listing counts, chapter counts, page count,
 blog posts — are read from this repository, so they cannot drift.
 
-Blog posts come from two places, both listed newest first. A post written here
-is a Markdown file in `blog/` with a `title`, `date` and `summary` metadata
-block. A post whose text lives in another repository is an entry in
-`blog/sources.json`: the document is fetched at build time and rendered, never
-copied, so the original stays the single source. See [`blog/README.md`](blog/README.md).
+The blog lives with the site, in
+[`blog/`](https://github.com/AppliedPQC/AppliedPQC.github.io/tree/main/blog) of
+the publishing repository, since the posts are the site's content rather than
+the book's. A post is either a Markdown file there or an entry in its
+`sources.json`, which renders a document held in another repository without
+copying it.
 
 The custom domain `appliedpqc.io` is attached to the publishing repository,
 with HTTPS enforced.
