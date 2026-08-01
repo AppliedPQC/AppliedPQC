@@ -13,4 +13,5 @@
 sage/vectors/
 sage/specs/
 site/
+site-repo/
 build/

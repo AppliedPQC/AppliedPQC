@@ -1,10 +1,14 @@
 name: Build the book and check the site
 
-# The site is published from AppliedPQC/AppliedPQC.github.io, which builds from
-# this repository. This workflow therefore builds and checks but does not
-# deploy: a broken book or a mangled page is caught here, in review, before it
-# can reach the publisher. Publishing this repository's own Pages as well would
-# put a second, competing copy of the site at appliedpqc.io/AppliedPQC/.
+# The site is published from AppliedPQC/AppliedPQC.github.io, which holds the
+# page templates and build scripts and checks out this repository for the
+# content they render.
+#
+# This workflow does the same thing in reverse: it checks out that repository
+# and runs the same build and the same checks, so a chapter change that would
+# break a page is caught here, in review, rather than after publishing. It does
+# not deploy -- publishing this repository's Pages as well would put a second,
+# competing copy of the site at appliedpqc.io/AppliedPQC/.
 
 on:
   push:
@@ -31,6 +35,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check out the site templates and build scripts
+        uses: actions/checkout@v4
+        with:
+          repository: AppliedPQC/AppliedPQC.github.io
+          path: site-repo
 
       - name: Install TeX Live
         run: |
@@ -66,14 +76,14 @@ jobs:
         run: |
           make
 
-      - name: Prepare Pages site
+      - name: Build the site
         run: |
           set -euo pipefail
           python3 -m pip install --quiet "jinja2==3.1.*"
           # The listings data is generated from chapters/*.tex; fail rather than
-          # publish a playground that disagrees with the book.
+          # build a playground that disagrees with the book.
           python3 sage/playground/extract_listings.py --check
-          python3 .github/pages/build_site.py site
+          python3 site-repo/pages/build_site.py --source . site
 
       - name: Check the rendered site
-        run: python3 .github/pages/check_site.py site
+        run: python3 site-repo/pages/check_site.py --source . site
