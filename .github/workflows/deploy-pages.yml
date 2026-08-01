@@ -68,86 +68,14 @@ jobs:
       - name: Prepare Pages site
         run: |
           set -euo pipefail
-          mkdir -p site
-          cp apqc.pdf site/apqc.pdf
-          cp apqc.pdf site/main.pdf   # alias for previously published links
-          # The landing page is the repository README, so the two cannot
-          # drift apart.  gfm keeps GitHub's tables and autolinks; the
-          # chrome and styling live in .github/pages/.
-          pandoc README.md \
-            --from=gfm --to=html5 --standalone \
-            --template=.github/pages/template.html \
-            --variable=pagetitle="Applied Post-Quantum Cryptography" \
-            --variable=lang=en \
-            --include-in-header=.github/pages/head.html \
-            --include-before-body=.github/pages/before-body.html \
-            --output=site/index.html
-          # The runnable playground.  Same template and chrome; the extra
-          # header include pulls in the Sage Cell embed.
-          pandoc .github/pages/playground.md \
-            --from=gfm --to=html5 --standalone \
-            --template=.github/pages/template.html \
-            --variable=pagetitle="Playground -- Applied Post-Quantum Cryptography" \
-            --variable=lang=en \
-            --include-in-header=.github/pages/head.html \
-            --include-in-header=.github/pages/playground-head.html \
-            --include-before-body=.github/pages/playground-before-body.html \
-            --output=site/playground.html
-          # One page per chapter, every book listing a runnable cell.  These
-          # are written directly as HTML, not via pandoc: a quarter of the
-          # listings contain a blank line, which ends a CommonMark raw-HTML
-          # block and would silently shred the cell into paragraph tags.
+          python3 -m pip install --quiet "jinja2==3.1.*"
+          # The listings data is generated from chapters/*.tex; fail rather than
+          # publish a playground that disagrees with the book.
           python3 sage/playground/extract_listings.py --check
-          python3 .github/pages/build_book_pages.py site
-          touch site/.nojekyll
+          python3 .github/pages/build_site.py site
 
       - name: Check the rendered site
-        run: |
-          set -euo pipefail
-          # A silently empty or malformed page would still deploy, so assert
-          # the markers that prove the render actually happened.
-          test -s site/index.html
-          test -s site/apqc.pdf
-          grep -q '<title>Applied Post-Quantum Cryptography</title>' site/index.html
-          grep -q 'href="apqc.pdf"' site/index.html
-          grep -q '<main>' site/index.html
-          # The custom template exists to keep pandoc's default stylesheet
-          # out; if it ever reappears it silently overrides the real one.
-          if grep -q 'max-width: 36em' site/index.html; then
-            echo "::error::pandoc's default stylesheet leaked into the page"
-            exit 1
-          fi
-          test "$(grep -c 'name=\"viewport\"' site/index.html)" = "1"
-          grep -q 'href="playground.html"' site/index.html
-          # The playground is worthless if the Sage Cell embed or the cells
-          # themselves fail to render, so assert both.
-          test -s site/playground.html
-          grep -q 'embedded_sagecell.js' site/playground.html
-          cells="$(grep -c 'type="text/x-sage"' site/playground.html)"
-          test "$cells" -ge 8 || {
-            echo "::error::only $cells Sage cells rendered; raw HTML was mangled"
-            exit 1
-          }
-          # Every cell bootstraps from raw.githubusercontent.com; a cell that
-          # lost that line would silently fail for every visitor.
-          test "$(grep -c 'sage/playground.py' site/playground.html)" -ge 8
-          echo "landing page: $(wc -c < site/index.html) bytes, PDF: $(wc -c < site/apqc.pdf) bytes"
-          echo "playground: $(wc -c < site/playground.html) bytes, $cells cells"
-          # The book pages: every listing must have survived as a live cell.
-          test -s site/book-code.html
-          pages="$(ls site/playground-*.html | wc -l)"
-          book="$(cat site/playground-*.html | grep -c 'type="text/x-sage"')"
-          expected="$(python3 -c "import json;d=json.load(open('sage/playground/book_listings.json'));print(sum(1 for c in d['chapters'] for l in c['listings'] if l['runnable']))")"
-          test "$book" = "$expected" || {
-            echo "::error::$book book cells rendered, expected $expected"
-            exit 1
-          }
-          # A shredded cell shows up as book code leaking into a <p>.
-          if grep -lq '<p>[a-z_]* = ' site/playground-*.html; then
-            echo "::error::a listing was mangled out of its cell"
-            exit 1
-          fi
-          echo "book pages: $pages chapters, $book runnable cells"
+        run: python3 .github/pages/check_site.py site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

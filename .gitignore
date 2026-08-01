@@ -12,3 +12,5 @@
 # sage/fetch_vectors.sh); ~90 MB, not kept in the repository.
 sage/vectors/
 sage/specs/
+site/
+build/
