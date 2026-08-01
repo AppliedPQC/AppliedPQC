@@ -79,12 +79,18 @@ https://appliedpqc.io/playground.html # run every listing in a browser
 https://appliedpqc.io/blog.html      # notes and research
 ```
 
-The landing page is assembled by `.github/pages/build_home.py` rather than
-rendered from this README: a hero, card grids and section bands need more
-structure than linear Markdown can express. Its figures — listing counts,
-chapter counts, page count, blog posts — are read from the repository, so they
-cannot drift. Chapter pages and the blog index are generated too; only the
-playground prose and the blog posts themselves are hand-written.
+The page templates, stylesheets and build scripts live in the publishing
+repository, under
+[`pages/`](https://github.com/AppliedPQC/AppliedPQC.github.io/tree/main/pages).
+This repository supplies what they render: the PDF, the listing data generated
+from the chapters, and the blog content. Its CI checks out `pages/` and runs the
+same build and the same checks on every pull request, so a chapter change that
+would break a page is caught in review rather than after publishing.
+
+The landing page is assembled from templates rather than rendered from this
+README: a hero, card grids and section bands need more structure than linear
+Markdown can express. Its figures — listing counts, chapter counts, page count,
+blog posts — are read from this repository, so they cannot drift.
 
 Blog posts come from two places, both listed newest first. A post written here
 is a Markdown file in `blog/` with a `title`, `date` and `summary` metadata
