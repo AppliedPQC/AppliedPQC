@@ -76,8 +76,11 @@ chapter counts, page count, blog posts — are read from the repository, so they
 cannot drift. Chapter pages and the blog index are generated too; only the
 playground prose and the blog posts themselves are hand-written.
 
-To add a blog post, drop a Markdown file in `blog/` with a `title`, `date` and
-`summary` metadata block. Nothing else needs editing.
+Blog posts come from two places, both listed newest first. A post written here
+is a Markdown file in `blog/` with a `title`, `date` and `summary` metadata
+block. A post whose text lives in another repository is an entry in
+`blog/sources.json`: the document is fetched at build time and rendered, never
+copied, so the original stays the single source. See [`blog/README.md`](blog/README.md).
 
 Pages must be enabled once, with its source set to "GitHub Actions", in the
 repository settings. The site is served from the custom domain
@@ -151,7 +154,7 @@ constant-time and not for production use.
 
 - **[awesome-pqc](https://github.com/AppliedPQC/awesome-pqc)** — the curated,
   link-verified resource list described at the top of this page.
-- **[btc-l2-pqc-research](https://github.com/AppliedPQC/btc-l2-pqc-research)** —
+- **[pqc-research](https://github.com/AppliedPQC/pqc-research)** —
   what a post-quantum migration means for Bitcoin layer 2s, with GOAT as a
   worked case study.
 

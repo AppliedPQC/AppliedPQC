@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.request
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
@@ -96,14 +97,53 @@ def pdf_pages(pdf):
 
 
 FRONT = re.compile(r"\A---\n(.*?)\n---\n", re.S)
+SOURCES = os.path.join(POSTS, "sources.json")
+RAW_REPO = "https://raw.githubusercontent.com/AppliedPQC/%s/main/%s"
+
+
+def fetch_sourced(build):
+    """Posts whose text lives in another repository.
+
+    The document is fetched at build time rather than copied here, so the
+    original stays the single source and the two cannot drift. Its own top-level
+    heading becomes the title; only the date and the index summary are held
+    locally, since those are about presentation rather than content.
+    """
+    if not os.path.exists(SOURCES):
+        return []
+    out = []
+    for e in json.load(open(SOURCES)):
+        url = RAW_REPO % (e["repo"], e["path"])
+        try:
+            body = urllib.request.urlopen(url, timeout=30).read().decode()
+        except Exception as exc:                       # noqa: BLE001 - reported as-is
+            raise SystemExit("could not fetch %s\n%s\nThe blog sources a "
+                             "document from another repository; check it is "
+                             "still at that path." % (url, exc))
+        m = re.search(r"^#\s+(.+)", body, re.M)
+        if not m:
+            raise SystemExit("%s has no top-level heading to use as a title" % url)
+        title = m.group(1).strip()
+        home = "https://github.com/AppliedPQC/%s" % e["repo"]
+        note = ("*Originally published in [%s](%s/blob/main/%s), where it is "
+                "maintained. This page renders that document.*\n\n"
+                % (e["repo"], home, e["path"]))
+        # Keep the heading first so the page leads with the title, then the note.
+        body = body.replace(m.group(0), m.group(0) + "\n\n" + note, 1)
+        path = os.path.join(build, "sourced-%s.md" % e["slug"])
+        open(path, "w").write(body)
+        out.append(dict(title=title, date=e["date"], summary=e.get("summary", ""),
+                        slug=e["slug"], path=path, source=home))
+    return out
 
 
 def read_posts():
+    """Posts written in this repository."""
     if not os.path.isdir(POSTS):
         return []
     out = []
     for f in sorted(os.listdir(POSTS)):
-        if not f.endswith(".md"):
+        if not f.endswith(".md") or f == "README.md":
             continue
         path = os.path.join(POSTS, f)
         m = FRONT.match(open(path).read())
@@ -142,7 +182,8 @@ def main():
     data = json.load(open(LISTINGS))
     chapters = data["chapters"]
     n_listings = sum(len(c["listings"]) for c in chapters)
-    posts = read_posts()
+    posts = read_posts() + fetch_sourced(build)
+    posts.sort(key=lambda p: p["date"], reverse=True)
 
     # The book, and the alias some published links still use.
     for name in ("apqc.pdf", "main.pdf"):
