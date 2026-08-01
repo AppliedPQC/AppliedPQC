@@ -59,8 +59,18 @@ complete TeX Live is required (the CI installs `texlive-latex-base`,
 
 ## GitHub Pages
 
-Every push to `main` triggers `.github/workflows/deploy-pages.yml`, which
-builds the PDF and publishes it via GitHub Actions. The site is served at:
+The site is published from
+[AppliedPQC/AppliedPQC.github.io](https://github.com/AppliedPQC/AppliedPQC.github.io),
+which builds it from this repository. This repository builds and checks the
+book and the site on every push and pull request, but does not deploy, so a
+broken build is caught in review before it can reach the publisher. The live
+site records the exact commit it was built from at
+[build-info.json](https://appliedpqc.io/build-info.json).
+
+A change here appears on the site within about an hour, or immediately with
+`gh workflow run deploy.yml --repo AppliedPQC/AppliedPQC.github.io`.
+
+The site is served at:
 
 ```text
 https://appliedpqc.io/               # landing page
@@ -82,10 +92,8 @@ block. A post whose text lives in another repository is an entry in
 `blog/sources.json`: the document is fetched at build time and rendered, never
 copied, so the original stays the single source. See [`blog/README.md`](blog/README.md).
 
-Pages must be enabled once, with its source set to "GitHub Actions", in the
-repository settings. The site is served from the custom domain
-`appliedpqc.io`, with HTTPS enforced; the old
-`appliedpqc.github.io/AppliedPQC/` address redirects to it.
+The custom domain `appliedpqc.io` is attached to the publishing repository,
+with HTTPS enforced.
 
 ## Run it in your browser
 
