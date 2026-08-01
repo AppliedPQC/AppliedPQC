@@ -36,29 +36,61 @@ Every algebraic object used later in the book is a specialization of a small han
 \end{figure}
 
 \section{Installing SageMath}
-There are two practical ways to begin.
 
-\subsection{Option 1: Docker}
-A convenient approach is to start SageMath from a container:
+\subsection{Option 0: install nothing}
+Every code listing in this book runs in a browser at
+\href{\playgroundurl}{appliedpqc.io/playground.html}, on the free SageMath Cell
+service. Nothing is installed, and each listing arrives with the earlier
+listings of its chapter already run, so any snippet can be tried on its own.
+The one thing a browser cannot do is the slowest work --- Falcon key
+generation, and signing under the SLH-DSA \texttt{s} parameter sets --- which
+needs a local Sage.
+
+\subsection{Option 1: conda-forge}
+The quickest local install on any platform, and the one that gives the newest
+release:
+
+\begin{lstlisting}[language=bash]
+conda create -n sage -c conda-forge sage
+conda activate sage
+\end{lstlisting}
+
+The package is named \texttt{sage}. Note there is no \texttt{sagemath-standard}
+package on conda-forge, despite the name appearing in some older instructions.
+
+\subsection{Option 2: Docker}
+To keep the host clean, start SageMath from a container:
 
 \begin{lstlisting}[language=bash]
 docker run -it sagemath/sagemath sage
 \end{lstlisting}
 
-Once the shell starts, you can enter Sage commands directly.
+Once the shell starts, you can enter Sage commands directly. To run a script
+rather than work interactively, override the image's entry point, and mount a
+\emph{writable} directory --- Sage writes a preparsed \texttt{.sage.py} beside
+each source file:
 
-\subsection{Option 2: Local installation}
-On Ubuntu, a typical installation command is:
+\begin{lstlisting}[language=bash]
+docker run --rm --entrypoint bash -v "$PWD:/home/sage/work" \
+    -w /home/sage/work sagemath/sagemath:10.9 -lc 'sage myscript.sage'
+\end{lstlisting}
+
+\subsection{Option 3: system packages}
+On Debian and Ubuntu:
 
 \begin{lstlisting}[language=bash]
 sudo apt install sagemath
 \end{lstlisting}
 
-On macOS, one may use:
+On macOS, SageMath is distributed as a cask rather than a formula:
 
 \begin{lstlisting}[language=bash]
-brew install sage
+brew install --cask sage
 \end{lstlisting}
+
+On Windows, install WSL2 and then use conda-forge or \texttt{apt} inside the
+Linux environment. Debian and Ubuntu currently ship Sage 9.5, some way behind
+conda-forge; everything in this book works on 9.5 or newer.
 
 \subsection{Notebook workflow}
 For experiments and exploratory work, a notebook interface is often most convenient:

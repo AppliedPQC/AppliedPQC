@@ -36,6 +36,7 @@ RAW = "https://raw.githubusercontent.com/AppliedPQC/AppliedPQC/main/sage/"
 _NS = globals()
 _SRC_CACHE = {}
 _ARTIFACTS = [None]
+_BOOK = [None]
 
 MODULES = {
     "fips203": "fips203_mlkem.sage",
@@ -156,8 +157,69 @@ def apqc_demo_sig(param_set="SLH-DSA-SHAKE-128s"):
             bytes.fromhex(c["signature"]))
 
 
+def _book():
+    if _BOOK[0] is None:
+        _BOOK[0] = json.loads(_fetch("playground/book_listings.json"))
+    return _BOOK[0]
+
+
+def apqc_chapters():
+    """List the book chapters that contain runnable code."""
+    for c in _book()["chapters"]:
+        print("  %-24s %2d listings   %s"
+              % (c["stem"], len(c["listings"]), c["title"]))
+
+
+def apqc_book(chapter, upto=None):
+    """Run a chapter's earlier listings, so a later one has its context.
+
+    The book's snippets build on each other down a chapter, the way cells in a
+    notebook do, but a Sage Cell kernel runs exactly one cell and keeps no
+    state afterwards.  Each playground cell therefore replays what came before
+    it::
+
+        apqc_book('13_toy_mlkem', upto=8)   # listings 1-7 as setup
+        ...                                 # then listing 8 itself
+
+    With ``upto`` omitted, every listing in the chapter runs.
+    """
+    from sage.repl.preparse import preparse
+
+    for c in _book()["chapters"]:
+        if c["stem"] == chapter:
+            break
+    else:
+        raise ValueError("no chapter %r; try apqc_chapters()" % chapter)
+
+    numbers = [l["n"] for l in c["listings"]]
+    if upto is not None and int(upto) not in numbers:
+        # The page and this data file disagree about how the chapter is
+        # numbered.  Without this check the cell would quietly replay nothing
+        # and then fail on an undefined name from the setup it never ran.
+        raise RuntimeError(
+            "listing %s is not in chapter %r, which has listings %s.\n"
+            "The playground data is out of step with the page -- most likely a "
+            "cached copy just after a deploy. Re-run in a minute; if it "
+            "persists, regenerate with: make playground"
+            % (upto, chapter, numbers))
+
+    wanted = [l for l in c["listings"] if upto is None or l["n"] <= upto]
+    needs = sorted({m for l in wanted for m in l["requires"]})
+    if needs:
+        apqc_load(*needs)
+
+    ran = 0
+    for l in wanted:
+        if l["n"] == upto or not l["runnable"]:
+            continue                       # the target itself is the cell's own body
+        exec(compile(preparse(l["code"]), "%s#%d" % (chapter, l["n"]), "exec"), _NS)
+        ran += 1
+    return ran
+
+
 def apqc_help():
     print(__doc__)
     print("Modules:  " + ", ".join(sorted(set(MODULES.values()))))
-    print("Helpers:  apqc_load, apqc_require, apqc_demo_key, apqc_demo_sig")
+    print("Helpers:  apqc_load, apqc_require, apqc_demo_key, apqc_demo_sig,")
+    print("          apqc_book, apqc_chapters")
     print("Does not fit in 30 s:  " + ", ".join(sorted(TOO_SLOW)))

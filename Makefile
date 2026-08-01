@@ -35,3 +35,10 @@ kat-full: vectors
 
 clean:
 	rm -f *.aux *.bbl *.blg *.log *.out *.toc *.pdf *.fdb_latexmk *.fls
+
+# Regenerate the playground's copy of the book listings.  Run after adding or
+# editing a code listing in any chapter; CI checks the result is in sync.
+playground:
+	python3 sage/playground/extract_listings.py
+
+.PHONY: playground

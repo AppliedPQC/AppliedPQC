@@ -69,7 +69,9 @@ repository settings. The site is served from the custom domain
 ## Run it in your browser
 
 Every implementation runs at **https://appliedpqc.io/playground.html** with
-nothing to install. The page fetches the `.sage` sources straight from this
+nothing to install, and so does **every code listing in the book** —
+all 105 of them, chapter by chapter, at
+**https://appliedpqc.io/book-code.html**. The page fetches the `.sage` sources straight from this
 repository, so what runs there is exactly the code the book documents.
 
 | Standard | In the browser |
