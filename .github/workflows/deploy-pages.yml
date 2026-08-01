@@ -148,6 +148,15 @@ jobs:
             exit 1
           fi
           echo "book pages: $pages chapters, $book runnable cells"
+          # The topbar links live in shared includes; a mistake there drops
+          # them from every page at once, so assert on the whole site.
+          html="$(ls site/*.html | wc -l)"
+          social="$(grep -l 'x.com/AppliedPQC' site/*.html | wc -l)"
+          test "$social" = "$html" || {
+            echo "::error::X link on $social of $html pages"
+            exit 1
+          }
+          echo "topbar: X link present on all $html pages"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
