@@ -1,5 +1,3 @@
-<!-- Landing-page layout: full-width bands with a contained column inside. -->
-<style>
   main.home { max-width: none; margin: 0; padding: 0; }
   .band { border-bottom: 1px solid var(--rule); }
   .band-inner { max-width: 62rem; margin: 0 auto; padding: 3.25rem 1.25rem; }
@@ -54,5 +52,3 @@
   .posts .date { color: var(--muted); font-size: 0.86rem; }
   .posts a { font-weight: 600; }
   .posts p { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.95rem; }
-
-</style>

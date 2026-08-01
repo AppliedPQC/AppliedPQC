@@ -1,13 +1,3 @@
-<meta name="description" content="Applied Post-Quantum Cryptography: a book that builds post-quantum cryptography from the ground up, with SageMath implementations of FIPS 203, 204, 205 and 206." />
-<meta name="color-scheme" content="light dark" />
-<meta property="og:type" content="website" />
-<meta property="og:site_name" content="Applied Post-Quantum Cryptography" />
-<meta property="og:title" content="Applied Post-Quantum Cryptography" />
-<meta property="og:description" content="A book that builds post-quantum cryptography from the ground up, with runnable SageMath implementations of FIPS 203, 204, 205 and 206." />
-<meta property="og:url" content="https://appliedpqc.io/" />
-<meta name="twitter:card" content="summary" />
-<meta name="twitter:site" content="@AppliedPQC" />
-<style>
   :root {
     --bg: #ffffff;
     --fg: #1f2328;
@@ -155,4 +145,3 @@
 
   img { max-width: 100%; }
   hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0; }
-</style>

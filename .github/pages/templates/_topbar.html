@@ -1,0 +1,16 @@
+<div class="topbar">
+  <div class="topbar-inner">
+    <span class="topbar-title">Applied Post-Quantum Cryptography</span>
+    <span class="topbar-links">
+      <a href="{{ gh }}/AppliedPQC">GitHub</a>
+      {%- if here == 'home' %}
+      <a href="playground.html">Playground</a>
+      {%- else %}
+      <a href="index.html">Home</a>
+      <a href="playground.html"{% if here == 'playground' %} class="here"{% endif %}>Playground</a>
+      {%- endif %}
+      <a href="blog.html"{% if here == 'blog' %} class="here"{% endif %}>Blog</a>
+      <a href="https://x.com/AppliedPQC" rel="me">@AppliedPQC</a>
+    </span>
+  </div>
+</div>

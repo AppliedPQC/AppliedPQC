@@ -1,0 +1,20 @@
+<!-- Sage Cell embed.  Loaded only on the playground page. -->
+<script src="https://sagecell.sagemath.org/static/embedded_sagecell.js"></script>
+<script>
+  // The script defers its own jQuery setup, so wait for the DOM either way.
+  (function () {
+    function init() {
+      if (typeof sagecell === "undefined") { return; }
+      sagecell.makeSagecell({
+        inputLocation: "div.sage",
+        evalButtonText: "Run",
+        hide: ["permalink"]
+      });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+</script>

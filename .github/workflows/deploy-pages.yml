@@ -68,63 +68,11 @@ jobs:
       - name: Prepare Pages site
         run: |
           set -euo pipefail
-          mkdir -p site build
-          cp apqc.pdf site/apqc.pdf
-          cp apqc.pdf site/main.pdf   # alias for previously published links
-
-          # The chapter pages and the chapter table used by the playground.
-          # Written directly as HTML rather than through pandoc: a quarter of
-          # the listings contain a blank line, which ends a CommonMark raw-HTML
-          # block and would silently shred the cell into paragraph tags.
+          python3 -m pip install --quiet "jinja2==3.1.*"
+          # The listings data is generated from chapters/*.tex; fail rather than
+          # publish a playground that disagrees with the book.
           python3 sage/playground/extract_listings.py --check
-          python3 .github/pages/build_book_pages.py site
-          mv site/_chapters.md build/_chapters.md
-
-          # The playground is the single entry point for running code, so the
-          # generated chapter table is appended to it.
-          cat .github/pages/playground.md build/_chapters.md > build/playground.md
-          pandoc build/playground.md \
-            --from=gfm --to=html5 --standalone \
-            --template=.github/pages/template.html \
-            --variable=pagetitle="Playground -- Applied Post-Quantum Cryptography" \
-            --variable=lang=en \
-            --include-in-header=.github/pages/head.html \
-            --include-in-header=.github/pages/playground-head.html \
-            --include-before-body=.github/pages/playground-before-body.html \
-            --include-after-body=.github/pages/footer.html \
-            --output=site/playground.html
-
-          # Blog: one page per post in blog/, plus the index.  Posts are prose,
-          # so pandoc renders them and Markdown features work normally.
-          python3 .github/pages/build_blog.py build
-          for post in blog/*.md; do
-            [ -e "$post" ] || continue
-            slug="$(basename "$post" .md)"
-            pandoc "$post" \
-              --from=gfm+yaml_metadata_block --to=html5 --standalone \
-              --template=.github/pages/template.html \
-              --variable=pagetitle="Applied Post-Quantum Cryptography" \
-              --variable=lang=en \
-              --include-in-header=.github/pages/head.html \
-              --include-before-body=.github/pages/before-body.html \
-              --include-after-body=.github/pages/footer.html \
-              --output="site/blog-$slug.html"
-          done
-          pandoc build/blog.md \
-            --from=gfm --to=html5 --standalone \
-            --template=.github/pages/template.html \
-            --variable=pagetitle="Blog -- Applied Post-Quantum Cryptography" \
-            --variable=lang=en \
-            --include-in-header=.github/pages/head.html \
-            --include-before-body=.github/pages/before-body.html \
-            --include-after-body=.github/pages/footer.html \
-            --output=site/blog.html
-
-          # The landing page is assembled rather than rendered from the README:
-          # a hero, card grids and section bands need more structure than linear
-          # Markdown gives.  Its figures are read from the repository.
-          python3 .github/pages/build_home.py site
-          touch site/.nojekyll
+          python3 .github/pages/build_site.py site
 
       - name: Check the rendered site
         run: |
