@@ -68,23 +68,22 @@ jobs:
       - name: Prepare Pages site
         run: |
           set -euo pipefail
-          mkdir -p site
+          mkdir -p site build
           cp apqc.pdf site/apqc.pdf
           cp apqc.pdf site/main.pdf   # alias for previously published links
-          # The landing page is the repository README, so the two cannot
-          # drift apart.  gfm keeps GitHub's tables and autolinks; the
-          # chrome and styling live in .github/pages/.
-          pandoc README.md \
-            --from=gfm --to=html5 --standalone \
-            --template=.github/pages/template.html \
-            --variable=pagetitle="Applied Post-Quantum Cryptography" \
-            --variable=lang=en \
-            --include-in-header=.github/pages/head.html \
-            --include-before-body=.github/pages/before-body.html \
-            --output=site/index.html
-          # The runnable playground.  Same template and chrome; the extra
-          # header include pulls in the Sage Cell embed.
-          pandoc .github/pages/playground.md \
+
+          # The chapter pages and the chapter table used by the playground.
+          # Written directly as HTML rather than through pandoc: a quarter of
+          # the listings contain a blank line, which ends a CommonMark raw-HTML
+          # block and would silently shred the cell into paragraph tags.
+          python3 sage/playground/extract_listings.py --check
+          python3 .github/pages/build_book_pages.py site
+          mv site/_chapters.md build/_chapters.md
+
+          # The playground is the single entry point for running code, so the
+          # generated chapter table is appended to it.
+          cat .github/pages/playground.md build/_chapters.md > build/playground.md
+          pandoc build/playground.md \
             --from=gfm --to=html5 --standalone \
             --template=.github/pages/template.html \
             --variable=pagetitle="Playground -- Applied Post-Quantum Cryptography" \
@@ -92,51 +91,81 @@ jobs:
             --include-in-header=.github/pages/head.html \
             --include-in-header=.github/pages/playground-head.html \
             --include-before-body=.github/pages/playground-before-body.html \
+            --include-after-body=.github/pages/footer.html \
             --output=site/playground.html
-          # One page per chapter, every book listing a runnable cell.  These
-          # are written directly as HTML, not via pandoc: a quarter of the
-          # listings contain a blank line, which ends a CommonMark raw-HTML
-          # block and would silently shred the cell into paragraph tags.
-          python3 sage/playground/extract_listings.py --check
-          python3 .github/pages/build_book_pages.py site
+
+          # Blog: one page per post in blog/, plus the index.  Posts are prose,
+          # so pandoc renders them and Markdown features work normally.
+          python3 .github/pages/build_blog.py build
+          for post in blog/*.md; do
+            [ -e "$post" ] || continue
+            slug="$(basename "$post" .md)"
+            pandoc "$post" \
+              --from=gfm+yaml_metadata_block --to=html5 --standalone \
+              --template=.github/pages/template.html \
+              --variable=pagetitle="Applied Post-Quantum Cryptography" \
+              --variable=lang=en \
+              --include-in-header=.github/pages/head.html \
+              --include-before-body=.github/pages/before-body.html \
+              --include-after-body=.github/pages/footer.html \
+              --output="site/blog-$slug.html"
+          done
+          pandoc build/blog.md \
+            --from=gfm --to=html5 --standalone \
+            --template=.github/pages/template.html \
+            --variable=pagetitle="Blog -- Applied Post-Quantum Cryptography" \
+            --variable=lang=en \
+            --include-in-header=.github/pages/head.html \
+            --include-before-body=.github/pages/before-body.html \
+            --include-after-body=.github/pages/footer.html \
+            --output=site/blog.html
+
+          # The landing page is assembled rather than rendered from the README:
+          # a hero, card grids and section bands need more structure than linear
+          # Markdown gives.  Its figures are read from the repository.
+          python3 .github/pages/build_home.py site
           touch site/.nojekyll
 
       - name: Check the rendered site
         run: |
           set -euo pipefail
           # A silently empty or malformed page would still deploy, so assert
-          # the markers that prove the render actually happened.
+          # the markers that prove each render actually happened.
           test -s site/index.html
           test -s site/apqc.pdf
           grep -q '<title>Applied Post-Quantum Cryptography</title>' site/index.html
           grep -q 'href="apqc.pdf"' site/index.html
-          grep -q '<main>' site/index.html
+          grep -q '<main class="home">' site/index.html
+          # Landing page structure: hero, the card grid, and the sibling
+          # projects it exists to surface.
+          test "$(grep -c '<section class="band' site/index.html)" -ge 4
+          test "$(grep -c '<div class="card">' site/index.html)" -ge 6
+          grep -q 'AppliedPQC/awesome-pqc' site/index.html
           # The custom template exists to keep pandoc's default stylesheet
           # out; if it ever reappears it silently overrides the real one.
-          if grep -q 'max-width: 36em' site/index.html; then
+          if grep -q 'max-width: 36em' site/playground.html; then
             echo "::error::pandoc's default stylesheet leaked into the page"
             exit 1
           fi
           test "$(grep -c 'name=\"viewport\"' site/index.html)" = "1"
-          grep -q 'href="playground.html"' site/index.html
+
           # The playground is worthless if the Sage Cell embed or the cells
           # themselves fail to render, so assert both.
           test -s site/playground.html
           grep -q 'embedded_sagecell.js' site/playground.html
-          cells="$(grep -c 'type="text/x-sage"' site/playground.html)"
+          cells="$(grep -c 'type=\"text/x-sage\"' site/playground.html)"
           test "$cells" -ge 8 || {
             echo "::error::only $cells Sage cells rendered; raw HTML was mangled"
             exit 1
           }
-          # Every cell bootstraps from raw.githubusercontent.com; a cell that
-          # lost that line would silently fail for every visitor.
           test "$(grep -c 'sage/playground.py' site/playground.html)" -ge 8
-          echo "landing page: $(wc -c < site/index.html) bytes, PDF: $(wc -c < site/apqc.pdf) bytes"
-          echo "playground: $(wc -c < site/playground.html) bytes, $cells cells"
+          # Book code merged into the playground; the old URL must still resolve.
+          grep -q 'playground-01_sagemath_basics.html' site/playground.html
+          grep -q 'url=playground.html' site/book-code.html
+
           # The book pages: every listing must have survived as a live cell.
-          test -s site/book-code.html
           pages="$(ls site/playground-*.html | wc -l)"
-          book="$(cat site/playground-*.html | grep -c 'type="text/x-sage"')"
+          book="$(cat site/playground-*.html | grep -c 'type=\"text/x-sage\"')"
           expected="$(python3 -c "import json;d=json.load(open('sage/playground/book_listings.json'));print(sum(1 for c in d['chapters'] for l in c['listings'] if l['runnable']))")"
           test "$book" = "$expected" || {
             echo "::error::$book book cells rendered, expected $expected"
@@ -147,21 +176,36 @@ jobs:
             echo "::error::a listing was mangled out of its cell"
             exit 1
           fi
-          echo "book pages: $pages chapters, $book runnable cells"
-          # The topbar links live in shared includes; a mistake there drops
-          # them from every page at once, so assert on the whole site.
-          html="$(ls site/*.html | wc -l)"
-          social="$(grep -l 'x.com/AppliedPQC' site/*.html | wc -l)"
-          test "$social" = "$html" || {
-            echo "::error::X link on $social of $html pages"
+
+          # Blog: one page per post, all reachable from the index.
+          test -s site/blog.html
+          posts="$(ls blog/*.md 2>/dev/null | wc -l)"
+          built="$(ls site/blog-*.html 2>/dev/null | wc -l)"
+          test "$built" = "$posts" || {
+            echo "::error::$built blog pages built from $posts posts"
             exit 1
           }
-          echo "topbar: X link present on all $html pages"
-          # The awesome-pqc callout is raw HTML in the README, so a stray blank
-          # line inside it would have pandoc shred it into paragraphs.
-          grep -q '<div class="callout">' site/index.html
-          grep -q 'AppliedPQC/awesome-pqc' site/index.html
-          python3 -c "import re,sys; h=open('site/index.html').read(); m=re.search(r'<div class=\"callout\">.*?</div>', h, re.S); sys.exit('::error::the awesome-pqc callout was mangled out of its block') if (not m or '<p>' in m.group(0)) else print('callout: intact, %d chars' % len(m.group(0)))"
+          for post in blog/*.md; do
+            [ -e "$post" ] || continue
+            grep -q "blog-$(basename "$post" .md).html" site/blog.html
+          done
+
+          # Chrome lives in shared includes, so a mistake there hits every page
+          # at once.  Assert across the whole site.
+          html="$(ls site/*.html | grep -v book-code | wc -l)"
+          social="$(grep -l 'x.com/AppliedPQC' site/*.html | wc -l)"
+          foot="$(grep -l 'class=\"sitefooter\"' site/*.html | wc -l)"
+          test "$social" -ge "$html" || { echo "::error::X link on $social of $html pages"; exit 1; }
+          test "$foot" -ge "$html" || { echo "::error::footer on $foot of $html pages"; exit 1; }
+          # The PDF button was removed from the topbar; it must not creep back.
+          if grep -q 'class="button" href="apqc.pdf">Download the PDF' site/playground.html; then
+            echo "::error::the PDF button is back in the topbar"
+            exit 1
+          fi
+
+          echo "landing page: $(wc -c < site/index.html) bytes, PDF: $(wc -c < site/apqc.pdf) bytes"
+          echo "playground: $cells standards cells; book: $pages chapters, $book cells"
+          echo "blog: $built post(s); chrome on $html pages"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

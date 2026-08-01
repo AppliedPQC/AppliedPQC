@@ -55,7 +55,7 @@
     background: var(--bg);
   }
   .topbar-inner {
-    max-width: 46rem;
+    max-width: 62rem;
     margin: 0 auto;
     padding: 0.9rem 1.25rem;
     display: flex;
@@ -109,6 +109,23 @@
   }
   .callout strong { font-size: 1.02em; }
   .callout a { font-weight: 700; }
+
+  /* Site footer, shared by every page. */
+  .sitefooter { border-top: 1px solid var(--rule); margin-top: 3rem; }
+  .sitefooter .band-inner {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 2.25rem 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem 1.5rem;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .sitefooter a { color: var(--muted); }
+  .sitefooter nav { display: flex; gap: 1.1rem; flex-wrap: wrap; }
 
   code, pre {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,

@@ -45,10 +45,11 @@ def page(title, body):
 <body>
 %s<main>
 %s</main>
+%s
 </body>
 </html>
 """ % (html.escape(title), _inc("head.html"), _inc("playground-head.html"),
-       _inc("playground-before-body.html"), body)
+       _inc("playground-before-body.html"), body, _inc("footer.html"))
 
 
 def cell(code):
@@ -68,8 +69,7 @@ def chapter_page(c):
          "Sage Cell kernel runs one cell and keeps no state afterwards, so each "
          "cell replays the earlier listings with <code>apqc_book</code>. That "
          "call is the only thing added to the book's own code.</p>",
-         '<p><a href="book-code.html">← all chapters</a> · '
-         '<a href="playground.html">the four standards</a></p>']
+         '<p><a href="playground.html">← the playground</a></p>']
 
     for l in c["listings"]:
         b.append('<h2 id="listing-%d">Listing %d</h2>' % (l["n"], l["n"]))
@@ -86,22 +86,32 @@ def chapter_page(c):
     return page("%s — Applied Post-Quantum Cryptography" % c["title"], "\n".join(b))
 
 
-def index_page(chapters):
+def chapters_fragment(chapters):
+    """The chapter table, as Markdown appended to the playground page.
+
+    The playground is the single entry point for running code, so the list of
+    chapters lives there rather than on a page of its own.
+    """
     total = sum(len(c["listings"]) for c in chapters)
-    rows = "\n".join(
-        '<tr><td>%s</td><td>%d</td><td><a href="playground-%s.html">run</a></td></tr>'
-        % (html.escape(c["title"]), len(c["listings"]), c["stem"])
-        for c in chapters)
-    b = ["<h1>Code from the book</h1>",
-         "<p>All %d code listings from <em>Applied Post-Quantum Cryptography</em>, "
-         "runnable in your browser. Nothing to install.</p>" % total,
-         "<p>The cells are generated from the book's LaTeX sources, so they are "
-         "the same code the chapters print.</p>",
-         '<p><a href="playground.html">The four standards →</a></p>',
-         "<table><thead><tr><th>Chapter</th><th>Listings</th><th></th></tr></thead>",
-         "<tbody>%s</tbody></table>" % rows]
-    return page("Code from the book — Applied Post-Quantum Cryptography",
-                "\n".join(b))
+    out = ["", "## Every listing in the book", "",
+           "All %d code listings from the chapters, runnable the same way. "
+           "Each cell replays its chapter's earlier listings first, so any "
+           "snippet can be tried on its own." % total, "",
+           "| Chapter | Listings | |", "| --- | --- | --- |"]
+    for c in chapters:
+        out.append("| %s | %d | [run](playground-%s.html) |"
+                   % (c["title"].replace("|", "\\|"), len(c["listings"]), c["stem"]))
+    return "\n".join(out) + "\n"
+
+
+def redirect(to):
+    """book-code.html was a published URL before the pages merged."""
+    return ('<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8" />\n'
+            '<meta http-equiv="refresh" content="0; url=%s" />\n'
+            '<link rel="canonical" href="%s" />\n'
+            '<title>Moved</title></head>\n'
+            '<body><p>This page is now part of the '
+            '<a href="%s">playground</a>.</p></body></html>\n' % (to, to, to))
 
 
 def main():
@@ -110,7 +120,8 @@ def main():
     chapters = json.load(open(DATA))["chapters"]
     for c in chapters:
         open(os.path.join(dest, "playground-%s.html" % c["stem"]), "w").write(chapter_page(c))
-    open(os.path.join(dest, "book-code.html"), "w").write(index_page(chapters))
+    open(os.path.join(dest, "book-code.html"), "w").write(redirect("playground.html"))
+    open(os.path.join(dest, "_chapters.md"), "w").write(chapters_fragment(chapters))
     cells = sum(1 for c in chapters for l in c["listings"] if l["runnable"])
     print("%d chapter pages + index, %d runnable cells -> %s"
           % (len(chapters), cells, dest))

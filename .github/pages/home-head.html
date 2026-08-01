@@ -1,0 +1,58 @@
+<!-- Landing-page layout: full-width bands with a contained column inside. -->
+<style>
+  main.home { max-width: none; margin: 0; padding: 0; }
+  .band { border-bottom: 1px solid var(--rule); }
+  .band-inner { max-width: 62rem; margin: 0 auto; padding: 3.25rem 1.25rem; }
+  .band.tint { background: var(--code-bg); }
+
+  .hero { text-align: center; }
+  .hero .band-inner { padding: 4.5rem 1.25rem 3.75rem; }
+  .hero h1 {
+    font-size: clamp(2rem, 5.5vw, 3.1rem);
+    line-height: 1.15;
+    margin: 0 0 0.85rem;
+    letter-spacing: -0.02em;
+  }
+  .hero p.lede {
+    font-size: clamp(1.02rem, 2.1vw, 1.2rem);
+    color: var(--muted);
+    max-width: 40rem;
+    margin: 0 auto 1.9rem;
+  }
+  .hero .byline { color: var(--muted); font-size: 0.92rem; margin: 1.75rem 0 0; }
+  .cta { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+  .cta .button.ghost {
+    background: transparent;
+    color: var(--link);
+    border: 1px solid var(--rule);
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+    gap: 1.15rem;
+  }
+  .card {
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.35rem;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  .card h3 { margin: 0 0 0.45rem; font-size: 1.06rem; }
+  .card p { margin: 0 0 1rem; color: var(--muted); font-size: 0.95rem; flex: 1; }
+  .card .more { font-weight: 600; text-decoration: none; }
+  .card .more:hover { text-decoration: underline; }
+
+  .band h2 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+  .band .sub { color: var(--muted); margin: 0 0 1.9rem; }
+
+  .posts { list-style: none; padding: 0; margin: 0; }
+  .posts li { padding: 0.95rem 0; border-top: 1px solid var(--rule); }
+  .posts li:last-child { border-bottom: 1px solid var(--rule); }
+  .posts .date { color: var(--muted); font-size: 0.86rem; }
+  .posts a { font-weight: 600; }
+  .posts p { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.95rem; }
+
+</style>

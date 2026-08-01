@@ -63,9 +63,21 @@ Every push to `main` triggers `.github/workflows/deploy-pages.yml`, which
 builds the PDF and publishes it via GitHub Actions. The site is served at:
 
 ```text
-https://appliedpqc.io/          # landing page
-https://appliedpqc.io/apqc.pdf  # the book
+https://appliedpqc.io/               # landing page
+https://appliedpqc.io/apqc.pdf       # the book
+https://appliedpqc.io/playground.html # run every listing in a browser
+https://appliedpqc.io/blog.html      # notes and research
 ```
+
+The landing page is assembled by `.github/pages/build_home.py` rather than
+rendered from this README: a hero, card grids and section bands need more
+structure than linear Markdown can express. Its figures — listing counts,
+chapter counts, page count, blog posts — are read from the repository, so they
+cannot drift. Chapter pages and the blog index are generated too; only the
+playground prose and the blog posts themselves are hand-written.
+
+To add a blog post, drop a Markdown file in `blog/` with a `title`, `date` and
+`summary` metadata block. Nothing else needs editing.
 
 Pages must be enabled once, with its source set to "GitHub Actions", in the
 repository settings. The site is served from the custom domain
@@ -76,8 +88,7 @@ repository settings. The site is served from the custom domain
 
 Every implementation runs at **https://appliedpqc.io/playground.html** with
 nothing to install, and so does **every code listing in the book** —
-all 105 of them, chapter by chapter, at
-**https://appliedpqc.io/book-code.html**. The page fetches the `.sage` sources straight from this
+all 105 of them, chapter by chapter, listed at the foot of the same page. The page fetches the `.sage` sources straight from this
 repository, so what runs there is exactly the code the book documents.
 
 | Standard | In the browser |
