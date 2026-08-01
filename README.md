@@ -7,6 +7,11 @@ Stephen Duan and Wei Li.
 - Live PDF: https://appliedpqc.io/apqc.pdf
 - X: https://x.com/AppliedPQC
 
+<div class="callout">
+<strong>Also from Applied PQC — <a href="https://github.com/AppliedPQC/awesome-pqc">awesome-pqc</a></strong><br />
+A curated, link-verified list of post-quantum cryptography resources for people who have to build and ship it: standards, conformance test vectors, reference implementations, libraries, protocol deployment, and blockchain consensus. Around ninety links across a dozen sections, re-checked on a schedule so the list does not quietly rot.
+</div>
+
 ## About the book
 
 The book develops the subject as a single arc, from first principles to
@@ -133,9 +138,10 @@ constant-time and not for production use.
 
 ## More from Applied PQC
 
-- **[awesome-pqc](https://github.com/AppliedPQC/awesome-pqc)** — an
-  implementation-first, link-verified list of post-quantum cryptography
-  resources: standards, conformance test vectors, libraries, and deployment.
-  Every link is checked on a schedule, so the list does not quietly rot.
+- **[awesome-pqc](https://github.com/AppliedPQC/awesome-pqc)** — the curated,
+  link-verified resource list described at the top of this page.
+- **[btc-l2-pqc-research](https://github.com/AppliedPQC/btc-l2-pqc-research)** —
+  what a post-quantum migration means for Bitcoin layer 2s, with GOAT as a
+  worked case study.
 
 Everything lives under [github.com/AppliedPQC](https://github.com/AppliedPQC).

@@ -157,6 +157,11 @@ jobs:
             exit 1
           }
           echo "topbar: X link present on all $html pages"
+          # The awesome-pqc callout is raw HTML in the README, so a stray blank
+          # line inside it would have pandoc shred it into paragraphs.
+          grep -q '<div class="callout">' site/index.html
+          grep -q 'AppliedPQC/awesome-pqc' site/index.html
+          python3 -c "import re,sys; h=open('site/index.html').read(); m=re.search(r'<div class=\"callout\">.*?</div>', h, re.S); sys.exit('::error::the awesome-pqc callout was mangled out of its block') if (not m or '<p>' in m.group(0)) else print('callout: intact, %d chars' % len(m.group(0)))"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
