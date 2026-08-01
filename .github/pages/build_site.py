@@ -71,8 +71,20 @@ def css(*names):
 
 
 def pdf_pages(pdf):
-    if not os.path.exists(pdf):
-        return None
+    """Page count of the book, so the figure on the landing page is never typed.
+
+    Read from the LaTeX log first: it is always present after a build and needs
+    no extra tool. pdfinfo is a fallback for building the site without
+    rebuilding the PDF -- it is not installed on the CI runner, and counting
+    /Type /Page in the raw bytes does not work because those objects sit inside
+    compressed object streams.
+    """
+    log = os.path.join(ROOT, "apqc.log")
+    if os.path.exists(log):
+        m = re.search(r"Output written on .*?\((\d+) pages",
+                      open(log, errors="replace").read())
+        if m:
+            return int(m.group(1))
     try:
         out = subprocess.run(["pdfinfo", pdf], capture_output=True, text=True).stdout
         m = re.search(r"^Pages:\s+(\d+)", out, re.M)
@@ -80,7 +92,7 @@ def pdf_pages(pdf):
             return int(m.group(1))
     except FileNotFoundError:
         pass
-    return len(re.findall(rb"/Type\s*/Page\b", open(pdf, "rb").read())) or None
+    return None
 
 
 FRONT = re.compile(r"\A---\n(.*?)\n---\n", re.S)

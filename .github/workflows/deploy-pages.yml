@@ -84,6 +84,9 @@ jobs:
           grep -q '<title>Applied Post-Quantum Cryptography</title>' site/index.html
           grep -q 'href="apqc.pdf"' site/index.html
           grep -q '<main class="home">' site/index.html
+          # The page count is read from the build, not typed in; if the source
+          # it comes from ever moves, the hero loses it silently.
+          grep -qE '[0-9]+ pages · by' site/index.html
           # Landing page structure: hero, the card grid, and the sibling
           # projects it exists to surface.
           test "$(grep -c '<section class="band' site/index.html)" -ge 4
