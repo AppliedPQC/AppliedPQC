@@ -1,22 +1,23 @@
-name: Deploy LaTeX book to GitHub Pages
+name: Build the book and check the site
+
+# The site is published from AppliedPQC/AppliedPQC.github.io, which builds from
+# this repository. This workflow therefore builds and checks but does not
+# deploy: a broken book or a mangled page is caught here, in review, before it
+# can reach the publisher. Publishing this repository's own Pages as well would
+# put a second, competing copy of the site at appliedpqc.io/AppliedPQC/.
 
 on:
   push:
     branches: [main]
-  # Pull requests build the book and render the landing page but do not
-  # deploy, so a broken build is caught in review rather than on main.
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  # Scope by ref so a pull-request run can never cancel a live deployment.
-  group: pages-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -76,24 +77,3 @@ jobs:
 
       - name: Check the rendered site
         run: python3 .github/pages/check_site.py site
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  deploy:
-    # Pull requests validate the build above; only main publishes.
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    permissions:
-      pages: write
-      id-token: write
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
