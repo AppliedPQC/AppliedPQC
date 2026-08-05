@@ -242,7 +242,7 @@ The algorithm above is not quite ML-KEM. It is the key generation of \textbf{K-P
 \[
 \textsc{K-PKE.KeyGen},\qquad \textsc{K-PKE.Encrypt}(ek, m, r),\qquad \textsc{K-PKE.Decrypt}(dk, c),
 \]
-and the \textbf{Fujisaki--Okamoto (FO) transform} turns them into a \emph{CCA-secure} key-encapsulation mechanism. ML-KEM key generation simply calls K-PKE key generation and stores a little extra in the secret key:
+and the \textbf{Fujisaki--Okamoto (FO) transform}~\cite{fo1999} turns them into a \emph{CCA-secure} key-encapsulation mechanism. ML-KEM key generation simply calls K-PKE key generation and stores a little extra in the secret key:
 
 \begin{algorithm}[H]
 \caption{ML-KEM.KeyGen (teaching form)}
@@ -290,7 +290,7 @@ encryption} scheme secure only against a passive eavesdropper. One more layer is
 needed before any of it is safe to deploy, and FIPS 203 is blunt that the layer
 is not optional: K-PKE ``is not IND-CCA2-secure and shall not be used as a
 stand-alone scheme''~\cite{fips203}. This section explains what that missing
-property is and how the \textbf{Fujisaki--Okamoto (FO) transform}~\cite{fo1999}
+property is and how the \textbf{Fujisaki--Okamoto (FO) transform}
 supplies it. The same transform reappears in every other KEM in this book --
 Classic McEliece (Chapter~\ref{ch:mceliece}), HQC (Chapter~\ref{ch:hqc}), and
 SIKE (Chapter~\ref{ch:isogeny}) -- so it is worth meeting properly once.
