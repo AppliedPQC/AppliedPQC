@@ -36,6 +36,27 @@
 \renewcommand{\algorithmicrequire}{\textbf{Input:}}
 \renewcommand{\algorithmicensure}{\textbf{Output:}}
 
+% ---- Vertical spacing ----
+% book.cls flush-bottoms every page by stretching whatever glue it offers,
+% which on pages full of [H] floats and short paragraphs inflates the display
+% and list skips unevenly -- the same gap is a different height on every page.
+\raggedbottom
+% The chapters alternate one-sentence paragraphs with one-line display
+% formulas; at the default skips each formula reads as a paragraph of its own
+% inside a blank line on either side. Tighten the skips so a short formula
+% stays visually attached to the sentence that introduces it. Appended to
+% \normalsize because every size command resets these lengths.
+\makeatletter
+\g@addto@macro\normalsize{%
+  \setlength{\abovedisplayskip}{6pt plus 2pt minus 3pt}%
+  \setlength{\belowdisplayskip}{6pt plus 2pt minus 3pt}%
+  \setlength{\abovedisplayshortskip}{2pt plus 1pt}%
+  \setlength{\belowdisplayshortskip}{4pt plus 2pt minus 2pt}%
+}
+\makeatother
+% Lists inherit the same airiness from the class defaults.
+\setlist{topsep=5pt, itemsep=2pt, parsep=0pt}
+
 % ---- Theorem-like environments (shared counter, numbered by chapter) ----
 \usepackage{amsthm}
 \theoremstyle{definition}
