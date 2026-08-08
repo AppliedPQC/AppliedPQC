@@ -5,15 +5,28 @@
 \section{Why this chapter matters}
 Blockchains are one of the hardest post-quantum migration problems in existence, for two reasons the previous chapter only touched. First, the funds are secured by \emph{signatures} whose public keys are, sooner or later, \emph{permanently public} on an immutable ledger -- so ``harvest now, decrypt later'' becomes a much sharper ``store now, steal later.'' Second, there is no administrator: changing the rules of Bitcoin or Ethereum is a governance problem settled by rough consensus and forks, not a software update pushed to servers. This chapter looks at how three ecosystems are actually approaching the transition, as of mid-2026: Bitcoin and Ethereum, the two largest, and Cosmos, which is furthest along in shipped code. Everything here is a moving target: the concrete proposals are drafts, not deployed consensus, and the reader should treat dates and statuses as a snapshot.
 
+Mosca's inequality $x + y > z$ (Chapter~\ref{ch:quantum}) states the problem in
+one line, and blockchains are the case where it degenerates. The shelf life $x$
+of an exposed on-chain public key is not measured in years: the ledger is
+immutable and public, so the key is a target for as long as the chain exists and
+the coins remain unmoved. With $x$ unbounded, $x + y > z$ holds for \emph{any}
+migration time $y$ and \emph{any} finite $z$. The inequality therefore cannot be
+satisfied by better hardware forecasts or by moving faster; it can only be
+escaped by removing the exposure --- which means moving the coins. That is why
+every roadmap in this chapter, whatever else it disputes, ends up arguing about
+how to make users act.
+
 \section{Learning goals}
 After reading this chapter, you should be able to:
 
 \begin{itemize}
   \item explain which blockchain primitives a quantum computer breaks (Shor) versus merely weakens (Grover), and the public-key-exposure principle;
-  \item describe Bitcoin's exposure by output type and the current draft proposals (BIP-360, BIP-361);
+  \item describe Bitcoin's exposure by output type and the current draft proposals (BIP-360, BIP-361), and distinguish exposure caused by \emph{protocol design} from exposure caused by \emph{user behaviour};
   \item inventory the cryptographic surfaces of a layer 2 by \emph{who can fix each one};
   \item explain why a hash-based or symmetric layer does not make a system post-quantum, and what to ask instead;
   \item describe Ethereum's exposure and its two-front plan: an emergency hard fork and account-abstraction-based migration;
+  \item explain why an EdDSA chain admits a migration route that an ECDSA chain does not, and why generating ECDSA keys from a seed does not close the gap;
+  \item bound a migration by the \emph{throughput} of the chain itself, and compute that bound;
   \item weigh the central controversy -- whether to freeze quantum-vulnerable coins -- and the honest uncertainty in the timeline.
 \end{itemize}
 
@@ -50,6 +63,46 @@ exposed. Other scripts must be assessed by their actual path and witness.
 \subsection{What is exposed}
 Bitcoin's exposure is precisely a function of output type. Coins in \emph{pay-to-public-key} (P2PK, the earliest, Satoshi-era outputs), raw multisig, and Taproot key-path outputs carry a public key on chain permanently and are long-exposure vulnerable. Coins in the hash-wrapped types (P2PKH, P2SH, P2WPKH) stay protected \emph{until the address is reused or spent}, at which point the key is revealed~\cite{bip360,chaincodepq2025}. BIP-361 states that, as of 1~March 2026, over \textbf{34\% of all bitcoin have revealed a public key on chain}~\cite{bip361}; an independent Chaincode Labs analysis puts the exposed fraction in the range of roughly one-fifth to one-half of supply~\cite{chaincodepq2025}. (Older and widely repeated figures attributing a specific amount to Satoshi-era P2PK are best treated as estimates rather than established fact.)
 
+\subsection{Two kinds of exposure}
+\label{sec:two-exposures}
+
+The aggregate percentage hides the more useful structure. Published on-chain
+analyses that break the exposed supply down by \emph{cause} agree on the
+qualitative shape, even where their totals differ: roughly one quarter to one
+third of it comes from output types that publish a key by design (P2PK, raw
+multisig, Taproot key-path), and the clear majority --- on the order of
+seven-tenths --- comes from ordinary hash-wrapped addresses that were
+\textbf{reused after being spent from}. Figure~\ref{fig:pubkey-exposure} draws
+the mechanism; the split tells us how often each branch is taken.
+
+That distinction is worth making explicit because the two causes have different
+remedies and different politics:
+
+\begin{itemize}
+  \item \textbf{Design exposure} is a property of the protocol. No user action
+        can undo it --- a P2PK output has its public key in the ledger forever,
+        and the owner cannot retract it. Only a migration to a new output type
+        helps, and for P2PK outputs whose keys are lost, nothing helps at all.
+  \item \textbf{Behavioural exposure} is a property of how wallets were used. It
+        was avoidable in principle, it is still accumulating today with every
+        reused address, and --- crucially --- it is the part that education,
+        wallet defaults, and fee policy can actually reduce \emph{before} any
+        consensus change ships.
+\end{itemize}
+
+The practical consequence is that the largest single share of Bitcoin's quantum
+exposure does not require a soft fork to start shrinking. It requires wallets to
+stop reusing addresses, which is a change nobody has to be persuaded to ratify.
+Any exposure figure quoted without this breakdown makes the problem look more
+uniformly intractable than it is.
+
+\begin{remark}[Reading exposure statistics]
+On-chain exposure figures are analyst-dependent. They vary with the treatment of
+dust and provably-unspendable outputs, with whether an address is counted by
+balance or by output count, and with how Taproot outputs are classified. Quote a
+range and a source, as this section does, rather than a single decimal figure.
+\end{remark}
+
 \subsection{The draft proposals}
 Two Bitcoin Improvement Proposals anchor the response, and it is worth stressing that both are \textbf{Draft and not activated} as of mid-2026:
 
@@ -64,6 +117,7 @@ under the stated confirmation-depth, reorganization, fee, timeout, and recovery
 assumptions; it is not an unconditional guarantee.
 
 \subsection{The freeze controversy}
+\label{sec:freeze}
 BIP-361's sunset implies that coins whose owners never migrate -- and coins for which no ownership proof is possible, notably P2PK -- become effectively unspendable, i.e.\ \emph{frozen}. This is the sharpest open dispute in Bitcoin's roadmap. Proponents argue a pre-announced sunset is defensive: a quantum attacker would otherwise \emph{steal} those coins outright, whereas a freeze at least preserves them. Critics call any forced migration confiscatory, contrary to Bitcoin's property-rights ethos, and warn that freezing long-dormant coins (including Satoshi's) sets a dangerous precedent. This is a genuine, unresolved political disagreement, not a settled plan, and should be read as such.
 
 \section{Ethereum}
@@ -114,6 +168,53 @@ Status (mid-2026) & Draft BIPs, not activated & prototypes, unaudited; PQ infra 
 \label{tab:chain-migration}
 \end{table}
 
+
+\section{Administrative keys: the concentrated case}
+\label{sec:admin-keys}
+
+Everything so far has treated the threat as distributed: many users, each holding
+their own coins behind their own key, migrating at their own pace. One class of
+target inverts that structure completely, and it is under-discussed relative to
+its size.
+
+A stablecoin is not a native asset but an upgradeable smart contract, and its
+behaviour is governed by a handful of privileged roles held by ordinary
+externally-owned accounts --- which is to say, by ordinary secp256k1 keys with
+ordinary on-chain public keys. The roles vary by issuer, but the pattern is
+consistent:
+
+\begin{itemize}
+  \item a \textbf{proxy admin}, which can replace the contract's implementation
+        and therefore its entire logic;
+  \item a \textbf{minter} or master-minter role, which can issue tokens without
+        corresponding reserves;
+  \item a \textbf{blacklister} or freezer, which can immobilize balances;
+  \item a \textbf{pauser}, which can halt all transfers.
+\end{itemize}
+
+The security properties here are unlike the rest of this chapter in three ways.
+The number of keys is tiny, so an attacker needs a handful of Shor executions
+rather than a campaign. The value controlled is enormous and shared --- compromise
+does not drain one wallet but affects every holder of the token at once, along
+with every lending protocol, bridge, and exchange that treats it as collateral.
+And the damage is not bounded by the balance, because a proxy admin can
+\emph{rewrite the accounting rules} rather than merely move funds.
+
+Two mitigations that work elsewhere do not help. Multisignature control divides
+the private keys among several holders, but a quantum adversary derives each one
+independently from its published public key, so an $m$-of-$n$ scheme raises the
+attacker's cost by a factor of $m$, not exponentially --- the same linear
+degradation noted for user wallets. Hardware custody protects a key against
+extraction from a device, and Shor does not extract keys from devices; it derives
+them from the ledger.
+
+The redeeming feature is that this is the one part of the problem with a
+\emph{responsible party}. Nobody can compel millions of users to rotate their
+wallets, but a stablecoin issuer can migrate its own admin roles to post-quantum
+authorization on its own schedule --- provided the chain gives it a post-quantum
+verification path to migrate \emph{to}, which returns the problem to the protocol
+roadmaps above. Concentrated control is the reason this exposure is dangerous,
+and also the reason it is the most tractable item in the chapter.
 
 \section{Cosmos}
 
@@ -175,6 +276,177 @@ carry packets stops doing so. Any multi-chain migration plan needs a sequencing
 story, and no published one yet covers a large IBC graph.
 
 
+\section{Seeds, preimages, and the EdDSA asymmetry}
+\label{sec:eddsa-asymmetry}
+
+Every migration route so far has required the owner to act \emph{before} the
+attacker does. There is one family of mechanisms that does not, and it turns on a
+detail of key generation that most readers will never have had reason to notice.
+
+\subsection{The recovery problem}
+Suppose the worst has already happened: a quantum adversary has run Shor's
+algorithm against an exposed public key and holds a valid private key. The chain
+can protect the coins only by refusing legacy signatures --- but then the
+\emph{honest owner} cannot spend either, because their private key is exactly the
+one the attacker now has. Recovering the coins requires the owner to demonstrate
+something the attacker cannot: not possession of the private key, which is no
+longer secret, but possession of some secret \emph{upstream} of it.
+
+Ethereum's emergency plan (Section~\ref{sec:eth-two-front}) is precisely this
+move: authenticate by proving knowledge of a hash preimage rather than by signing.
+What makes it work is that the recovery secret was never published, so Shor never
+touches it. What makes it \emph{ad hoc} is that Ethereum must arrange for such a
+secret to exist.
+
+\subsection{RFC 8032 arranges it by construction}
+EdDSA does not need the arrangement, because its key generation already has this
+shape. Under RFC~8032~\cite{rfc8032} an Ed25519 key begins as a 32-byte
+\emph{seed} $k$, and the signing scalar is derived by hashing it:
+\[
+  h = \mathrm{SHA\text{-}512}(k), \qquad
+  s = \mathrm{clamp}\big(h[0..31]\big), \qquad
+  A = s\cdot B ,
+\]
+with the upper half $h[32..63]$ retained as the deterministic nonce prefix. The
+value stored by the wallet is $k$; the value that the public key commits to is
+$s$.
+
+This one hash is the whole asymmetry. Shor's algorithm computes discrete
+logarithms, so from $A$ an attacker recovers $s$ --- and stops there, because
+recovering $k$ from $s$ is a preimage search on SHA-512, which Grover reduces
+only quadratically. The honest owner knows $k$ and the attacker does not, even
+after the curve is completely broken. The owner can therefore prove, in zero
+knowledge,
+\[
+  \exists\, k \;:\; \mathrm{clamp}\big(\mathrm{SHA\text{-}512}(k)[0..31]\big)\cdot B = A ,
+\]
+binding the existing address $A$ to a fresh post-quantum key, with no need to
+have moved the funds beforehand~\cite{eddsapq2025}.
+
+The last clause is the valuable one, and it is worth stating as sharply as
+possible:
+
+\begin{itemize}
+  \item A \textbf{pre-commitment} scheme --- publish a commitment to a future
+        post-quantum key, as BIP-360's commit--reveal does --- requires every
+        owner to \emph{act before Q-Day}.
+  \item A \textbf{seed-preimage proof} lets an owner recover \emph{after Q-Day,
+        having done nothing at all}.
+\end{itemize}
+
+Given that SegWit needed over three years to reach 80\% of transactions while
+offering an immediate fee discount, ``requires no prior user action'' is not a
+minor convenience. It is the difference between a mechanism that reaches dormant
+coins and one that does not.
+
+\subsection{Why not simply derive ECDSA keys from a seed?}
+\label{sec:why-not-ecdsa-seed}
+
+The obvious question is why ECDSA chains cannot adopt the same trick: define
+$sk = H(\text{seed}) \bmod n$, keep the seed, and prove the preimage later.
+Cryptographically, nothing prevents it. ECDSA places no constraint on how the
+scalar is produced, so the construction is sound and the proof statement is the
+same shape.
+
+More than that, \textbf{it has already been done}. BIP-32 hierarchical
+deterministic wallets~\cite{bip32} derive every signing key from a master seed
+through a chain of HMAC-SHA512 steps, and BIP-39 puts a mnemonic and PBKDF2 in
+front of that. Most Bitcoin and Ethereum keys in existence today do have a hash
+between the secret their owner wrote down and the scalar their address commits
+to. The blanket claim that ECDSA chains lack this layer is a statement about the
+\emph{protocol}, and it is too strong as a statement about \emph{wallets}.
+
+The gap is nevertheless real, and it is instructive because it is not a
+cryptographic gap at all. Three things separate a protocol invariant from a
+widespread convention:
+
+\begin{enumerate}
+  \item \textbf{Universality.} RFC~8032 makes seed-then-hash the \emph{definition}
+        of Ed25519 key generation, so every conforming key has the structure. In
+        ECDSA it is a wallet choice, and the exceptions are exactly the
+        high-value historical cases: early Bitcoin keys from \texttt{dumpprivkey},
+        brainwallets, paper wallets, exchange- and HSM-generated keys, and
+        anything produced before BIP-32 existed in 2012.
+  \item \textbf{Detectability.} Given an address, nothing on chain reveals
+        whether it has BIP-32 ancestry. A consensus rule cannot offer a recovery
+        path to seed-derived keys and freeze the rest, because it cannot tell them
+        apart in advance; owners of raw-entropy keys would discover the problem
+        only at the moment they tried to recover.
+  \item \textbf{A single statement to prove.} Ed25519 needs one circuit. ECDSA
+        recovery would have to cover BIP-32 against SLIP-0010 against Electrum's
+        scheme against raw entropy, hardened against non-hardened derivation, and
+        an arbitrary derivation path --- either as a much larger circuit or by
+        revealing the path as a public input, which is probably acceptable but is
+        one more thing to specify and get adopted.
+\end{enumerate}
+
+And for keys generated \emph{from now on}, the idea dissolves entirely. Changing
+key generation requires a wallet software update; if a wallet is being updated
+anyway, it should generate an ML-DSA key rather than a cleverly-derived ECDSA
+one. The seed-preimage route has value only \emph{retroactively}, for coins
+already sitting at addresses whose owners cannot or will not act --- which is
+also, not coincidentally, the population every other mechanism in this chapter
+fails to reach.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{3.4cm}p{5.0cm}p{5.4cm}@{}}
+\toprule
+ & \textbf{EdDSA chains} & \textbf{ECDSA chains} \\
+\midrule
+Seed-to-scalar hash & mandated by RFC~8032 & wallet convention (BIP-32/39) \\
+Coverage & every conforming key & most, but not all, and not the oldest \\
+Detectable on chain & yes, by construction & \textbf{no} \\
+Derivation to prove & one function & many schemes, plus a path \\
+Usable as a consensus rule & plausibly & not without classifying keys it cannot classify \\
+\bottomrule
+\end{tabular}
+\caption{Why the same cryptographic idea supports a chain-wide policy in one case
+and not the other. The difference is not the hash; it is whether the hash is a
+protocol invariant or a wallet habit.}
+\label{tab:eddsa-ecdsa}
+\end{table}
+
+\subsection{Caveats that apply to both}
+Three conditions are easy to overlook, and each one connects to material
+elsewhere in this chapter.
+
+\paragraph{It is recovery, not protection.}
+A seed proof does nothing while legacy signatures are still valid: the attacker
+holds a working private key and simply spends with it, faster than the owner will
+notice. The mechanism only has force on a chain that has \emph{already disabled}
+legacy authorization. It therefore does not sidestep the freeze controversy of
+Section~\ref{sec:freeze} --- it presupposes that the sunset argument has been won.
+
+\paragraph{The proof system must itself be post-quantum.}
+Proving a hash preimage inside a Groth16 verifier over a pairing-friendly curve
+would produce an argument whose soundness Shor breaks, and the resulting system
+would be no better than the ECDSA it replaced. This is exactly the error
+catalogued in Section~\ref{sec:symmetric-plumbing}: a hash-based
+\emph{statement} carried by an elliptic-curve \emph{argument}. A STARK or other
+hash-based proof system is required, and it must be checked all the way down,
+including its lookup and memory arguments.
+
+\paragraph{The proof must be bound to the destination.}
+Recovery proofs are published. If a proof establishes only ``someone knows the
+seed behind $A$'' without committing to where the funds go, an attacker watching
+the mempool can replay it in a transaction paying themselves. The proof statement
+must include the destination, which makes it a signature over the recovery
+transaction rather than a free-floating attestation --- the same front-running
+hazard, with the same class of fix, as the commit--reveal construction discussed
+above.
+
+\begin{remark}[BIP-32 degrades separately under Shor]
+Non-hardened BIP-32 derivation sets $k_{\text{child}} = k_{\text{parent}} + I_L$
+where $I_L$ is computable from the parent \emph{public} key and chain code. An
+account-level extended public key is routinely shared with watch-only wallets and
+light-client servers; against Shor, that exposure yields the account scalar and
+hence every non-hardened child. The master seed stays safe, so the recovery
+argument above still holds --- but the cost of a single exposure is an entire
+account branch, not one address.
+\end{remark}
+
 \section{Layer 2s: the composition problem}
 \label{sec:l2-composition}
 
@@ -202,6 +474,7 @@ Bridge operator keys & secp256k1, Schnorr, BLS & yes & the L2 \\
 Bridge proof system & Groth16/PLONK, or STARK & \emph{check inside} & the L2, often with upstream \\
 Bridge commitments & Merkle, Winternitz & \textbf{no} & already safe \\
 L2 consensus keys & ed25519, BLS12-381 & yes & the L2's consensus stack \\
+Contract admin / upgrade keys & secp256k1 (often multisig) & yes & the role holder, unilaterally \\
 EVM crypto precompiles & \texttt{ecrecover}, BN254 pairing, KZG & yes & \textbf{upstream; unmigratable} \\
 \bottomrule
 \end{tabular}
@@ -210,6 +483,7 @@ EVM crypto precompiles & \texttt{ecrecover}, BN254 pairing, KZG & yes & \textbf{
 \end{table}
 
 \subsection{Symmetric plumbing does not make a system post-quantum}
+\label{sec:symmetric-plumbing}
 The most useful lesson from auditing such a stack is a negative one, and it
 generalizes well beyond blockchains: \textbf{a hash-based or symmetric layer
 protects only what it carries.}
@@ -288,6 +562,120 @@ A 2026 arXiv preprint, not a consensus survey, gives one set of model-dependent
 estimates for cryptographically relevant quantum computing~\cite{quantumhorizon2026}.
 A 2025 Google analysis of RSA-2048 illustrates a downward resource-estimation trend,
 but is RSA-specific and not a direct estimate for Bitcoin or Ethereum curves~\cite{gidney2025}.
+Expert elicitation~\cite{mosca2025} and national guidance~\cite{nistir8547,ncscpqc2025,cnsa2}
+place the migration deadline for conventional systems in the early-to-mid 2030s,
+but those targets were set for enterprise IT, where an administrator can deploy a
+change; they were not calibrated for a system whose users must each act
+individually.
+
+The honest position is that $z$ in Mosca's inequality is unknown and contested.
+The useful response is to stop arguing about $z$ and measure $y$ instead --- the
+migration time is a property of the system, not of the adversary, and unlike $z$
+it can be computed.
+
+\subsection{Migration is bounded by blockspace}
+\label{sec:migration-throughput}
+
+Here is the constraint that the roadmap debates tend to skip. Migrating a coin is
+not a database update; it is a \emph{transaction}, and transactions compete for a
+fixed and quite small amount of blockspace. So there is a floor on how fast any
+migration can possibly proceed, and it depends only on arithmetic --- the number
+of outputs to move, the size of a post-quantum spend, and the throughput of the
+chain.
+
+Write $N$ for the number of unspent outputs to migrate, $w$ for the weight a
+single migration transaction consumes, $W$ for the weight available per block,
+and $T$ for the block interval. If migration were given \emph{every unit} of
+every block, it would still take
+\[
+  T_{\min} \;=\; T \cdot \left\lceil \frac{N\,w}{W} \right\rceil ,
+\]
+and at a share $\sigma$ of blockspace the figure scales by $1/\sigma$.
+
+Two features of this bound deserve emphasis. It is a \emph{lower} bound assuming
+all of the chain's capacity goes to migration and nothing else --- no payments,
+no ordinary economic activity --- which no live chain would tolerate. And it is
+driven by $w$, which for a post-quantum spend is dominated by the signature and
+public key, exactly the quantities that are one to two orders of magnitude larger
+than what they replace. The sizes tabulated throughout this book are not merely a
+bandwidth annoyance: they set the clock on the migration itself.
+
+A published analysis of this question for Bitcoin reports a required downtime on
+the order of a few months of exclusive blockspace, under its own assumptions
+about which outputs must move and what a migration spend
+costs~\cite{pont2024}. The exercise below builds a cruder model and gets a
+larger answer; the discrepancy is the instructive part, and reconciling the two
+is the point.
+
+\begin{remark}[Why this reframes the whole chapter]
+Every other quantity in this chapter is contested: when Q-Day arrives, whether a
+freeze is legitimate, which signature scheme wins. The throughput bound is not.
+It follows from block size, signature size, and arithmetic, and it says that even
+a perfectly coordinated ecosystem with universal agreement and instant wallet
+support could not complete the migration quickly. That is the strongest available
+argument for starting early, and it does not require winning any argument about
+quantum hardware.
+\end{remark}
+
+\subsection*{Exercise: compute the bound}
+
+The formula above is worth evaluating rather than reading, because the sensitivity
+to $w$ is the lesson. Using the tools of Chapter~\ref{ch:sagemath}:
+
+\begin{lstlisting}[language=Python]
+# Lower bound on migration time: every weight unit of every block, nothing else.
+BLOCK_WEIGHT   = 4_000_000   # weight units available per Bitcoin block
+BLOCKS_PER_DAY = 144         # one block per ten minutes
+
+def migration_days(n_outputs, witness_bytes, base_bytes=80, share=1.0):
+    # SegWit discount: witness bytes cost 1 weight unit, the rest cost 4.
+    weight_per_tx = witness_bytes + 4 * base_bytes
+    per_block = BLOCK_WEIGHT // weight_per_tx
+    blocks = -(-n_outputs // per_block)          # ceiling division
+    return blocks / (BLOCKS_PER_DAY * share)
+
+SCHEMES = [("ed25519 (baseline)",  64 + 32),      # signature + public key
+           ("ML-DSA-65",         3309 + 1952),
+           ("SLH-DSA-128s",      7856 + 32)]
+
+for label, n in [("every UTXO (~190M)", 190_000_000),
+                 ("exposed third (~63M)", 63_000_000)]:
+    print(label)
+    for name, size in SCHEMES:
+        print(f"  {name:20s} {migration_days(n, size):8.0f} days exclusive"
+              f"   {migration_days(n, size, share=0.10):8.0f} days at 10%")
+\end{lstlisting}
+
+The model gives roughly 1800 days to move every output at ML-DSA-65 sizes with
+the whole chain to itself, and about 600 days for the exposed third --- against
+137 and 46 days respectively for the classical baseline. At a tenth of
+blockspace, which is already generous for a chain that must keep processing
+payments, the exposed third alone runs to some sixteen years.
+
+Three things to take from that. The baseline rows show that migration is slow
+even with \emph{classical} signatures, so post-quantum sizes are an aggravating
+factor rather than the sole cause. The SLH-DSA rows price the most conservative
+assumption in schedule rather than in bytes --- a trade-off the size tables of
+Chapter~\ref{ch:applications} state but do not cost out. And the gap between
+these figures and the published estimate is itself the lesson: this model
+migrates one output per transaction, at full witness size, for the entire
+exposed set. Every one of those is pessimistic, and the published analysis relaxes
+them.
+
+So relax them, and see which matters. Vary the migrating set; batch many outputs
+into one transaction; apply an aggregation or a proof-based authorization in
+place of a per-output signature. Batching is the interesting lever, because $N$
+and $W$ are given to the designer while $w$ per migrated output is the one term a
+protocol can actually negotiate --- which is precisely what the output-type and
+recovery-path proposals in this chapter are trying to buy.
+
+\begin{remark}[Do not quote this figure]
+The numbers above depend on the UTXO count, the fraction deemed exposed, the
+witness discount, batching, and the scheme --- and Pitfall 3 of this chapter
+applies to them as much as to gas figures. The order of magnitude is the claim
+worth carrying: \emph{years, not weeks}, under any assumption set that keeps the
+chain usable.
+\end{remark}
 
 \section{Pitfalls}
 
@@ -300,17 +688,39 @@ BIP-360, BIP-361, and EIP-8141 are drafts; the freeze question in particular is 
 \paragraph{Pitfall 3: quoting a single gas figure.}
 On-chain verification costs move between implementations, versions, and precompile assumptions. A number without a source and date is not meaningful.
 
+\paragraph{Pitfall 4: assuming hybrid signatures are the safe default.}
+They are the conservative choice in TLS, where the redundant work is ephemeral,
+negotiated, and invisible (Section~\ref{sec:hybrid-limits}). On chain the extra
+signature is stored forever by everyone, cannot be negotiated away, and obliges
+users to migrate twice. Importing the internet's default here doubles the
+dominant cost.
+
+\paragraph{Pitfall 5: quoting an exposure percentage without its cause.}
+``One third of supply is exposed'' conflates outputs that publish a key by design
+with addresses that were reused, and only the second is still growing and
+reducible without a consensus change (Section~\ref{sec:two-exposures}).
+
+\paragraph{Pitfall 6: treating migration as a scheduling problem.}
+It is a throughput problem. Blockspace bounds it from below regardless of how
+well the ecosystem coordinates (Section~\ref{sec:migration-throughput}), so a
+plan that begins when Q-Day is announced cannot finish, however motivated
+everyone is by then.
+
 \section{Summary}
 Blockchains sharpen the quantum threat and complicate the response:
 
 \begin{itemize}
-  \item the danger is to signatures (Shor), not hashing (Grover); an exposed public key on an immutable ledger is a permanent, ``store now, steal later'' liability;
+  \item the danger is to signatures (Shor), not hashing (Grover); an exposed public key on an immutable ledger is a permanent, ``store now, steal later'' liability --- which makes the shelf-life term in \textbf{Mosca's inequality} unbounded, so $x+y>z$ holds for any finite Q-Day and the only escape is to remove the exposure;
+  \item exposure has \textbf{two causes} with different remedies: output types that publish a key by design, and address reuse --- the larger share, still accumulating, and reducible by wallet behaviour alone;
+  \item \textbf{administrative keys} (stablecoin proxy admin, minter, pauser) are the concentrated case: few keys, shared blast radius, immune to multisig and hardware custody, but owned by someone who can actually act;
   \item \textbf{Bitcoin} proposes a new quantum-hardened output type (BIP-360) and a contested legacy-signature sunset (BIP-361), both draft soft forks;
   \item \textbf{Ethereum} pairs an emergency hard fork with STARK-based hash-preimage recovery and an account-abstraction migration path (EIP-7702 shipped, EIP-8141 draft), targeting first-layer post-quantum infrastructure around 2029;
   \item \textbf{Cosmos} has gone furthest in shipped code, registering ML-DSA-65 as an opt-in validator consensus key type, at $60\times$ the key size and $50\times$ the signature size of ed25519;
   \item a \textbf{layer 2} inherits all of these at once and can fix only some of them, so its plan must be organized by \emph{ownership} of each surface rather than by scheme;
   \item a symmetric or hash-based layer protects only what it \emph{carries}: Winternitz commitments, garbled circuits and FRI commitments have all been found wrapping elliptic-curve assertions, and a proof system can hide a discrete-log dependency in an argument that is not its headline commitment scheme;
   \item some exposures cannot be migrated at all --- an EVM pairing precompile has immutable callers, so it can be inventoried but never upgraded --- and aggregation has no post-quantum drop-in, which is why replacing BLS is an architectural project;
+  \item \textbf{EdDSA chains} inherit a recovery route from RFC~8032's seed-then-hash key generation, letting an owner prove seed knowledge \emph{after} Q-Day with no prior action; ECDSA chains can imitate it per-wallet (BIP-32 already does) but cannot make it a consensus rule, because the structure is neither universal nor detectable on chain;
+  \item migration is bounded from below by \textbf{blockspace}, not by willingness: at post-quantum witness sizes the floor is months to years of \emph{exclusive} blockspace, and years to decades at any share that leaves the chain usable --- a bound that follows from arithmetic rather than from any contested claim about quantum hardware;
   \item the timeline is uncertain but the required lead time is long, which is why these communities are debating the transition years before any quantum computer can execute the attack.
 \end{itemize}
 

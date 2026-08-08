@@ -8,8 +8,9 @@ The previous parts built and analysed the algorithms. This chapter is about the 
 After reading this chapter, you should be able to:
 
 \begin{itemize}
-  \item explain why real deployments use \emph{hybrid} classical-plus-postquantum cryptography, and what crypto-agility means;
+  \item explain why real deployments use \emph{hybrid} classical-plus-postquantum cryptography, what crypto-agility means, and when hybrid is the wrong choice;
   \item describe how TLS 1.3 carries a hybrid key exchange and post-quantum certificates, and what the size costs are;
+  \item say what has already shipped, and why key exchange migrated years ahead of signatures;
   \item explain why verifying post-quantum signatures on-chain is expensive and how projects reduce that cost;
   \item weigh the size and performance trade-offs that drive scheme choice in practice.
 \end{itemize}
@@ -33,6 +34,35 @@ Hybrid deployment hedges two opposite risks at once: a future quantum computer b
 \begin{remark}[Crypto-agility]
 Hybrids only work if systems can \emph{negotiate} which algorithms they use rather than hardcoding one. \emph{Crypto-agility} -- designing protocols, certificate formats, and code so the algorithm can be swapped without re-architecting -- is the quiet prerequisite for the whole migration. The schemes will keep evolving; the plumbing must not assume any single one.
 \end{remark}
+
+\subsection{Where hybrid does not fit}
+\label{sec:hybrid-limits}
+
+Hybrid is the right default for the protocols above, and it is worth being
+explicit about \emph{why}, because the reasons are properties of those protocols
+rather than facts about cryptography --- and one important class of system has
+none of them.
+
+In TLS, a hybrid transition is nearly free. The extra classical key exchange
+costs a few hundred bytes on a connection that is discarded seconds later, both
+endpoints negotiate the algorithm without asking anyone's permission, and no user
+is aware the change happened. The cost is paid once, by software vendors, and it
+is invisible.
+
+On a blockchain, every one of those properties fails. The extra signature is not
+transient: it is written permanently into a block, relayed to every node, and
+stored by every archive, so a hybrid transaction costs its wire size
+\emph{forever} and to \emph{everyone}. There is no negotiation, because consensus
+rules are the same for all participants. And the change is emphatically not
+invisible --- users must act, first to move to the hybrid scheme and then again
+to move off it, which means the ecosystem pays the coordination cost of a
+migration \textbf{twice}. Chapter~\ref{ch:blockchains} shows what that
+coordination cost actually looks like; it is the dominant term.
+
+The generalizable rule is that hybrid is cheap where the redundant work is
+\emph{ephemeral, negotiated, and invisible}, and expensive where it is
+\emph{persistent, consensus-fixed, and user-visible}. Before adopting hybrid by
+reflex, check which of those two descriptions the system fits.
 
 \section{Post-quantum TLS 1.3}
 TLS 1.3 secures most web traffic, and it is the first place post-quantum cryptography has reached production. Two independent parts of the handshake must be upgraded: the \emph{key exchange} (confidentiality) and the \emph{authentication} (signatures on certificates).
@@ -79,6 +109,38 @@ SLH-DSA-128s (FIPS 205) & 32 & $\approx 7856$ \\
 \caption{Approximate sizes of a classical signature, published PQC standards, and the draft-dependent FN-DSA candidate. Falcon/FN-DSA is not a final FIPS at this standards snapshot.}
 \label{tab:sig-sizes}
 \end{table}
+
+\subsection{What has actually shipped}
+\label{sec:pq-adoption}
+
+It is easy to read a chapter like this one as describing a future. For key
+exchange, it does not. Hybrid post-quantum key agreement is on by default in
+mainstream browsers and in OpenSSH~\cite{opensshpq}, and the share of
+human-initiated HTTPS traffic reaching Cloudflare under a post-quantum key
+agreement passed roughly one half during 2025~\cite{cloudflarepq2025}. Major
+cloud key-management and transport services offer post-quantum KEMs as a
+supported option. A reader who has browsed the web or opened an SSH session
+recently has, with high probability, already used ML-KEM.
+
+Authentication is the opposite story, and the contrast is the useful part.
+Signature migration has barely begun: post-quantum certificates remain a
+draft and experimental track, public certificate authorities are only starting
+to issue them, and the chains of trust behind code signing, firmware, and secure
+boot turn over on a timescale of years. The asymmetry has a simple cause.
+
+\begin{itemize}
+  \item Key exchange is \textbf{ephemeral and two-party}. Both endpoints
+        negotiate afresh on every connection, so an upgrade propagates as fast as
+        software updates do, and nothing needs to be re-issued.
+  \item Signatures are \textbf{long-lived and multi-party}. A root certificate,
+        a signed firmware image, or an on-chain public key commits a verifier who
+        may not be upgraded --- or may not even exist --- yet.
+\end{itemize}
+
+That distinction recurs for the rest of this book. It is why ``harvest now,
+decrypt later'' is the urgent framing for confidentiality but the wrong framing
+for signatures, and it is why the hardest case in the next chapter is a
+signature case.
 
 Implementation and deployment status changes rapidly. Before making a production decision, consult the current IETF document and the release notes of the selected browser, TLS library, or service for its supported groups, defaults, and authentication behaviour.
 
@@ -139,7 +201,7 @@ scheme fits in a TLS handshake, a certificate chain, or a smart-contract call.
 \section{Pitfalls}
 
 \paragraph{Pitfall 1: deploying post-quantum only, too early.}
-Dropping the classical algorithm and trusting the post-quantum one alone forfeits the hedge that hybrid provides. Until the post-quantum schemes have had many more years of scrutiny, hybrid is the conservative default.
+Dropping the classical algorithm and trusting the post-quantum one alone forfeits the hedge that hybrid provides. Until the post-quantum schemes have had many more years of scrutiny, hybrid is the conservative default --- in the protocols where hybrid is cheap. Section~\ref{sec:hybrid-limits} gives the test for when it is not, and the mirror-image mistake, adopting hybrid where it doubles a permanent cost and forces users to migrate twice, is just as real.
 
 \paragraph{Pitfall 2: ignoring handshake and message sizes.}
 Post-quantum keys and signatures are kilobytes, not tens of bytes. Buffers, packet-size assumptions, and certificate-chain limits that were fine for elliptic curves can silently break; sizes must be designed for, not discovered in production.
@@ -154,8 +216,9 @@ The standards will keep changing. A system that cannot negotiate or swap algorit
 The mathematics of the previous parts defeats Shor's algorithm, but that is where the abstract scheme ends and the engineering begins:
 
 \begin{itemize}
-  \item \textbf{hybrid} classical-plus-postquantum deployment, with \textbf{crypto-agility}, is the mainstream migration strategy;
+  \item \textbf{hybrid} classical-plus-postquantum deployment, with \textbf{crypto-agility}, is the mainstream migration strategy --- where the redundant work is ephemeral, negotiated, and invisible, and not where it is permanent, consensus-fixed, and user-visible;
   \item \textbf{TLS 1.3} hybrid key exchange is under standardization and deployment; protocol and implementation versions must be checked at the time of use;
+  \item post-quantum \textbf{key exchange has already shipped} at scale, while \textbf{signature} migration has barely started --- because key exchange is ephemeral and two-party, and signatures are long-lived and multi-party;
   \item verifying signatures \textbf{on-chain} has scheme- and environment-dependent costs, with direct, proof-based, and optimistic designs offering different trade-offs;
   \item scheme choice is a trade-off among size, speed, and assumption strength, with side-channel controls scoped to the secrets and threat model of each operation.
 \end{itemize}
