@@ -61,16 +61,16 @@ It is worth restating the ladder in one place, since SLH-DSA is precisely its as
     \draw[pqcorange, very thick] (leaf\i) -- (mL\i) -- (r\i);
   }
   \node[anchor=west, font=\bfseries] at ($(r2)+(0.12,0)$) {$PK.\mathrm{root}$};
-  \draw[sig] (r0) -- (leaf1) node[midway, right=0.8mm] {WOTS\textsuperscript{+} sig.};
-  \draw[sig] (r1) -- (leaf2) node[midway, right=0.8mm] {WOTS\textsuperscript{+} sig.};
+  \draw[sig] (r0) -- (leaf1) node[midway, right=0.8mm] {WOTS\ensuremath{^{+}} sig.};
+  \draw[sig] (r1) -- (leaf2) node[midway, right=0.8mm] {WOTS\ensuremath{^{+}} sig.};
   \node[fnode] (fors) at (-0.5,1.1) {};
   \node[anchor=west] at ($(fors)+(0.45,0)$) {FORS public key};
   \node[ellipse, draw=pqcgray, fill=pqclight, minimum width=2.1cm, minimum height=0.72cm] (msg) at (-0.5,-0.2) {Message};
-  \draw[sig] (fors) -- (leaf0) node[midway, right=0.8mm] {WOTS\textsuperscript{+} sig.};
+  \draw[sig] (fors) -- (leaf0) node[midway, right=0.8mm] {WOTS\ensuremath{^{+}} sig.};
   \draw[sig] (msg) -- (fors) node[midway, right=0.8mm] {FORS sig.};
   \draw[pqcgray, rounded corners] (3.7,3.35) rectangle (7.7,5.45);
   \node[mnode] at (4.05,4.95) {}; \node[anchor=west] at (4.35,4.95) {Merkle tree node};
-  \node[wnode] at (4.05,4.40) {}; \node[anchor=west] at (4.35,4.40) {WOTS\textsuperscript{+} public key};
+  \node[wnode] at (4.05,4.40) {}; \node[anchor=west] at (4.35,4.40) {WOTS\ensuremath{^{+}} public key};
   \node[fnode, minimum size=4.5mm] at (4.05,3.85) {}; \node[anchor=west] at (4.35,3.85) {FORS public key};
 \end{tikzpicture}
 \caption{An SLH-DSA signature: the full hypertree with $d=3$ layers. The message is signed by \textbf{FORS} (a few-time signature); the FORS public key is signed by a WOTS\textsuperscript{+} leaf of the layer-$0$ Merkle tree; each tree's root is signed by a WOTS\textsuperscript{+} leaf of the tree one layer up; and only the top root $PK.\mathrm{root}$ is published. In each tree the used leaf (filled) and its path to the root are highlighted -- the authentication data that ties the leaf to the root. Redrawn in the style of FIPS 205~\cite{fips205}.}
