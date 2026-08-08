@@ -85,7 +85,7 @@ Two problems remain: a single tree tall enough to never repeat a leaf would be a
 \centering
 \begin{tikzpicture}[every node/.style={font=\scriptsize}]
   \node[keynode] (top) at (0,3) {top tree \; root $=PK.\mathrm{root}$};
-  \node[flownode] (mid) at (0,1.7) {middle tree (signs the root below with WOTS\textsuperscript{+})};
+  \node[flownode] (mid) at (0,1.7) {middle tree (signs the root below with WOTS\ensuremath{^{+}})};
   \node[flownode] (bot) at (0,0.4) {bottom tree (signs the FORS public key)};
   \node[flownode, draw=pqcorange] (fors) at (0,-0.9) {FORS \;(signs the message digest)};
   \draw[flowarrow] (fors) -- (bot);
