@@ -13,8 +13,10 @@ After reading this chapter, you should be able to:
   \item name the hard problems that today's public-key cryptography relies on;
   \item explain, at a high level, what Shor's and Grover's algorithms do;
   \item distinguish what a quantum computer \emph{breaks} from what it merely \emph{weakens};
-  \item explain ``harvest now, decrypt later'' and why migration is urgent;
-  \item place the published NIST standards and the main mathematical families in context.
+  \item read a quantum resource estimate, and say what it does and does not establish;
+  \item explain ``harvest now, decrypt later'' and state Mosca's inequality;
+  \item place the published NIST standards and the main mathematical families in context;
+  \item interpret the NIST security categories that name every parameter set in this book.
 \end{itemize}
 
 \section{What today's cryptography rests on}
@@ -86,11 +88,126 @@ Lattice / code / hash problems & (none known) & survive \\
 \caption{How a large quantum computer affects common primitives. Only the number-theoretic public-key schemes are broken outright.}
 \end{table}
 
+\section{How large a quantum computer?}
+\label{sec:resource-estimates}
+
+``Broken by a large enough quantum computer'' is the right statement, and it is
+also an unsatisfying one: it says nothing about \emph{how} large. The literature
+that answers this is called \emph{resource estimation}, and reading one of its
+results correctly is a skill worth acquiring before any of the migration
+arguments in this book will carry weight.
+
+A resource estimate is not a single number. Three quantities must be satisfied
+\emph{simultaneously}, and a machine that fails any one of them cannot run the
+attack:
+
+\begin{itemize}
+  \item \textbf{Width} -- how many logical qubits the circuit needs at once.
+  \item \textbf{Depth} -- how many logical operations it executes in total,
+        usually reported as a count of Toffoli or $T$ gates, since those are the
+        expensive non-Clifford operations.
+  \item \textbf{Wall-clock time} -- width and depth together with the physical
+        cycle time determine how long the machine must run \emph{coherently
+        under error correction}. An attack that takes a decade is not an attack.
+\end{itemize}
+
+The gap between a \emph{logical} qubit and a \emph{physical} one is where almost
+all of the cost lives. A logical qubit is an error-corrected abstraction built
+from many noisy physical qubits; at present that overhead is roughly three
+orders of magnitude. Google's 2025 demonstration that a surface-code memory can
+run \emph{below threshold} -- adding physical qubits makes the logical error rate
+fall rather than rise -- is the result that makes the whole construction credible
+in principle~\cite{googleqec2025}, and quantum low-density-parity-check codes are
+an active line of work aimed at cutting the overhead
+further~\cite{bravyi2024}. Neither changes the fact that published logical-qubit
+counts today are in the single or low double digits, against the roughly one
+thousand that the estimates below assume.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+Target & Resources & Runtime & Source \\
+\midrule
+RSA-2048 & 20 million noisy physical qubits & 8 hours & Gidney--Eker\aa\ 2021~\cite{gidneyekera2021} \\
+RSA-2048 & $<1$ million noisy physical qubits & $<1$ week & Gidney 2025~\cite{gidney2025qubits} \\
+RSA-2048 & 13{,}436 qubits $+$ multimode memory & 177 days & Gouzien--Sangouard 2021~\cite{gouziensangouard2021} \\
+ECC-256 discrete log & $\approx 50$ million Toffoli gates & --- & Litinski 2023~\cite{litinski2023} \\
+\bottomrule
+\end{tabular}
+\caption{Selected published resource estimates. They are not competing
+predictions of the same quantity: each assumes its own architecture, physical
+error rate, error-correcting code, and connectivity, and the third trades a far
+smaller qubit count against a runtime two orders of magnitude longer. Compare
+rows only after checking those assumptions.}
+\label{tab:resource-estimates}
+\end{table}
+
+Two lessons matter more than any individual row.
+
+The first is the \textbf{direction of travel}. The estimate for RSA-2048 fell
+from twenty million physical qubits to under one million in four years, and
+essentially none of that came from better hardware: it came from better circuits
+for modular arithmetic and from more efficient error correction. This is the
+reverse of the intuition most readers arrive with. The threat advances through
+the cryptography and the coding theory, which are cheap to improve, not only
+through the qubit count, which is expensive.
+
+The second is that \textbf{elliptic curves are the easier target}. The instinct
+that a 256-bit key must be harder than a 2048-bit one is exactly wrong here:
+elliptic-curve discrete logarithms need a smaller quantum circuit than factoring
+a comparable-security RSA modulus~\cite{litinski2023}. Any system whose signatures
+are elliptic-curve -- which is to say nearly every deployed signature scheme, and
+every blockchain in Chapter~\ref{ch:blockchains} -- falls before RSA does, not
+after.
+
+\begin{remark}[What an estimate does and does not establish]
+A resource estimate is a conditional engineering statement: \emph{if} a machine
+with these parameters existed, the attack would cost this much. It is not a
+forecast of when such a machine will be built, and a paper reporting a lower
+figure has not moved any date closer by itself --- it has lowered the bar that
+hardware must eventually clear. Treat the two as separate claims, and be
+sceptical of any source that merges them.
+\end{remark}
+
 \section{Harvest now, decrypt later}
 
 A natural objection is that large quantum computers do not yet exist, so why migrate today? The answer is \emph{harvest now, decrypt later}. An adversary can record encrypted traffic today and decrypt it years later once a quantum computer is available. Any data that must remain confidential beyond the arrival of quantum computing is therefore already at risk.
 
 Signatures create a different risk. A future quantum adversary may forge \emph{new} signatures, including signatures on malicious firmware or certificates, and may undermine long-term verification. Whether a historically verified signature remains useful depends on its timestamp, archival evidence, and trust model; it is not a case of ``record now, decrypt later.'' Both risks argue for migration before the threat materializes.
+
+\subsection*{Mosca's inequality}
+
+The argument can be made precise. Let $x$ be the number of years a secret must
+remain secure (its \emph{shelf life}), $y$ the number of years the migration
+itself will take, and $z$ the number of years until a cryptographically relevant
+quantum computer exists. Michele Mosca's observation~\cite{mosca2025} is that
+there is a problem whenever
+\[
+  x + y \;>\; z .
+\]
+
+The reasoning is a deadline calculation. Migration finishes at year $y$; a secret
+created today must survive until year $x$; so if $x + y$ exceeds $z$, some secret
+is still live at the moment the attacker acquires the capability. Note what the
+inequality does \emph{not} require: no term needs to be known accurately, and $z$
+in particular is unknowable. It is enough that $x + y$ be large, because then the
+inequality is violated for a wide range of plausible $z$.
+
+\begin{example}[The shape of the problem]
+For a medical record that must stay confidential for 50 years in an organization
+whose migration will take 5, we have $x + y = 55$. No serious estimate of $z$ is
+anywhere near 55 years, so the inequality is violated and the migration is
+already late --- regardless of how the argument about quantum timelines is
+settled. For a TLS session key with a shelf life of seconds, $x + y \approx y$
+and the calculation turns entirely on how fast the organization can move.
+\end{example}
+
+The inequality is also what makes the blockchain case in
+Chapter~\ref{ch:blockchains} so much sharper than the rest of this book's:
+there, $x$ is not fifty years but unbounded, because a public key committed to an
+immutable ledger is exposed for as long as the ledger exists.
 
 \section{The response: post-quantum standards}
 
@@ -135,14 +252,62 @@ Isogeny & supersingular isogeny path & SQIsign (candidate) & signature \\
 \label{tab:pqc-families}
 \end{table}
 
+\subsection*{NIST security categories}
+\label{sec:nist-categories}
+
+Every parameter set in this book carries a number --- ML-KEM-768, ML-DSA-65,
+SLH-DSA-192s --- and behind each sits a NIST \emph{security category}. The
+categories are worth understanding once, here, because they explain a convention
+that otherwise looks arbitrary.
+
+The difficulty NIST faced is the one Section~\ref{sec:resource-estimates} and the
+Grover discussion above have already exposed: ``bits of quantum security'' is not
+a well-defined quantity. It depends on the attack model, on whether quantum
+memory is free, on circuit depth limits, and on which property of the primitive
+is under attack. Rather than quote a number that would not survive scrutiny, NIST
+defined each category \emph{by reference to a classical primitive whose cost is
+well understood}, and required a candidate to be at least as hard to break as
+that reference:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}cllp{4.6cm}@{}}
+\toprule
+Category & At least as hard as & Reference attack & Example parameter sets \\
+\midrule
+1 & AES-128 & exhaustive key search & ML-KEM-512, SLH-DSA-128s/f \\
+2 & SHA-256 & collision search      & ML-DSA-44 \\
+3 & AES-192 & exhaustive key search & ML-KEM-768, ML-DSA-65, SLH-DSA-192s/f \\
+4 & SHA-384 & collision search      & (rarely targeted) \\
+5 & AES-256 & exhaustive key search & ML-KEM-1024, ML-DSA-87, SLH-DSA-256s/f \\
+\bottomrule
+\end{tabular}
+\caption{The five NIST post-quantum security categories. Odd categories are
+pinned to block-cipher key search, even categories to hash collision search. A
+category is a \emph{floor}, not a measurement: it asserts that breaking the
+scheme costs at least as much as the reference attack, whatever that attack turns
+out to cost.}
+\label{tab:nist-categories}
+\end{table}
+
+Two consequences follow. First, categories are comparable across families: a
+Category 3 lattice scheme and a Category 3 hash-based scheme make the same claim,
+which is exactly what a reader choosing between the chapters of this book needs.
+Second, the categories say nothing about \emph{confidence} in the underlying
+assumption. SLH-DSA-128s and ML-KEM-512 both sit at Category 1, but one rests on
+a hash function and the other on module lattices, and no category number captures
+that difference. Choosing a scheme means choosing a category \emph{and} a family.
+
 \section{Summary}
 
 \begin{itemize}
   \item Today's public-key cryptography (RSA, Diffie--Hellman, ECC) rests on factoring and discrete logarithms.
   \item \textbf{Shor's algorithm} solves both in polynomial time on a quantum computer, breaking these schemes at \emph{any} key size.
   \item \textbf{Grover's algorithm} gives a quadratic generic-search speedup; key search, hash preimages, and hash collisions need separate security analyses.
-  \item Confidentiality has a ``harvest now, decrypt later'' risk; signature migration concerns future forgery and long-term verification.
-  \item The rest of the book surveys five broad mathematical families -- lattice, hash, code, multivariate, and isogeny -- with FIPS 203--205 as published NIST standards at this snapshot.
+  \item \textbf{Resource estimates} bound width, depth, and runtime together; the published figure for RSA-2048 fell from 20 million physical qubits to under 1 million in four years, driven by better circuits and error correction rather than better hardware --- and elliptic curves are the \emph{cheaper} target, not the harder one.
+  \item Confidentiality has a ``harvest now, decrypt later'' risk; signature migration concerns future forgery and long-term verification. \textbf{Mosca's inequality} $x + y > z$ turns both into a deadline that does not require knowing $z$.
+  \item The rest of the book surveys five broad mathematical families -- lattice, hash, code, multivariate, and isogeny -- with FIPS 203--205 as published NIST standards at this snapshot, and every parameter set labelled by a \textbf{NIST security category} defined against AES key search or hash collision search.
 \end{itemize}
 
 The remaining chapters start from the ground up: the mathematical objects -- finite fields, vectors, polynomials, and lattices -- on which these new hard problems are built.

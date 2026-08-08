@@ -1229,6 +1229,30 @@
   {
    "listings": [
     {
+     "code": "# Lower bound on migration time: every weight unit of every block, nothing else.\nBLOCK_WEIGHT   = 4_000_000   # weight units available per Bitcoin block\nBLOCKS_PER_DAY = 144         # one block per ten minutes\n\ndef migration_days(n_outputs, witness_bytes, base_bytes=80, share=1.0):\n    # SegWit discount: witness bytes cost 1 weight unit, the rest cost 4.\n    weight_per_tx = witness_bytes + 4 * base_bytes\n    per_block = BLOCK_WEIGHT // weight_per_tx\n    blocks = -(-n_outputs // per_block)          # ceiling division\n    return blocks / (BLOCKS_PER_DAY * share)\n\nSCHEMES = [(\"ed25519 (baseline)\",  64 + 32),      # signature + public key\n           (\"ML-DSA-65\",         3309 + 1952),\n           (\"SLH-DSA-128s\",      7856 + 32)]\n\nfor label, n in [(\"every UTXO (~190M)\", 190_000_000),\n                 (\"exposed third (~63M)\", 63_000_000)]:\n    print(label)\n    for name, size in SCHEMES:\n        print(f\"  {name:20s} {migration_days(n, size):8.0f} days exclusive\"\n              f\"   {migration_days(n, size, share=0.10):8.0f} days at 10%\")",
+     "intro": [
+      "Here is the constraint that the roadmap debates tend to skip. Migrating a coin is not a database update; it is a transaction, and transactions compete for a fixed and quite small amount of blockspace. So there is a floor on how fast any migration can possibly proceed, and it depends only on arithmetic \u2014 the number of outputs to move, the size of a post-quantum spend, and the throughput of the chain.",
+      "Write N for the number of unspent outputs to migrate, w for the weight a single migration transaction consumes, W for the weight available per block, and T for the block interval. If migration were given every unit of every block, it would still take",
+      "and at a share \u03c3 of blockspace the figure scales by 1/\u03c3.",
+      "Two features of this bound deserve emphasis. It is a lower bound assuming all of the chain's capacity goes to migration and nothing else \u2014 no payments, no ordinary economic activity \u2014 which no live chain would tolerate. And it is driven by w, which for a post-quantum spend is dominated by the signature and public key, exactly the quantities that are one to two orders of magnitude larger than what they replace. The sizes tabulated throughout this book are not merely a bandwidth annoyance: they set the clock on the migration itself.",
+      "A published analysis of this question for Bitcoin reports a required downtime on the order of a few months of exclusive blockspace, under its own assumptions about which outputs must move and what a migration spend costs. The exercise below builds a cruder model and gets a larger answer; the discrepancy is the instructive part, and reconciling the two is the point.",
+      "remark[Why this reframes the whole chapter] Every other quantity in this chapter is contested: when Q-Day arrives, whether a freeze is legitimate, which signature scheme wins. The throughput bound is not. It follows from block size, signature size, and arithmetic, and it says that even a perfectly coordinated ecosystem with universal agreement and instant wallet support could not complete the migration quickly. That is the strongest available argument for starting early, and it does not require winning any argument about quantum hardware. remark",
+      "*Exercise: compute the bound",
+      "The formula above is worth evaluating rather than reading, because the sensitivity to w is the lesson. Using the tools of the \u201cSageMath Basics for Post-Quantum Cryptography\u201d chapter:"
+     ],
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true,
+     "title": "Migration is bounded by blockspace"
+    }
+   ],
+   "stem": "25_blockchains",
+   "title": "Post-Quantum Migration of Blockchains"
+  },
+  {
+   "listings": [
+    {
      "code": "F.<a> = GF(2^4)\nPR.<x> = F[]\ng = x^2 + x + a\nwhile not g.is_irreducible():\n    g = x^2 + F.random_element()*x + F.random_element()\nassert g.is_irreducible()\nL = [b for b in F if g(b) != 0]     # support: exclude any roots of g\nn = len(L)\n\nfrom sage.coding.goppa_code import GoppaCode\nC = GoppaCode(g, L)\nprint(C)                            # a binary [n, k] Goppa code\nprint(C.dimension(), n - g.degree() * F.degree())   # k  vs  n - m t",
      "intro": [
       "The whole object is short to build. Take m=4, so \ud835\udd3d\u2081\u2086, and a squarefree Goppa polynomial of degree t=2."
