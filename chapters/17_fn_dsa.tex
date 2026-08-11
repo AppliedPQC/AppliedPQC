@@ -26,7 +26,7 @@ ML-DSA built a signature from an interactive identification protocol collapsed b
   \item the verifier checks the vector is short and consistent with $c$.
 \end{enumerate}
 
-The difficulty that stalled lattice hash-and-sign for years was that a naive short vector \emph{leaks the secret basis}: every signature is a hint about the trapdoor. Falcon's core contribution is a sampler whose output distribution is provably independent of the secret -- a discrete Gaussian over the lattice, in the hash-and-sign framework of Gentry, Peikert, and Vaikuntanathan~\cite{gpv2008}. This is the same ``the mask must hide the secret'' principle as ML-DSA's aborts, achieved by a different mechanism.
+The difficulty that stalled lattice hash-and-sign for years was that a naive short vector \emph{leaks the secret basis}: every signature is a hint about the trapdoor. Falcon's core contribution is a sampler whose output distribution is provably independent of the secret -- a discrete Gaussian over the lattice, in the hash-and-sign framework of Gentry, Peikert, and Vaikuntanathan~\cite{gpv2008} --- \textbf{GPV}, after its authors, and the name this chapter uses for it from here on. This is the same ``the mask must hide the secret'' principle as ML-DSA's aborts, achieved by a different mechanism.
 
 \section{The NTRU lattice and its trapdoor}
 
