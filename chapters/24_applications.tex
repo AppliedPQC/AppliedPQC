@@ -31,6 +31,104 @@ general theorem.
 
 Hybrid deployment hedges two opposite risks at once: a future quantum computer breaking the classical part, and an as-yet-undiscovered classical weakness in the still-young post-quantum part. It is the mainstream migration strategy precisely because it removes the need to bet everything on one new assumption.
 
+\subsection{The combiner, concretely}
+\label{sec:kem-combiner}
+
+The definition above says ``an analysed protocol construction'' and warns that
+arbitrary hashing is not one. It is worth seeing what a construction that
+\emph{is} analysed looks like, because the reason for each of its inputs is the
+whole content of the warning.
+
+\paragraph{First, X25519 is not a KEM.}
+Diffie--Hellman is key \emph{agreement}, so it has to be wrapped before it will
+compose with one. The standard wrapping makes the ephemeral public key play the
+role of the ciphertext:
+
+\begin{algorithm}[H]
+\caption{A KEM from Diffie--Hellman (here X25519~\cite{rfc7748})}
+\begin{algorithmic}[1]
+\Statex \textbf{KeyGen:}
+\State $sk \gets$ random scalar; \quad $pk \gets sk\cdot G$
+\Statex \textbf{Encaps}$(pk)$:
+\State $r \gets$ random scalar
+\State $ct \gets r\cdot G$ \Comment{the ephemeral public key \emph{is} the ciphertext}
+\State $ss \gets r\cdot pk$ \Comment{$= rsk\cdot G$}
+\State \Return $(ct, ss)$
+\Statex \textbf{Decaps}$(sk, ct)$:
+\State \Return $ss \gets sk\cdot ct$ \Comment{$= skr\cdot G$}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Then the combiner.}
+With both components in KEM form, the hybrid is componentwise, and everything
+interesting happens on one line.
+
+\begin{algorithm}[H]
+\caption{Generic hybrid KEM from a classical $\mathsf{KEM}_1$ and a post-quantum $\mathsf{KEM}_2$}
+\label{alg:hybrid-kem}
+\begin{algorithmic}[1]
+\Statex \textbf{KeyGen:}
+\State $(pk_1, sk_1) \gets \mathsf{KEM}_1.\mathsf{KeyGen}()$
+\State $(pk_2, sk_2) \gets \mathsf{KEM}_2.\mathsf{KeyGen}()$
+\State \Return $pk = pk_1 \| pk_2$, \quad $sk = sk_1 \| sk_2$
+\Statex \textbf{Encaps}$(pk)$:
+\State parse $pk_1 \| pk_2 \gets pk$
+\State $(ct_1, ss_1) \gets \mathsf{KEM}_1.\mathsf{Encaps}(pk_1)$
+\State $(ct_2, ss_2) \gets \mathsf{KEM}_2.\mathsf{Encaps}(pk_2)$
+\State $ss \gets \mathrm{KDF}\big(ss_1 \,\|\, ss_2 \,\|\, ct_1 \,\|\, ct_2 \,\|\, \textit{label}\big)$
+\State \Return $ct = ct_1 \| ct_2$, \quad $ss$
+\Statex \textbf{Decaps}$(sk, ct)$:
+\State parse $sk_1 \| sk_2 \gets sk$; \quad $ct_1 \| ct_2 \gets ct$
+\State $ss_1 \gets \mathsf{KEM}_1.\mathsf{Decaps}(sk_1, ct_1)$
+\State $ss_2 \gets \mathsf{KEM}_2.\mathsf{Decaps}(sk_2, ct_2)$
+\State \Return $ss \gets \mathrm{KDF}\big(ss_1 \,\|\, ss_2 \,\|\, ct_1 \,\|\, ct_2 \,\|\, \textit{label}\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Why the ciphertexts are in the hash.}
+This is the step that turns the construction into a theorem, and the reason
+$\mathrm{KDF}(ss_1 \| ss_2)$ alone is not one. Suppose the ciphertexts were
+omitted. An IND-CCA attacker holds a challenge $(ct_1^{*}, ct_2^{*})$ and wants
+the key behind it. If it can find any $ct_1' \neq ct_1^{*}$ that decapsulates to
+the \emph{same} $ss_1^{*}$, then $(ct_1', ct_2^{*})$ is a \textbf{different}
+ciphertext with an \textbf{identical} shared secret. It is not the challenge, so
+the decapsulation oracle will answer it --- and the answer is the challenge key.
+The game is lost without either component having been broken.
+
+Binding $ct_1 \| ct_2$ closes this: change any byte of the ciphertext and the
+derived key changes with it. Giacon, Heuer, and Poettering~\cite{ghp2018} showed
+that the naive concatenation combiner is not generically CCA-preserving and gave
+combiners that are; Bindel, Brendel, Fischlin, Goncalves, and
+Stebila~\cite{bbfgs2019} carried the analysis into the hybrid KEM and
+authenticated-key-exchange setting. NIST's KEM recommendations
+SP~800-227~\cite{nistsp800227} now give the corresponding standards-side guidance
+on hybrid constructions and approved key combiners. The \emph{label} is domain
+separation, so that a key derived here cannot collide with one derived by another
+protocol from the same primitives.
+
+\begin{remark}[Two places the binding can live]
+Algorithm~\ref{alg:hybrid-kem} binds the ciphertexts inside the combiner because
+it must stand alone. A protocol that already hashes its full transcript can get
+the same property from the protocol instead --- which is exactly what TLS does
+(Section~\ref{sec:tls-hybrid}), and why its combiner looks simpler than this one.
+Neither is more correct; what matters is that the binding exists somewhere, and a
+combiner lifted out of a protocol that was providing it silently loses it.
+\end{remark}
+
+\paragraph{X-Wing: a real instantiation, and a caution.}
+X-Wing~\cite{xwing2024} is a standalone hybrid KEM of ML-KEM-768 with X25519,
+designed for use where no protocol supplies a transcript. Its combiner is
+\[
+  ss \;=\; \mathrm{SHA3\text{-}256}\big(ss_{\mathrm{M}} \,\|\, ss_{\mathrm{X}} \,\|\, ct_{\mathrm{X}} \,\|\, pk_{\mathrm{X}} \,\|\, \textit{XWingLabel}\big),
+\]
+with a six-byte label and a $1216$-byte encapsulation key against a $1120$-byte
+ciphertext. Note what is \emph{missing}: the ML-KEM ciphertext $ct_{\mathrm{M}}$
+is not hashed in. That is not an oversight and not a general licence --- the
+specification is explicit that it holds \emph{for the concrete choice of
+ML-KEM-768}, justified by that scheme's own proven properties. The transferable
+lesson is the one the definition above states abstractly: a combiner may be
+shortened only with a proof about the particular schemes, never by inspection.
+
 \begin{remark}[Crypto-agility]
 Hybrids only work if systems can \emph{negotiate} which algorithms they use rather than hardcoding one. \emph{Crypto-agility} -- designing protocols, certificate formats, and code so the algorithm can be swapped without re-architecting -- is the quiet prerequisite for the whole migration. The schemes will keep evolving; the plumbing must not assume any single one.
 \end{remark}
@@ -68,7 +166,35 @@ reflex, check which of those two descriptions the system fits.
 TLS 1.3 secures most web traffic, and it is the first place post-quantum cryptography has reached production. Two independent parts of the handshake must be upgraded: the \emph{key exchange} (confidentiality) and the \emph{authentication} (signatures on certificates).
 
 \subsection{Hybrid key exchange}
-As of this book's standards snapshot, TLS hybrid ECDHE--ML-KEM groups are under IETF standardization and are appearing in implementations. A group such as \texttt{X25519MLKEM768} combines an X25519 share with an ML-KEM contribution; the exact wire format, group naming, enablement, and TLS key-schedule binding must follow the applicable IETF specification and implementation release notes.
+\label{sec:tls-hybrid}
+The framework is settled: RFC~9954~\cite{rfc9954} specifies how TLS 1.3 carries a
+hybrid key exchange, and the concrete ECDHE--ML-KEM groups and their code points
+are given by a Transport Layer Security working-group
+draft~\cite{tlsecdhemlkem} --- \texttt{X25519MLKEM768} (code point $4588$,
+\texttt{0x11EC}), \texttt{SecP256r1MLKEM768}, and \texttt{SecP384r1MLKEM1024}.
+Enablement and release status remain implementation-dependent, but the wire
+format no longer is.
+
+TLS takes the simpler route flagged in Section~\ref{sec:kem-combiner}: the two
+shared secrets are \emph{concatenated} and handed to the existing TLS 1.3 key
+schedule, whose HKDF~\cite{rfc5869} extract step already hashes the full
+handshake transcript --- and the transcript contains both key shares. The
+ciphertext binding that Algorithm~\ref{alg:hybrid-kem} performs itself is thus
+supplied by the protocol. RFC~9954 does require every component to have a
+\emph{fixed-length} shared secret, which is what stops the concatenation from
+being ambiguous.
+
+\begin{remark}[Why ML-KEM's secret goes first, and why that flips]
+In \texttt{X25519MLKEM768} the concatenation is $ss_{\text{ML-KEM}} \|
+ss_{\text{X25519}}$, ML-KEM first --- and the reason is regulatory rather than
+cryptographic. NIST SP~800-56C approves HKDF with two shared secrets on the
+condition that the \emph{first} comes from a FIPS-approved key-establishment
+scheme. X25519 is not one, so ML-KEM must lead. In the two \texttt{SecP} groups
+the ECDHE share \emph{is} approved, so there the order reverses and ECDHE leads.
+The consequence is worth knowing: which of the two implementations needs FIPS
+certification depends on the group you negotiate. Reading the ordering as a
+security judgement gets it backwards.
+\end{remark}
 
 \begin{figure}[H]
 \centering
@@ -79,9 +205,9 @@ As of this book's standards snapshot, TLS hybrid ECDHE--ML-KEM groups are under 
   \draw[pqcgray!45, dashed] (8.6,3.1) -- (8.6,0.0);
   \draw[flowarrow] (1.4,2.5) -- node[above]{X25519 share $+$ ML-KEM key (encapsulation key)} (8.6,2.5);
   \draw[flowarrow] (8.6,1.7) -- node[above]{X25519 share $+$ ML-KEM ciphertext $+$ certificate} (1.4,1.7);
-  \node[keynode, align=center] at (5,0.55) {shared secret $=\mathrm{KDF}\big(ss_{\text{X25519}} \,\|\, ss_{\text{ML-KEM}}\big)$};
+  \node[keynode, align=center] at (5,0.55) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
 \end{tikzpicture}
-\caption{Illustrative hybrid key exchange in TLS 1.3. Both an elliptic-curve share and an ML-KEM contribution travel in the handshake; an analysed KDF construction binds both secrets and the protocol context. Post-quantum certificate authentication is a separate, draft/experimental deployment track. Specific group names and deployment status are version-dependent.}
+\caption{Hybrid key exchange in TLS 1.3, as specified by RFC~9954~\cite{rfc9954}. Both an elliptic-curve share and an ML-KEM contribution travel in the handshake, and the TLS key schedule binds both secrets together with the handshake transcript. The order shown is that of \texttt{X25519MLKEM768}; it reverses in the \texttt{SecP} groups, for the reason given above. Post-quantum certificate authentication is a separate deployment track.}
 \label{fig:tls-hybrid}
 \end{figure}
 
