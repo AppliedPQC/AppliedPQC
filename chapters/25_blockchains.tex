@@ -111,6 +111,148 @@ Two Bitcoin Improvement Proposals anchor the response, and it is worth stressing
   \item \textbf{BIP-361, ``Post-Quantum Migration and Legacy Signature Sunset''}~\cite{bip361} -- the migration-and-deadline layer. It proposes a phased sunset of ECDSA/Schnorr: a first phase (on the order of three years after activation) that stops sending funds to legacy address types, and a later flag-day (around five years) that restricts legacy signatures, so that only a holder who can prove ownership by a quantum-safe route can still move the coins.
 \end{itemize}
 
+\subsection{Which signature scheme? The size argument}
+\label{sec:bitcoin-scheme-choice}
+
+BIP-360 deliberately leaves the scheme unspecified, so the question is live
+rather than settled, and it is worth seeing what the evidence actually
+constrains. A 2026 Blockstream Research review of the lattice
+candidates~\cite{blockstreamlattice2026} works the problem through for Bitcoin
+specifically, and its framing is the part to carry: for a chain, the cost metric
+is not the signature size but the \textbf{combined public-key and signature
+size}, because a spend writes both to the ledger. That single choice of metric
+reorders the field.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrl}
+\toprule
+Scheme & NIST level & $|pk| + |\sigma|$ & Note \\
+\midrule
+Schnorr (\texttt{secp256k1}) & --- & $96$ B & the incumbent; Shor-breakable \\
+\midrule
+FN-DSA-512 (Falcon)   & 1 & $1563$ B & smallest standardized \\
+FN-DSA-1024 (Falcon)  & 5 & $3073$ B & \\
+ML-DSA-44             & 2 & $3732$ B & \\
+ML-DSA-65             & 3 & $5261$ B & \\
+\midrule
+SLH-DSA-128s          & 1 & $7888$ B & most conservative assumption \\
+PORS+FP               & 1 & $3472$ B & non-standard; $2^{30}$ signing budget \\
+\bottomrule
+\end{tabular}
+\caption{On-chain footprint of a single spend, following the comparison
+in~\cite{blockstreamlattice2026}. Every post-quantum row is one to two orders of
+magnitude above the incumbent, which is the quantity
+Section~\ref{sec:migration-throughput} turns into a migration schedule.}
+\label{tab:bitcoin-scheme-sizes}
+\end{table}
+
+Three things follow, and none of them is obvious from the per-scheme tables
+elsewhere in this book.
+
+\paragraph{Bitcoin should not want Level 1 lattice parameters.}
+An output may sit unspent for decades, so a scheme that later slips below its
+intended level does not merely inconvenience active wallets: coins locked under
+the weakened keys stay vulnerable, and the freeze argument of
+Section~\ref{sec:freeze} reopens. This is why large deployers already avoid
+Level 1 lattice parameters --- Apple's iMessage PQ3 uses Category 3 and 5
+throughout, and Cloudflare pairs X25519 with ML-KEM-768 rather than the
+smaller set, both citing margin against cryptanalytic progress over the system's
+lifetime. Hash-based schemes are treated differently, and defensibly: their
+assumption is mature enough that Category 1 is widely argued to suffice.
+
+\paragraph{The margin is nearly free for Falcon, and expensive for Dilithium.}
+Falcon-1024, at \emph{Category 5}, has a smaller combined footprint (3073 B)
+than the best stateless hash-based construction at \emph{Category 1} (7888 B),
+and than ML-DSA at Category 3 (5261 B). Moving ML-DSA from Category 2 to
+Category 3, by contrast, adds about 1.5 kB per spend. If a large security margin
+is wanted --- and the previous paragraph argues it should be --- Falcon is the
+only candidate that supplies one without paying for it in blockspace.
+
+\paragraph{Falcon has no Category 3.}
+The recursive sampler of Chapter~\ref{ch:fndsa} halves the ring degree at every
+step, so admissible degrees are powers of two and the parameter sets jump from
+$n=512$ (roughly Category 1) straight to $n=1024$ (above Category 5). There is
+no intermediate ring, so there is no intermediate parameter set: a deployment
+picks the low margin or the high one.
+
+\paragraph{Where this leaves the choice.}
+The review's own recommendation is a two-stage one, and it is a reasonable
+reading of the state of play. For \emph{today}, a hash-based scheme is the
+conservative option: it rests on the most mature assumption in the book, and
+FN-DSA is not a finished standard --- FIPS 206 was still in development at this
+book's snapshot, so there is no fixed specification, no test vectors, and no
+audited library ecosystem to integrate against. Once Falcon completes
+standardization, its size advantage over every hash-based alternative is large
+enough that the case changes. The two families are also complementary rather
+than rival: a stateful hash-based scheme with short common-case signatures can
+use Falcon as its stateless fallback, which is far cheaper than a SLH-DSA
+fallback for the rare recovery path.
+
+\begin{remark}[Read the recommendation, not just the table]
+The smallest number in Table~\ref{tab:bitcoin-scheme-sizes} is not the answer.
+Falcon wins on bytes and loses on maturity, implementation delicacy
+(Section~\ref{sec:falcon-hard}), and wallet compatibility
+(Section~\ref{sec:pq-wallet-derivation}); the review recommends the
+\emph{larger} family for immediate deployment on exactly those grounds. A
+scheme comparison that reports only sizes has skipped the part where the
+decision is actually made.
+\end{remark}
+
+\subsection{The wallet-derivation gap}
+\label{sec:pq-wallet-derivation}
+
+There is a second constraint on the choice, and it is not a size problem at all.
+Bitcoin wallets are hierarchical and deterministic: from one master extended
+public key, BIP-32~\cite{bip32} derives an unbounded supply of child public keys
+using \emph{public data only}, with the secret key never involved. That is
+what lets a watch-only hot wallet hand out fresh addresses while the seed stays
+in cold storage, and it is the backbone of essentially every wallet in use.
+
+\textbf{None of the standardized post-quantum signature schemes supports
+it.}~\cite{blockstreamlattice2026} BIP-32's unhardened derivation is an addition
+in the elliptic-curve group --- child key $=$ parent key $+$ tweak, on both the
+secret and public sides --- and lattice schemes do not offer the same structure
+for free. The known replacements are research constructions, and expensive ones:
+
+\begin{itemize}
+  \item \textbf{Dilithium} is the furthest along. Rerandomizable-key variants
+        derive a child from a public update value and keep the two keys in
+        step, at a combined footprint of roughly 6.5 to 8.3 kB depending on
+        whether the wallet publishes an uncompressed key or carries a
+        correction in every signature. The obstruction is that ML-DSA's
+        public-key compression is not additive, so an update cannot simply be
+        added to a compressed parent.
+  \item \textbf{Falcon} has one published construction, which rerandomizes the
+        lattice basis. Doing so inflates the signature-norm bound and pushes an
+        on-chain signature to roughly \textbf{23.7 kB}, about $36\times$ a
+        Falcon-512 signature --- and its stated parameters do not satisfy the
+        scheme's own security condition, so a corrected version is larger
+        still. There is currently no workable public-key derivation for Falcon.
+\end{itemize}
+
+The Dilithium variants also carry a deployment assumption worth surfacing,
+because it inverts one of ML-DSA's own design decisions. Unlinkability of
+derived addresses requires the matrix $A$ to be shared \emph{network-wide}. That
+is formally sound under Module-LWE, but Chapter~\ref{ch:mldsa} derives $A$ from
+a per-key seed precisely to rule out a backdoored matrix and to stop one
+precomputation from applying to many targets. The preprocessing in dual-lattice
+attacks depends only on the matrix, so a single network-wide $A$ would let one
+large reduction effort apply to every key on the chain at once. At Dilithium-3
+dimensions that attack remains far out of reach --- but the convention
+concentrates the whole network's security on one instance, which is a different
+risk profile from the one FIPS 204 chose.
+
+\begin{remark}[What this costs a migration]
+Section~\ref{sec:migration-throughput} treats the per-output cost $w$ as the
+term a protocol can negotiate. Wallet derivation is a reminder that $w$ is not
+the only thing at stake: a scheme with no unhardened derivation forces either a
+different wallet architecture (every address pre-derived from the cold key and
+stored) or a scheme variant that is not the standardized one. Neither is fatal,
+and neither is free, and both are easy to omit from a comparison that stops at
+signature size.
+\end{remark}
+
 A recurring safety mechanism is \emph{commit--reveal}: a holder first publishes a
 binding commitment and only later reveals it. It is designed to mitigate front-running
 under the stated confirmation-depth, reorganization, fee, timeout, and recovery
@@ -635,6 +777,8 @@ def migration_days(n_outputs, witness_bytes, base_bytes=80, share=1.0):
     return blocks / (BLOCKS_PER_DAY * share)
 
 SCHEMES = [("ed25519 (baseline)",  64 + 32),      # signature + public key
+           ("FN-DSA-512",         666 +  897),
+           ("FN-DSA-1024",       1280 + 1793),
            ("ML-DSA-65",         3309 + 1952),
            ("SLH-DSA-128s",      7856 + 32)]
 
@@ -652,11 +796,15 @@ the whole chain to itself, and about 600 days for the exposed third --- against
 blockspace, which is already generous for a chain that must keep processing
 payments, the exposed third alone runs to some sixteen years.
 
-Three things to take from that. The baseline rows show that migration is slow
+Four things to take from that. The baseline rows show that migration is slow
 even with \emph{classical} signatures, so post-quantum sizes are an aggravating
 factor rather than the sole cause. The SLH-DSA rows price the most conservative
 assumption in schedule rather than in bytes --- a trade-off the size tables of
-Chapter~\ref{ch:applications} state but do not cost out. And the gap between
+Chapter~\ref{ch:applications} state but do not cost out. The FN-DSA rows are the
+reason Section~\ref{sec:bitcoin-scheme-choice} cares about the combined
+footprint: at Falcon-512 sizes the schedule is roughly a third of the ML-DSA-65
+figure and a fifth of the SLH-DSA one, so the scheme choice moves the migration
+clock by years, not percentages. And the gap between
 these figures and the published estimate is itself the lesson: this model
 migrates one output per transaction, at full witness size, for the entire
 exposed set. Every one of those is pessimistic, and the published analysis relaxes

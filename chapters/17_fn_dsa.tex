@@ -98,6 +98,7 @@ c = \textsc{HashToPoint}(r \,\|\, M) \in R_q.
 \]
 
 \section{Phase 3: sample a short solution (the trapdoor sampler)}
+\label{sec:falcon-tree-note}
 
 The signer must find a short pair $(s_1, s_2)$ satisfying
 \[
@@ -154,8 +155,68 @@ Only $s_2$ needs to be sent: the verifier can recover $s_1 = c - s_2 h \bmod q$.
 Verification is cheap: one multiplication to recover $s_1$, then a norm check. A forger without the good basis would have to solve the closest-vector problem in the NTRU lattice using only $h$ -- exactly the hardness Part~\ref{part:lattices} established.
 
 \section{Why Falcon is the hardest to implement}
+\label{sec:falcon-hard}
 
 The Gaussian sampler needs high-precision \emph{floating-point} arithmetic (FFT over the reals) to get the output distribution exactly right. Floating-point operations are notoriously variable-time and platform-dependent, which makes a \emph{constant-time} implementation -- one that leaks nothing through timing -- genuinely difficult. If the sampler's timing or rounding depends on the secret basis, an attacker can gradually reconstruct it. This is the direct motivation for the final chapter on side-channel security, and it is the main reason Falcon, despite its elegance and compactness, is the most demanding of the three standards to deploy safely.
+
+\subsection{Non-determinism is a second, separate problem}
+
+Timing is the familiar hazard, and it is not the only one. The same floating-point
+operation can give slightly different results on a different processor, compiler,
+or optimization level, and that alone can break the scheme --- with no side
+channel involved at all.
+
+The reason is the security requirement underneath the GPV framework: a signer must
+never release \emph{two distinct short preimages for the same digest}. Two short
+vectors $s, s'$ with $As = As' = c$ give their difference $s - s'$, a short
+non-zero vector in the lattice $\Lambda^{\perp}_q(A)$ --- which is a solution to
+the very problem the trapdoor was supposed to keep hard. Ordinary Falcon avoids
+this by drawing a fresh 320-bit salt for every signature, so no two signatures
+ever target the same digest.
+
+The danger appears when signing is \emph{derandomized}: if the salt is derived
+pseudorandomly from the message and the key, as one would want for reproducible
+signing, then signing the same message twice must produce the same signature
+bit-for-bit. Two implementations at different precision --- or the same
+implementation compiled twice --- would produce two valid signatures for one
+digest, and hand an observer a short lattice vector.
+
+The fix is to remove the platform dependence rather than to manage it: replace
+hardware floating-point with an \emph{integer emulation}, so that every
+implementation performs identical arithmetic and produces identical output. The
+cost is asymmetric in a way that happens to suit a blockchain
+(Section~\ref{sec:bitcoin-scheme-choice}):
+
+\begin{itemize}
+  \item key generation is about $2\times$ slower;
+  \item signing is about $15\times$ slower;
+  \item \textbf{verification is unaffected}, because Falcon verification uses no
+        floating-point arithmetic at all --- it is integer arithmetic modulo $q$
+        with an NTT, and it is the fastest verification of the three standards.
+\end{itemize}
+
+An output is signed once, by its owner, when it is spent; the signature is then
+verified by every validating node, forever. Paying $15\times$ on the operation
+that happens once to make the operation that happens everywhere both cheap and
+identical across platforms is the right side of that trade. Even emulated,
+Falcon signing remains one to two orders of magnitude faster than SLH-DSA at its
+small-signature parameters.
+
+\subsection{The signer needs memory, too}
+
+One further practical constraint, easy to miss because it appears in neither the
+key nor the signature size. The sampler is driven by the tree of
+Section~\ref{sec:falcon-tree-note}, and where that tree is kept decides the
+signer's memory footprint. Holding it alongside the compact basis makes signing a
+simple traversal but occupies roughly $40$ kB at $n=512$ and $90$ kB at
+$n=1024$. Rebuilding only the branch currently needed cuts this to about $8$ and
+$16$ kB, at roughly double the signing cost.
+
+That matters because the natural place to run a signer is a hardware wallet, and
+those are microcontrollers with tight RAM budgets. Note also that this cost
+compounds with the emulation penalty above, and that it is a \emph{per-signature}
+cost whenever a key signs only once --- which is exactly the recommended practice
+for a Bitcoin address.
 
 \section{SageMath experiment: the public NTRU relation}
 
@@ -324,6 +385,18 @@ FN-DSA-1024 & 1024 & 5 & $\approx 1793$ B & $\approx 1280$ B \\
 \end{tabular}
 \caption{The two FN-DSA (Falcon) parameter sets, both with $q=12289$. Signatures and keys are markedly smaller than ML-DSA's or SLH-DSA's -- the reason Falcon exists.}
 \end{table}
+
+\paragraph{Why there is no Level 3.}
+The gap in that table is structural, not an oversight. The fast Fourier sampler
+recurses by halving the ring degree at every step down to a scalar leaf, so $n$
+must be a power of two: the admissible degrees are $\dots, 256, 512, 1024,
+\dots$ with nothing in between. Concrete estimates place $n=512$ at roughly $128$
+bits of classical security and $n=1024$ well above $250$, and no power-of-two
+ring lands in the middle. ML-DSA, whose security is tuned by the module
+dimensions $(k,\ell)$ over a fixed ring, has no such constraint --- which is why
+it offers three levels and Falcon offers two. A deployment wanting a Category 3
+margin from a lattice signature must take Falcon-1024 and the size that comes
+with it, or take ML-DSA instead.
 
 \section{Pitfalls}
 
