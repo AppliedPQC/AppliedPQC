@@ -2,7 +2,7 @@
 \chaptermark{Binary Goppa Codes}
 \label{app:goppa}
 
-Classic McEliece (Chapter~\ref{ch:mceliece}) hides its trapdoor inside a \textbf{binary Goppa code}: a family of algebraic codes that come with a fast $t$-error decoder yet, after four decades of scrutiny, still cannot be distinguished from random linear codes by any known efficient test. The main text used only two facts about them -- that they correct $t$ errors and that they have an efficient decoder. This appendix supplies the construction behind those facts: how a Goppa code is defined, why the binary case corrects the full $t$ errors rather than $t/2$, and how Patterson's algorithm decodes it~\cite{goppa1970,patterson1975}. Throughout we assume the finite fields of Chapter~\ref{ch:polyring}.
+Classic McEliece (Chapter~\ref{ch:mceliece}) hides its trapdoor inside a \textbf{binary Goppa code}: a family of algebraic codes that come with a fast $t$-error decoder yet, after four decades of scrutiny, still cannot be distinguished from random linear codes by any \emph{efficient} test --- a qualifier that has been narrowing since 2023, and that Section~\ref{sec:goppa-distinguishers} takes up in full. The main text used only two facts about them -- that they correct $t$ errors and that they have an efficient decoder. This appendix supplies the construction behind those facts: how a Goppa code is defined, why the binary case corrects the full $t$ errors rather than $t/2$, and how Patterson's algorithm decodes it~\cite{goppa1970,patterson1975}. Throughout we assume the finite fields of Chapter~\ref{ch:polyring}.
 
 \section{Setup: the field, the support, and the Goppa polynomial}
 
@@ -149,10 +149,89 @@ Three properties, taken together, are what make binary Goppa codes the enduring 
 \begin{itemize}
   \item \textbf{An efficient decoder.} Patterson's algorithm corrects the full $t$ errors in near-linear time -- the trapdoor the legitimate key holder uses.
   \item \textbf{A vast family.} There are enormously many choices of support $L$ and polynomial $g$, so keys cannot be enumerated, and a random secret code is overwhelmingly unlikely to coincide with any particular target.
-  \item \textbf{Indistinguishability.} No known efficient algorithm distinguishes a scrambled binary Goppa code from a random linear code of the same parameters. This is the security-critical property, and it is where less conservative families failed: the generalized Reed--Solomon codes of the original Niederreiter proposal were broken by the Sidelnikov--Shestakov structural attack, and several Reed--Muller and algebraic-geometry variants fell the same way. Binary Goppa codes have resisted every such attack since 1978.
+  \item \textbf{Indistinguishability.} No \emph{efficient} algorithm distinguishes a scrambled binary Goppa code from a random linear code of the same parameters. This is the security-critical property, and it is where less conservative families failed: the generalized Reed--Solomon codes of the original Niederreiter proposal were broken by the Sidelnikov--Shestakov structural attack~\cite{ss1992}, and several Reed--Muller and algebraic-geometry variants fell the same way.
 \end{itemize}
 
+Read the third bullet carefully: it says \emph{efficient}, and that word has been doing more work each year since 2023. Section~\ref{sec:goppa-distinguishers} is about what has happened to it.
+
 This is the concrete content behind the ``decodable code in disguise'' of Chapter~\ref{ch:mceliece}: the disguise is the scrambled generator matrix, and the code being disguised is $\Gamma(L,g)$.
+
+\section{The distinguishers, and what they cost}
+\label{sec:goppa-distinguishers}
+
+A distinguisher is not a break. It does not read a message and it does not recover a key; it answers one bit --- \emph{is this public key a Goppa code or a random matrix?} McEliece can survive with that bit leaked, because recovering the plaintext still means decoding, and decoding a random-looking code is the assumption that has never fallen.
+
+But the bit matters, for two reasons. It is the difference between the \textbf{conservative} security claim (the public key is pseudorandom, so LPN applies) and the \textbf{minimal} one (recovering the message is hard). And historically, distinguishers have been the first step: Sidelnikov--Shestakov began as a structural observation about generalized Reed--Solomon codes and ended as a polynomial-time key recovery.
+
+\subsection{The square-code barrier}
+
+The classical tool is the \emph{Schur product}: for $a,b \in \mathbb{F}_q^n$ write $a \star b := (a_1b_1,\dots,a_nb_n)$, and let $\mathcal{C}^{\star 2} := \operatorname{span}\{a\star b\}$ be the square code. For a random code of dimension $k$ the square has dimension $\min\{n,\binom{k+1}{2}\}$ --- essentially everything. For a code that lives inside a GRS code of dimension $K$, products of evaluations of degree-$<K$ polynomials have degree $<2K-1$, so
+\[
+\dim \mathcal{C}^{\star 2} \;\le\; \min\{n,\; 2K-1\}.
+\]
+The structure shows up as a \emph{dimension defect} --- and only when $2K-1 < n$, essentially when the ambient rate is below $1/2$. This is the distinguisher of Faug\`{e}re, Gauthier-Uma\~{n}a, Otmani, Perret and Tillich~\cite{fgopt2013}, and it is polynomial-time, which is why Classic McEliece's parameters were chosen to sit well outside its reach. Dualizing is the standard escape --- the dual of a GRS code is again GRS, of dimension $n-K$ --- but it fails here, because the published code is only a \emph{subcode} of the ambient GRS code and the dual of a subcode is a \emph{supercode} of the dual, with no reason to have a small square.
+
+\subsection{Crossing it with multiplicities}
+
+Ghoshal, Ishai, Jain and Sun~\cite{gijs2026} cross that barrier, and the idea is worth stating because it is a general one. Replace \emph{evaluations} by \emph{Hasse jets} --- the value of a polynomial together with all its Hasse derivatives of order below $s$. Each coordinate then supplies $s$ Hermite-interpolation constraints instead of one, and the condition for the structure to be forced weakens from
+\[
+n > dD
+\qquad\text{to}\qquad
+s(n-1) > dD ,
+\]
+where $D$ is the ambient GRS degree and $d$ the test degree. The number of coordinates needed falls from about $dD$ to about $dD/s$, which is exactly what lets the test keep working in the regime where the square code has already saturated.
+
+The resulting algorithm is short enough to state in full. Fix $s$ and $d = s+1$, take the public matrix $Y = [\,y_1|\cdots|y_n\,] \in \mathbb{F}_2^{k\times n}$, and:
+
+\begin{enumerate}
+  \item hold out one column, say $y_n$;
+  \item compute the space of multilinear homogeneous degree-$d$ polynomials over $\mathbb{F}_2$ that vanish on the Hamming ball of radius $s-1$ around every other column (for multilinear $F$ over $\mathbb{F}_2$, vanishing on that ball \emph{is} the order-$<s$ Hasse jet vanishing);
+  \item take any nonzero $h$ from that space and evaluate it at $y_n$.
+\end{enumerate}
+
+If $h(y_n) \ne 0$, answer \emph{random}; otherwise answer \emph{Goppa}.
+
+On a Goppa key the answer is always \emph{Goppa}, with no probability attached. Restricting $h$ to homogeneous polynomials makes the vanishing conditions blind to the unknown GRS multipliers; composing $h$ with the hidden low-degree curve gives a univariate $\varphi$ of degree at most $dD$ with a zero of multiplicity $s$ at each of $n-1$ distinct points, and $s(n-1) > dD$ forces $\varphi \equiv 0$ by Hermite interpolation. On a random matrix a nonzero $h$ exists whenever $\binom{k}{d}$ exceeds the constraint count, and the held-out column is still uniform, so the minimum-distance bound for binary Reed--Muller codes bounds the false accept away from~1.
+
+\subsection{Where the doubled distance reappears}
+
+Proposition~\ref{prop:goppa-double} returns here, and not in the reader's favour. Because $\Gamma(L,g) = \Gamma(L,g^2)$ for squarefree $g$, the code sits inside an ambient GRS code of dimension $n-2t$ rather than $n-t$ --- so $D = n-2t-1$, and the reconstruction condition $s(n-1) > dD$ is \emph{easier} to satisfy. The identity that buys the free doubling of the minimum distance is the same identity that sharpens the distinguisher. Abandoning it is no defence: the attack still runs in quasipolynomial time with $D = n-t-1$, and one would have given up the error-correction for a worse constant.
+
+\subsection{What it costs, and what it does not touch}
+
+In the asymptotic regime Classic McEliece is actually parameterized for --- extension degree $m = \Theta(\log n)$, Goppa degree $t = \Theta(n/\log n)$, dimension $k = \Theta(n)$ --- the two conditions are met by $s,d = \Theta(\log n)$, and the polynomial space has dimension $\binom{k}{d} \le k^d = n^{O(\log n)}$. \emph{Quasipolynomial}: superpolynomial, but far below the $2^{\Theta(t)}$ of generic decoding.
+
+That $\Theta(\log n)$ is forced rather than chosen. Substituting $D = n-2t-1$ and $d = s+1$ turns the reconstruction condition into $2(s+1)t > n-1$ --- the multiplicity and the Goppa degree must \emph{multiply} to about $n/2$. With $t = \Theta(n/\log n)$ fixed by the scheme, $s = \Theta(\log n)$ is the smallest that works, and the running time follows from it.
+
+Concretely, after shortening (which lowers both length and dimension before the test), the estimates are:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+Parameter set & Distinguisher & Best previous & Generic decoding \\
+\midrule
+\texttt{mceliece348864}  & $2^{114}$ & $2^{298}$ & $2^{151}$ \\
+\texttt{mceliece460896}  & $2^{120}$ & $2^{595}$ & $2^{191}$ \\
+\texttt{mceliece6688128} & $2^{124}$ & $2^{691}$ & $2^{257}$ \\
+\texttt{mceliece8192128} & $2^{124}$ & $2^{551}$ & $2^{287}$ \\
+\bottomrule
+\end{tabular}
+\caption{Binary operations to distinguish a Classic McEliece public key from random~\cite{gijs2026}, against the best previously published structural distinguisher~\cite{hw2025} and against information-set decoding (which recovers the \emph{message}, and is the number the parameter sets were chosen against). Storage for the new attack is $2^{66}$ to $2^{72}$ bits, which is what ``not practical'' means here --- roughly eight exabytes, not a running time anyone waits out.}
+\label{tab:goppa-distinguishers}
+\end{table}
+
+Read the table in two passes. The distinguisher is now \emph{cheaper than generic decoding} on every parameter set, and below the claimed security level of the smallest --- so the conservative assumption no longer holds anywhere in the standardized range. But the minimal assumption is untouched: there is no key recovery, and the decryption attack the same paper describes is heuristic and, by its authors' own assessment, far beyond practical reach.
+
+Two properties of this result set it apart from the subexponential distinguishers that preceded it~\cite{ran2025,hw2025}. Its soundness analysis is \emph{unconditional} --- linear algebra and the Reed--Muller distance bound, with no heuristic about how some algebraic invariant behaves on random codes. And it came from somewhere unexpected: a failed attempt to build doubly-efficient private information retrieval from algebraic locally decodable codes. A McEliece public key has exactly the shape of a permuted PIR query matrix; the Reed--Muller construction reproduces the square-code attack, and the multiplicity-code construction gives this one.
+
+\subsection{The consequence for parameters}
+
+The last observation is the one most likely to outlive the attack. Generic decoding costs $2^{\tilde{O}(t)}$ and this distinguisher costs $2^{\tilde{O}(n/t)}$, so resisting both is governed by
+\[
+\min\{t,\; n/t\} \;\le\; \sqrt{n},
+\]
+and demanding $\kappa$-bit security against both forces $n = \tilde{\Omega}(\kappa^2)$. Classic McEliece's distinctive offer was $\kappa$-bit security with $\tilde{O}(\kappa)$-length ciphertexts --- 96 bytes at the smallest parameter set, the smallest of any NIST candidate. Under this attack it falls onto the same quadratic curve as the LPN-based schemes it was meant to improve on. The enormous public key was always the acknowledged price; the tiny ciphertext was the compensation, and it is the compensation that this result puts in question.
 
 \section*{Further reading}
 Goppa introduced the codes in 1970~\cite{goppa1970}; Patterson gave the binary decoder in 1975~\cite{patterson1975}; McEliece turned them into a cryptosystem in 1978~\cite{mceliece1978}; and the current parameters and constant-time engineering are specified by the Classic McEliece submission~\cite{classicmceliece}.

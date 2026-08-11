@@ -235,7 +235,19 @@ ML-KEM-768                        & $1184$\,B          & $1088$\,B & Module-LWE 
 \end{table}
 
 \paragraph{Status.}
-Classic McEliece competed in the NIST post-quantum project as a key-encapsulation candidate and advanced into the fourth round dedicated to additional KEMs. It is not a published NIST FIPS, and NIST IR~8545 selected HQC rather than Classic McEliece for the additional-KEM standardization path. Classic McEliece nevertheless has a long public cryptanalytic record; that record is a stable reason to study it, without making unsupported claims about present deployment or other standardization activity.
+Classic McEliece competed in the NIST post-quantum project as a key-encapsulation candidate and advanced into the fourth round dedicated to additional KEMs. It is not a published NIST FIPS, and NIST IR~8545 selected HQC rather than Classic McEliece for the additional-KEM standardization path. Classic McEliece nevertheless has the longest public cryptanalytic record of any scheme in this book, and that record is why it is worth studying.
+
+\paragraph{That record is currently moving.}
+Since 2023 a line of structural attacks has been closing on the parameter sets themselves. None of them decrypts anything, and none recovers a key at standardized parameters; what they attack is the \emph{indistinguishability} of the public key from a random matrix. The most recent, of Ghoshal, Ishai, Jain and Sun~\cite{gijs2026}, is quasipolynomial-time, applies to every parameter set NIST considered, and --- on the smallest set --- costs fewer operations than generic decoding does. Appendix~\ref{app:goppa} works through how it does that and what it leaves standing, because the mechanism is instructive well beyond this one scheme.
+
+The honest summary is a two-part one, and the two parts are easy to conflate:
+
+\begin{itemize}
+  \item the \textbf{minimal} assumption --- recovering a message means decoding, which is hard --- is intact, and no attack has come near it;
+  \item the \textbf{conservative} assumption --- the public key is indistinguishable from random, which is the one usually invoked when McEliece is called the safe choice --- no longer holds at any standardized parameter set.
+\end{itemize}
+
+A reader deciding whether to deploy this should weigh both. A reader deciding whether to \emph{study} it should note that a forty-eight-year-old scheme is currently the most interesting cryptanalytic target in the field, which is not an argument against reading the chapter.
 
 \section{Pitfalls}
 
@@ -246,7 +258,7 @@ The size is intrinsic. The public key is a random-looking code, and a random cod
 The decoder $\mathcal{D}_g$ corrects \emph{up to} $t$ errors and no more. Encapsulation must use weight exactly $t$: too few and it is easier to attack, too many and honest decoding fails. The weight is a fixed scheme parameter, not a tunable knob at encryption time.
 
 \paragraph{Pitfall 3: assuming any decodable code family will do.}
-The security rests on the scrambled code being \emph{indistinguishable} from random. Several families that offered efficient decoders (such as certain algebraic and low-density codes) were shown to leak their structure through the disguise and were broken. Binary Goppa codes are used precisely because, so far, they do not.
+The security rests on the scrambled code being \emph{indistinguishable} from random. Several families that offered efficient decoders (such as certain algebraic and low-density codes) were shown to leak their structure through the disguise and were broken outright. Binary Goppa codes are used because they resisted those attacks --- and, as Section~\ref{sec:goppa-distinguishers} sets out, they now leak that structure too, at quasipolynomial rather than polynomial cost. The distinction between ``leaks nothing'' and ``leaks expensively'' is the whole of the scheme's present margin, so it is worth keeping straight.
 
 \paragraph{Pitfall 4: skipping the chosen-ciphertext hardening.}
 The bare scheme in the algorithm boxes is only passively secure. Real deployments must bind the ciphertext into the key and use implicit rejection, exactly as the lattice KEMs apply a Fujisaki--Okamoto-style transform
@@ -260,7 +272,9 @@ Code-based cryptography rests on a hard problem wholly separate from lattices: d
   \item it starts from a \textbf{binary Goppa code}, which has an efficient $t$-error decoder $\mathcal{D}_g$;
   \item it \textbf{disguises} that code with a secret scrambler $S$ and permutation $P$, publishing $G' = SGP$ (or, dually, $H' = SHP$), which looks random;
   \item anyone can \textbf{encapsulate} -- add or send a weight-$t$ error -- but only the holder of $S$, $P$, and $\mathcal{D}_g$ can \textbf{decapsulate}, because only they can decode;
-  \item it buys unusually strong \textbf{conservatism} -- a forty-year unbroken record -- at the cost of a very large public key, while keeping ciphertexts tiny.
+  \item it buys unusually strong \textbf{conservatism} -- forty-eight years without a decryption or key-recovery attack -- at the cost of a very large public key, while keeping ciphertexts tiny.
 \end{itemize}
+
+That last claim needs its qualifier stated rather than assumed. What has never fallen is the hardness of \emph{decoding}. What has fallen, since this book's first edition would have been written, is the claim that the public key is indistinguishable from a random matrix: a quasipolynomial distinguisher now covers every parameter set (Section~\ref{sec:goppa-distinguishers}). Nothing about the scheme's operation changes; what changes is which of the two assumptions you are entitled to lean on.
 
 The lesson beyond the mechanics is that ``post-quantum'' is not a single idea but a portfolio of independent bets. Classic McEliece is the code-based family's oldest and most cautious member, decoding disguised as a random code. The next chapter, on HQC, takes a different route through the same code-based territory: rather than hiding a strongly structured Goppa code, it builds security on the hardness of decoding \emph{quasi-cyclic} codes, trading Classic McEliece's giant keys for something far more compact -- and, in doing so, became the code-based scheme NIST chose to standardize.
