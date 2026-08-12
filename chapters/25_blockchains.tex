@@ -760,11 +760,47 @@ verification equations gives
   \qquad
   \|\mathbf{s}-\mathbf{s}'\| \le 2\beta ,
 \]
-which is precisely a solution to Module-SIS at bound $2\beta$. The reduction is
-one subtraction; there is no random oracle in it and no hash function to model.
-This is the sense in which the assumption is \emph{stronger} than a STARK's:
-falsifiable and concrete, but an algebraic assumption where the hash-based
+which is precisely a solution to Module-SIS at bound $2\beta$.
+
+Read as a reduction this is as clean as they come. An adversary against binding
+is handed the M-SIS matrix \emph{unmodified} --- the challenge distribution and
+the commitment key are the same uniform $\mathbf{A}$, so nothing has to be
+simulated --- and its output is turned into a solution by one subtraction. There
+is no rewinding, no random oracle, and no loss:
+$\mathrm{Adv}^{\mathrm{bind}} \le \mathrm{Adv}^{\text{M-SIS}}_{2\beta}$. This is
+the sense in which the assumption is \emph{stronger} than a STARK's: falsifiable,
+concrete and tightly used, but an algebraic assumption where the hash-based
 family has none.
+
+\paragraph{It does not hide, and that is deliberate.}
+Algorithm~\ref{alg:ajtai-commit} is a \emph{deterministic} function of
+$\mathbf{s}$, so it is binding but emphatically not hiding: to test a guess, recompute
+$\mathbf{A}\mathbf{s}$ and compare. Hiding has to be bought with randomness, by
+committing as
+\[
+  \mathbf{t}_1 = \mathbf{A}_1\mathbf{r},
+  \qquad
+  \mathbf{t}_2 = \mathbf{A}_2\mathbf{r} + \mathbf{m},
+  \qquad \mathbf{r}\ \text{short and secret},
+\]
+and then the proof is one hybrid step: replace $(\mathbf{A}_1\mathbf{r},
+\mathbf{A}_2\mathbf{r})$ by uniform, which is exactly decisional Module-LWE in
+knapsack form (Chapter~\ref{ch:mlwe}), and $\mathbf{t}_2$ becomes a one-time pad
+over $\mathbf{m}$. Binding from SIS, hiding from LWE --- the two hard problems of
+Part~\ref{part:lattices}, one each.
+
+Both are computational, and that is forced: no commitment scheme is
+\emph{simultaneously} statistically binding and statistically hiding, since an
+unbounded adversary breaks whichever property was not paid for. Making
+$\mathbf{r}$ carry enough entropy for statistical hiding (a regularity argument
+over $R_q$) makes it long, and the opening has to stay short for binding to bite,
+so the parameters pull against each other.
+
+A proof system does not need the hiding half unless it wants zero knowledge, and
+these do not by default --- LaBRADOR and Greyhound are arguments of
+\emph{knowledge}, with zero knowledge available as a costed variant. Which is
+worth knowing before assuming a ``commitment'' in a lattice argument conceals
+anything: usually it is there to bind a prover, not to keep a secret.
 
 \paragraph{It is linearly homomorphic --- and that is what costs.}
 $\mathbf{A}\mathbf{s}_1+\mathbf{A}\mathbf{s}_2=\mathbf{A}(\mathbf{s}_1+\mathbf{s}_2)$,
