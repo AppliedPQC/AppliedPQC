@@ -82,7 +82,7 @@ Because the toy ring is modulo $x^8-1$ and the product has degree below eight, n
 
 \section{Butterflies and complexity}
 
-The direct code is intentionally transparent, but it evaluates every output from every input and therefore takes $O(n^2)$ field operations. A practical radix-2 NTT uses butterflies to reuse work. A butterfly combines two values $u$ and $v$ using a twiddle factor $\omega^k$:
+The direct code is intentionally transparent, but it evaluates every output from every input and therefore takes $O(n^2)$ field operations. A practical radix-2 NTT uses butterflies to reuse work, by the same divide-and-conquer recursion Cooley and Tukey published for the DFT~\cite{cooleytukey1965}. A butterfly combines two values $u$ and $v$ using a twiddle factor $\omega^k$:
 \[
 (u,v)\longmapsto(u+\omega^k v,\;u-\omega^k v).
 \]
