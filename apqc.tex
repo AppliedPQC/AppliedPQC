@@ -111,9 +111,14 @@ this book are identified by their exact publication or draft version.}
 \input{chapters/24_applications}
 \input{chapters/25_blockchains}
 
-% Back matter sits beside the parts, not inside Part VI.
+% Back matter sits beside the parts, not inside Part VI.  The divider is
+% unnumbered: the appendices are lettered, so a "Part VII" would compete with
+% the A that Chapter~\ref{app:goppa} already carries.
 \bookmarksetup{startatroot}
 \appendix
+\part*{Appendix}
+\phantomsection
+\addcontentsline{toc}{part}{Appendix}
 \input{chapters/28_goppa_appendix}
 
 \bookmarksetup{startatroot}
