@@ -699,6 +699,89 @@ drop-in replacement (Section~\ref{sec:eth-two-front}). Any system whose design
 depends on aggregation should expect its post-quantum migration to be an
 architectural project, not a key-type change.
 
+\subsection{The proof system, asked the same question}
+\label{sec:pq-proof-systems}
+Every argument in this section has been about what a layer \emph{carries}. Turn
+it on the proof system itself and it becomes a question about the
+\textbf{polynomial commitment}, because that is where a quantum adversary
+attacks: the rest of a modern argument is field arithmetic over a transcript.
+
+Two families answer it, and they differ in what they assume rather than in how
+fast they run.
+
+\begin{itemize}
+  \item \textbf{Hash-based} commitments --- FRI, and its successors STIR and
+        WHIR --- open a Merkle tree, so the assumption is a random oracle plus
+        collision resistance, with nothing algebraic underneath. This is what
+        makes a STARK post-quantum, and it is why the memory-check bug of
+        Section~\ref{sec:symmetric-plumbing} was a bug rather than a design
+        choice: an elliptic-curve accumulator had been placed inside a system
+        whose commitment assumed nothing of the kind.
+  \item \textbf{Lattice-based} commitments --- the LaBRADOR
+        line~\cite{labrador2023} --- commit with an Ajtai/Module-SIS commitment
+        (Chapter~\ref{ch:mlwe}) that is opened by \emph{ring arithmetic} rather
+        than by hashing. There is no per-level hash in the opening at all, which
+        is the structural difference: a Merkle path costs a hash per level,
+        while a module-lattice opening costs a multiplication in
+        $\mathbb{Z}_q[X]/(X^d+1)$ --- an NTT, the transform of
+        Chapter~\ref{ch:ntt}.
+\end{itemize}
+
+\paragraph{Smallest is not cheapest.}
+Lattice arguments produce the smallest post-quantum proofs by a wide margin:
+LaBRADOR proves an R1CS with $2^{20}$ constraints in \textbf{58\,kB} at the
+128-bit level, against megabytes for the hash-based family. The cost has moved
+rather than disappeared, and it has moved to the verifier. LaBRADOR's verifier
+is \emph{linear} in the witness, and Greyhound --- the polynomial commitment
+built on it --- measures \textbf{2.80\,s} to verify a degree-$2^{30}$ evaluation,
+which its own authors put at roughly twice Ligero's~\cite{greyhound2024}. A
+system that must verify inside a smart contract or a script is buying bytes with
+time, and should confirm it wants that trade.
+
+Published figures in this line also need reading carefully, because no two of
+them measure the same object: Greyhound's headline 53\,kB is an \emph{evaluation}
+proof rather than a proof of a computation, and the much-quoted 73\,kB from
+SALSAA is one folding step over linear relations, against 979\,kB for the same
+system's general-purpose argument~\cite{salsaa2025}.
+
+\paragraph{Where this touches aggregation.}
+The previous subsection said no standardized post-quantum signature aggregates.
+That remains true, but the research position is not empty, and it points
+somewhere specific. Falcon signatures \emph{can} be aggregated by proving their
+verification inside LaBRADOR: 500 signatures in about 73\,kB, against roughly
+3.6\,MB for the best lattice aggregate-signature scheme
+otherwise~\cite{falconagg2024}. Two qualifications matter before anyone plans
+around it. The parameters are at 121-bit security rather than 128, and every
+size is an analytic estimate --- there is no prover or verifier implementation
+to measure.
+
+The third qualification is the interesting one. The result \textbf{does not
+transfer to ML-DSA}, and not for want of engineering: its soundness proof
+handles a signing oracle only for \emph{hash-then-sign} schemes, the GPV
+structure of Chapter~\ref{ch:fndsa}, and ML-DSA's Fiat--Shamir-with-aborts
+structure (Chapter~\ref{ch:mldsa}) is exactly what the proof cannot
+accommodate. So the one aggregation result that exists lands on FN-DSA and not
+on the scheme most deployments would otherwise reach for first --- an argument
+for FN-DSA that Section~\ref{sec:bitcoin-scheme-choice} could not make on size
+alone.
+
+\paragraph{And the same warning, one level down.}
+``It is lattice-based'' is no better an answer than ``it is a STARK.'' In 2024 a
+quantum polynomial-time algorithm was shown to sample well-distributed LWE
+instances while provably \emph{not} knowing the secret, assuming only that LWE
+is hard~\cite{obliviouslwe2024}. It invalidated the security analyses of six
+published lattice SNARKs at a stroke.
+
+The scope is what the habit of this section would predict. Those six are
+standard-model, designated-verifier constructions resting on a
+\emph{knowledge-of-encoding} assumption --- an assumption that the sampler
+refutes. The LaBRADOR line is untouched, because it assumes Module-SIS in the
+random oracle model and never assumes that an adversary producing an encoding
+must know what it encoded. Same primitive family, different assumption,
+different outcome; and the paper is careful to say it invalidated proofs rather
+than broke schemes. Naming the family was never the answer at any level of the
+stack.
+
 \section{Timelines and honest uncertainty}
 No quantum computer capable of breaking secp256k1 or BLS12-381 exists as of mid-2026.
 A 2026 arXiv preprint, not a consensus survey, gives one set of model-dependent
