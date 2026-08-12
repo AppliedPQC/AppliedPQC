@@ -699,6 +699,426 @@ drop-in replacement (Section~\ref{sec:eth-two-front}). Any system whose design
 depends on aggregation should expect its post-quantum migration to be an
 architectural project, not a key-type change.
 
+\subsection{The proof system, asked the same question}
+\label{sec:pq-proof-systems}
+Every argument in this section has been about what a layer \emph{carries}. Turn
+it on the proof system itself and it becomes a question about the
+\textbf{polynomial commitment}, because that is where a quantum adversary
+attacks: the rest of a modern argument is field arithmetic over a transcript.
+
+Two families answer it, and they differ in what they assume rather than in how
+fast they run.
+
+\begin{itemize}
+  \item \textbf{Hash-based} commitments --- FRI, and its successors STIR and
+        WHIR --- open a Merkle tree, so the assumption is a random oracle plus
+        collision resistance, with nothing algebraic underneath. This is what
+        makes a STARK post-quantum, and it is why the memory-check bug of
+        Section~\ref{sec:symmetric-plumbing} was a bug rather than a design
+        choice: an elliptic-curve accumulator had been placed inside a system
+        whose commitment assumed nothing of the kind.
+  \item \textbf{Lattice-based} commitments --- the LaBRADOR
+        line~\cite{labrador2023} --- commit with an \textbf{Ajtai commitment},
+        which is a matrix--vector product over the module of
+        Chapter~\ref{ch:mlwe} and is opened by ring arithmetic rather than by
+        hashing. There is no hash anywhere in the opening.
+\end{itemize}
+
+\subsubsection{The commitment, in full}
+The whole scheme is one line of linear algebra. Fix the ring
+$R_q=\mathbb{Z}_q[X]/(X^d+1)$ of Chapter~\ref{ch:mlwe} --- Greyhound's
+implementation takes $d=64$ --- and a norm bound $\beta$.
+
+The figures in this section follow the convention of the lattice zero-knowledge
+literature~\cite{lnp2022} rather than the numbered pseudocode used elsewhere in
+this book: a header declaring what is public and what is private, then the two
+parties in columns with the messages between them, and the verifier's checks
+gathered into a closing \emph{Accept iff}. For these protocols the interesting
+content is who knows what and who sends when, and that convention shows it.
+
+\begin{figure}[H]
+\begin{protocol}
+\textbf{Public information:} $\mathbf{A} \in R_q^{\kappa\times n}$ uniformly
+random, norm bound $\beta$, commitment $\mathbf{t} \in R_q^{\kappa}$.\\
+\textbf{Private information:} $\mathbf{s} \in R^{n}$ such that
+\[
+  \mathbf{t} = \mathbf{A}\mathbf{s} \bmod q
+  \qquad\text{and}\qquad
+  \|\mathbf{s}\| \le \beta .
+\]
+\protorule
+\begin{tabular}{@{}p{0.30\linewidth}@{}p{0.30\linewidth}@{}p{0.36\linewidth}@{}}
+\Prover & & \Verifier \\[0.9em]
+ & \centering$\msgto{\mathbf{s}}$ & \\[0.6em]
+ & & Accept iff \\
+ & & \quad 1. $\|\mathbf{s}\| \le \beta$ \\
+ & & \quad 2. $\mathbf{A}\mathbf{s} = \mathbf{t}$ \\
+\end{tabular}
+\end{protocol}
+\caption{The Ajtai commitment and its opening. There is no trapdoor and no
+structured reference string: $\mathbf{A}$ is public randomness, exactly as a
+Merkle tree's hash function is. Note what is on the arrow --- the opening is the
+entire witness, which is the deficiency the rest of this section is about.}
+\label{fig:ajtai-commit}
+\end{figure}
+
+Three properties, each doing real work.
+
+\paragraph{It compresses, in bytes and in security.}
+The commitment is $\kappa$ ring elements no matter how large $n$ is, so
+$\kappa d\lceil\log_2 q\rceil$ bits stand for a witness of any length. The
+second half is easy to miss and is the better half: because the hardness of SIS
+does not really depend on the \emph{dimension} of the solution, lengthening the
+witness does not weaken the assumption either. A longer witness is free twice
+over. And $\mathbf{A}$ is public randomness --- no trusted setup and no
+structured reference string, exactly as for a Merkle root.
+
+\paragraph{Binding \emph{is} Module-SIS, with nothing in between.}
+Suppose $\mathbf{s}\ne\mathbf{s}'$ both open $\mathbf{t}$. Subtracting the two
+verification equations gives
+\[
+  \mathbf{A}(\mathbf{s}-\mathbf{s}') = \mathbf{0} \bmod q,
+  \qquad
+  \mathbf{s}-\mathbf{s}' \ne \mathbf{0},
+  \qquad
+  \|\mathbf{s}-\mathbf{s}'\| \le 2\beta ,
+\]
+which is precisely a solution to Module-SIS at bound $2\beta$.
+
+Read as a reduction this is as clean as they come. An adversary against binding
+is handed the M-SIS matrix \emph{unmodified} --- the challenge distribution and
+the commitment key are the same uniform $\mathbf{A}$, so nothing has to be
+simulated --- and its output is turned into a solution by one subtraction. There
+is no rewinding, no random oracle, and no loss:
+$\mathrm{Adv}^{\mathrm{bind}} \le \mathrm{Adv}^{\text{M-SIS}}_{2\beta}$. This is
+the sense in which the assumption is \emph{stronger} than a STARK's: falsifiable,
+concrete and tightly used, but an algebraic assumption where the hash-based
+family has none.
+
+\paragraph{Hiding is bought separately, and there are two ways to buy it.}
+As drawn, Figure~\ref{fig:ajtai-commit} is a \emph{deterministic} function of
+$\mathbf{s}$: it binds, but it emphatically does not hide, since testing a guess
+means recomputing $\mathbf{A}\mathbf{s}$ and comparing. That stripped form is
+what a succinct argument uses, for a reason returned to below. Stated in full,
+the Ajtai scheme carries randomness $\mathbf{s}_2$ alongside the message
+$\mathbf{s}_1$, both short:
+\[
+  \mathbf{A}_1\mathbf{s}_1 + \mathbf{A}_2\mathbf{s}_2 = \mathbf{t} \bmod q .
+\]
+Binding is the same subtraction as before. Hiding now follows because
+$(\mathbf{A}_2,\mathbf{A}_2\mathbf{s}_2)$ is indistinguishable from uniform,
+which is decisional Module-LWE (Chapter~\ref{ch:mlwe}). \textbf{Binding from
+SIS, hiding from LWE} --- the two hard problems of Part~\ref{part:lattices}, one
+each, on the same matrix.
+
+The alternative is the \textbf{BDLOP} commitment, where only the randomness
+$\mathbf{s}$ need be short and the message may be arbitrary modulo $q$:
+\[
+  \begin{bmatrix}\mathbf{A}\\ \mathbf{B}\end{bmatrix}\mathbf{s}
+  \;+\;\begin{bmatrix}\mathbf{0}\\ \mathbf{m}\end{bmatrix}
+  \;=\;\begin{bmatrix}\mathbf{t}_A\\ \mathbf{t}_B\end{bmatrix} \bmod q .
+\]
+The two trade against each other in a way worth knowing, because it explains the
+shape of every protocol built on them. Ajtai demands a \emph{short} message, but
+the message's dimension does not enlarge the commitment at all --- and since the
+hardness of SIS does not really depend on the dimension of the solution, a longer
+witness costs no security either. BDLOP accepts arbitrary messages and lets
+further elements be appended for one ring element apiece, but its commitment
+\emph{and} its opening grow linearly in the message. So one is for long witnesses
+with small coefficients and the other for short witnesses with large ones, and
+protocols need both: Lyubashevsky, Nguyen and Plan\c{c}on therefore fuse them
+into a single ABDLOP commitment~\cite{lnp2022}, putting the long witness in the
+Ajtai part and the low-dimensional auxiliary terms a protocol accumulates in the
+BDLOP part, which yields the Ajtai commitment for free because one $\mathbf{t}_A$
+serves both.
+
+Both properties are computational, and that is forced rather than chosen: no
+commitment is \emph{simultaneously} statistically binding and statistically
+hiding, since an unbounded adversary breaks whichever was not paid for. Pushing
+the randomness up to statistical hiding (a regularity argument over $R_q$) makes
+it long, and the opening has to stay short for binding to bite, so the parameters
+pull against each other.
+
+Which is why the stripped form is the one that appears in this section. A proof
+system needs the hiding half only if it wants zero knowledge, and these do not by
+default --- LaBRADOR and Greyhound are arguments of \emph{knowledge}, with zero
+knowledge available as a costed variant. Worth knowing before assuming that a
+``commitment'' inside a lattice argument conceals anything: usually it is there
+to bind a prover, not to keep a secret.
+
+\paragraph{It is linearly homomorphic --- and that is what costs.}
+$\mathbf{A}\mathbf{s}_1+\mathbf{A}\mathbf{s}_2=\mathbf{A}(\mathbf{s}_1+\mathbf{s}_2)$,
+which is why witnesses can be folded and batched at all. But the bound moves
+with them: the sum opens to something of norm up to $2\beta$, a challenge-weighted
+combination to more, and every round of folding must budget for the growth. In a
+Merkle tree an opening is exact and composition is free. Here \textbf{norms are
+the currency}, and the parameters are a norm budget.
+
+\subsubsection{Why there is a proof system at all}
+Note what Figure~\ref{fig:ajtai-commit} does \emph{not} give: opening it means
+sending $\mathbf{s}$, all $n$ ring elements of it. The commitment is short but
+its opening is as long as the witness --- the exact opposite of a Merkle tree,
+whose commitment is short \emph{and} whose openings are logarithmic, at the price
+of a hash per level.
+
+So the entire lattice proof-system literature exists to answer one question:
+\emph{how do you convince a verifier that a short opening exists without sending
+it?} LaBRADOR's answer is recursion --- reduce a system of quadratic relations
+over $R_q$ to a smaller system of the same shape, commit, and repeat, so the
+transcript is a sequence of commitments rather than a witness.
+
+There is a price, and it is the one to remember. Extraction from such a proof
+does not hand back the witness that was committed. What it yields is a
+$\bar{\mathbf{s}}$ and a short polynomial $c$ with
+\[
+  \mathbf{A}\bar{\mathbf{s}} = c\,\mathbf{t} \bmod q,
+  \qquad \|\bar{\mathbf{s}}\| \ \text{larger than}\ \|\mathbf{s}\| ,
+\]
+which is a different equation: the norm has grown, and an unknown multiplicand
+has appeared. That gap is called \textbf{slack}, and it is not a proof artefact
+to be tidied away later.
+
+Two consequences show why. Practically, a scheme downstream of such a proof
+inherits the $c$. In lattice verifiable encryption this was for years the reason
+the decryptor had to \emph{guess} $c$ in order to decrypt, making expected
+decryption time track the adversary's running time --- so the scheme could only
+be deployed where an attacker's time could be bounded~\cite{lnp2022}. And in
+parameters, slack compounds: a larger extracted solution demands a larger modulus
+for SIS security, which demands a larger dimension for LWE security, which
+enlarges everything again. It is the same wall that aggregating Falcon signatures
+hit, where LaBRADOR's norm check proved ``both approximate and with respect to
+the entire witness,'' with the slack growing in the number of signatures, forcing
+the first iteration to be replaced with an exact proof of
+smallness~\cite{falconagg2024}. Removing slack is not polish; it is what a
+decade of work in this area has largely been about.
+
+\subsubsection{From a commitment to a polynomial commitment}
+Figure~\ref{fig:ajtai-commit} commits to a \emph{vector}. A proof system needs
+to commit to a \textbf{polynomial} $f$ and later convince a verifier that
+$f(x)=y$ at a point $x$ chosen after the commitment --- a \textbf{polynomial
+commitment scheme}, or PCS. Two requirements: it is \emph{binding}, so no prover
+can answer two different values at the same point; and it is \emph{succinct}, so
+the commitment and the evaluation proof are far smaller than $f$ itself.
+
+\paragraph{The PCS is the unit of migration.}
+This is worth stating precisely, because it is what makes the rest of the section
+actionable. Most modern argument systems --- STARKs, PLONK and their descendants
+--- factor into two independent pieces:
+\begin{enumerate}
+  \item a \textbf{polynomial interactive oracle proof}, in which the prover hands
+        the verifier idealized oracles for some polynomials and the verifier
+        queries them. This half is \emph{information-theoretic}: it assumes
+        nothing, and a quantum adversary gains nothing against it.
+  \item a \textbf{compiler} that replaces each oracle with a polynomial
+        commitment, and each interaction with Fiat--Shamir.
+\end{enumerate}
+Every computational assumption in the system enters through the second step.
+That is why ``is this proof system post-quantum?'' is nearly always a question
+about its PCS, and why the Ziren repair earlier in this section is a primitive
+swap rather than a redesign: the protocol above the commitment does not know or
+care what the commitment is made of.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{2.3cm}p{3.5cm}p{3.4cm}p{2.2cm}p{2.4cm}@{}}
+\toprule
+PCS & Commitment is & Rests on & Setup & Survives Shor? \\
+\midrule
+KZG & one group element & pairings; discrete log & structured, trusted & \textbf{no} \\
+FRI / WHIR & a Merkle root & random oracle; collision resistance & transparent & yes \\
+Ajtai & $\mathbf{t}=\mathbf{A}\mathbf{s}$, $\kappa$ ring elements & Module-SIS (+ random oracle once compiled) & transparent & yes \\
+\bottomrule
+\end{tabular}
+\caption{The three polynomial commitment families, which is the row that decides
+whether an argument system is post-quantum. Ethereum's stated plan to ``move KZG
+commitments to STARK- or lattice-based alternatives'' (Section~\ref{sec:eth-two-front})
+is a move from the first row to one of the others; the protocol layered on top is
+largely unaffected.}
+\label{tab:pcs-families}
+\end{table}
+
+\paragraph{The square-root decomposition.}
+For the lattice row, the bridge from Figure~\ref{fig:ajtai-commit} to a PCS is
+a reshaping. Write
+$f(X)=\sum_{i<N} f_i X^{i}$ with $N=n\cdot m$, arrange the coefficients into an
+$n\times m$ matrix $M$ with $M_{i,j}=f_{i+jn}$, and the evaluation factors:
+\[
+  f(x)\;=\;\sum_{j<m} x^{jn} \sum_{i<n} f_{i+jn}\,x^{i}
+       \;=\;\mathbf{a}(x)^{\!\top} M\, \mathbf{b}(x),
+  \qquad
+  \begin{aligned}
+    \mathbf{a}(x)&=(1,x,\dots,x^{n-1}),\\
+    \mathbf{b}(x)&=(1,x^{n},\dots,x^{(m-1)n}).
+  \end{aligned}
+\]
+A quadratic form, and a commitment that is linearly homomorphic can be pushed
+through one side of it.
+
+\begin{figure}[H]
+\begin{protocol}
+\textbf{Public information:} $\mathbf{A} \in R_q^{\kappa\times n}$, the column
+commitments $\mathbf{t}_j = \mathbf{A}M_{\cdot,j}$ for $j<m$, the evaluation
+point $x$, the claimed value $y$, a norm bound $B$.\\
+\textbf{Private information:} $M \in R^{n\times m}$, the coefficients of $f$,
+such that
+\[
+  \mathbf{a}(x)^{\!\top} M\, \mathbf{b}(x) = y .
+\]
+\protorule
+\begin{tabular}{@{}p{0.30\linewidth}@{}p{0.28\linewidth}@{}p{0.38\linewidth}@{}}
+\Prover & & \Verifier \\[0.9em]
+$\mathbf{w} := M\,\mathbf{b}(x)$ & & \\[0.6em]
+ & \centering$\msgto{\mathbf{w}}$ & \\[0.6em]
+ & & Accept iff \\
+ & & \quad 1. $\|\mathbf{w}\| \le B$ \\
+ & & \quad 2. $\langle \mathbf{a}(x), \mathbf{w}\rangle = y$ \\
+ & & \quad 3. $\mathbf{A}\mathbf{w} = \sum_{j<m} b_j(x)\,\mathbf{t}_j$ \\
+\end{tabular}
+\end{protocol}
+\caption{The square-root evaluation argument, in the shape Greyhound
+instantiates. Check 3 is the homomorphism doing the work: the verifier never
+sees the columns, but
+$\sum_j b_j \mathbf{A}M_{\cdot,j} = \mathbf{A}(M\mathbf{b}) = \mathbf{A}\mathbf{w}$,
+so it can derive the commitment the response \emph{should} have and compare.
+Check 1 is not a formality, for the reason overleaf. As drawn this is one round
+and it is not yet sound --- see the caveat below.}
+\label{fig:sqrt-pcs}
+\end{figure}
+
+Both the transcript and the verifier are $O(\sqrt{N})$: the prover sends one
+column's worth of data instead of the whole matrix, and the verifier does
+$O(\sqrt{N})$ ring operations instead of reading $f$.
+
+\paragraph{Why the real protocol has three rounds.}
+The figure is the idea, and one step short of a protocol. The entries of
+$\mathbf{b}(x)$ are powers of $x$ and are not small, so $\mathbf{w}=M\mathbf{b}(x)$
+is not short either and check 1 cannot be satisfied at any useful bound. A real
+instantiation therefore inserts a round: the verifier sends a \emph{short}
+random challenge, the prover answers with a combination weighted by it, and the
+response stays inside the norm budget. That extra round is the difference between
+the picture and Greyhound, and it is a good illustration of the theme --- the
+algebra was never the hard part, the norms were.
+
+\paragraph{Why the norm check is not a formality.}
+It is tempting to read the norm check as a technicality bolted onto an otherwise
+clean argument. It is the opposite: \emph{without it there is no commitment at
+all}. The map $\mathbf{s}\mapsto\mathbf{A}\mathbf{s}$ from $R_q^{n}$ to
+$R_q^{\kappa}$ with $n\gg\kappa$ is wildly non-injective --- every $\mathbf{t}$
+has on the order of $q^{d(n-\kappa)}$ preimages, and Gaussian elimination finds
+one in polynomial time. Anyone can open an Ajtai commitment to anything they
+like, provided they are allowed to answer with a large vector.
+
+What is hard is finding a \emph{short} preimage, and finding \emph{two} short
+preimages of the same $\mathbf{t}$ is exactly the Module-SIS problem of the
+binding argument above. So the norm bound is not a side condition on the scheme;
+it \emph{is} the scheme. Every message in every round carries one, every
+operation that combines messages has to account for the growth, and a protocol
+that loses track of a bound anywhere has lost binding everywhere. This is why
+lattice arguments read like an exercise in bookkeeping, and why the extraction
+slack of the previous subsection is the natural failure mode rather than a
+surprise.
+
+\paragraph{A different mechanism, not a tuning of the same one.}
+It is worth seeing how little this resembles FRI, because the two are often
+filed together as ``the post-quantum options.'' FRI never proves an algebraic
+identity: it establishes that a committed word is \emph{close} to a low-degree
+codeword, by folding the word and opening a few positions, and its cost is
+therefore counted in queries and Merkle paths --- which is precisely why a
+verifier written in Bitcoin Script spends nearly all of its budget on hashing.
+The lattice PCS proves the identity directly, and its cost is counted in ring
+multiplications and in norm growth. They are different mechanisms with different
+cost centres, and a system that swaps one for the other is not tuning a
+parameter.
+
+\paragraph{Composition.}
+Greyhound's contribution is a three-round protocol of the shape above with the
+norm control that lattices require, and then a \emph{composition}: run LaBRADOR
+over the resulting statement to compress the $O(\sqrt{N})$ transcript to
+polylogarithmic size~\cite{greyhound2024}.
+
+It is worth being exact about what that composition buys, because it is easy to
+overstate. The sublinear \emph{verifier} is already there in the base protocol;
+LaBRADOR shrinks the \emph{proof} and preserves it. Composing does not make
+verification succinct, and Greyhound's verifier remains $O(\sqrt{N})$.
+
+\subsubsection{What the verifier actually computes}
+The natural summary --- ``a lattice opening is a ring multiplication, so it is an
+NTT'' --- is the right intuition and the wrong implementation. A proof modulus is
+chosen to make the \emph{security} argument work, not to be NTT-friendly, and
+Greyhound's is not: its implementation states plainly that NTT-based
+multiplication cannot be used directly for $R_q$, and instead multiplies modulo
+several small primes of 12 to 14 bits that \emph{do} split fully in
+$\mathbb{Z}[X]/(X^{64}+1)$, recombining by explicit CRT~\cite{greyhound2024}.
+
+So the transform of Chapter~\ref{ch:ntt} is still what runs --- several of them,
+plus a CRT reconstruction, per multiplication. For a script or a contract paying
+per operation, that constant factor is part of the design, not an implementation
+detail to be optimized away later.
+
+\paragraph{Smallest is not cheapest.}
+With the mechanism in view the headline numbers read correctly. Lattice arguments
+produce the smallest post-quantum proofs by a wide margin: LaBRADOR proves an
+R1CS with $2^{20}$ constraints in \textbf{58\,kB} at the 128-bit level, against
+megabytes for the hash-based family. The cost has moved rather than disappeared,
+and it has moved to the verifier --- LaBRADOR's is \emph{linear} in the witness,
+and Greyhound measures \textbf{2.80\,s} to verify a degree-$2^{30}$ evaluation,
+which its own authors put at roughly twice Ligero's~\cite{greyhound2024}. A
+verifier living inside a contract or a script is buying bytes with time, and
+should confirm it wants that trade.
+
+Published figures in this line also need reading carefully, because no two of
+them measure the same object: Greyhound's headline 53\,kB is an \emph{evaluation}
+proof rather than a proof of a computation, and the much-quoted 73\,kB from
+SALSAA is one folding step over linear relations, against 979\,kB for the same
+system's general-purpose argument~\cite{salsaa2025}.
+
+\paragraph{Where this touches aggregation.}
+The previous subsection said no standardized post-quantum signature aggregates.
+That remains true, but the research position is not empty, and it points
+somewhere specific. Falcon signatures \emph{can} be aggregated by proving their
+verification inside LaBRADOR: 500 signatures in about 73\,kB, against roughly
+3.6\,MB for the best lattice aggregate-signature scheme
+otherwise~\cite{falconagg2024}. Two qualifications matter before anyone plans
+around it. The parameters are at 121-bit security rather than 128, and every
+size is an analytic estimate --- there is no prover or verifier implementation
+to measure.
+
+The mechanism also shows why aggregation is not free even when it works. Beyond
+the exact-smallness repair above, the proof cannot run over Falcon's own modulus
+at all: the projection the argument uses needs room that $q=12289$ does not have,
+so the statement is lifted to a proof modulus of \emph{61 bits} for FN-DSA-512
+and 63 for FN-DSA-1024~\cite{falconagg2024}. Aggregating signatures means proving
+statements about them in a different arithmetic from the one they were signed
+in.
+
+The third qualification is the interesting one. The result \textbf{does not
+transfer to ML-DSA}, and not for want of engineering: its soundness proof
+handles a signing oracle only for \emph{hash-then-sign} schemes, the GPV
+structure of Chapter~\ref{ch:fndsa}, and ML-DSA's Fiat--Shamir-with-aborts
+structure (Chapter~\ref{ch:mldsa}) is exactly what the proof cannot
+accommodate. So the one aggregation result that exists lands on FN-DSA and not
+on the scheme most deployments would otherwise reach for first --- an argument
+for FN-DSA that Section~\ref{sec:bitcoin-scheme-choice} could not make on size
+alone.
+
+\paragraph{And the same warning, one level down.}
+``It is lattice-based'' is no better an answer than ``it is a STARK.'' In 2024 a
+quantum polynomial-time algorithm was shown to sample well-distributed LWE
+instances while provably \emph{not} knowing the secret, assuming only that LWE
+is hard~\cite{obliviouslwe2024}. It invalidated the security analyses of six
+published lattice SNARKs at a stroke.
+
+The scope is what the habit of this section would predict. Those six are
+standard-model, designated-verifier constructions resting on a
+\emph{knowledge-of-encoding} assumption --- an assumption that the sampler
+refutes. The LaBRADOR line is untouched, because it assumes Module-SIS in the
+random oracle model and never assumes that an adversary producing an encoding
+must know what it encoded. Same primitive family, different assumption,
+different outcome; and the paper is careful to say it invalidated proofs rather
+than broke schemes. Naming the family was never the answer at any level of the
+stack.
+
 \section{Timelines and honest uncertainty}
 No quantum computer capable of breaking secp256k1 or BLS12-381 exists as of mid-2026.
 A 2026 arXiv preprint, not a consensus survey, gives one set of model-dependent

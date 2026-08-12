@@ -17,6 +17,26 @@
 \definecolor{pqcgray}{HTML}{6B6B6B}   % grid lines, muted context
 \definecolor{pqclight}{HTML}{EDEDED}  % fills / backgrounds
 
+% ---- Interactive protocol figures ----
+% The convention of Lyubashevsky, Nguyen and Plancon (CRYPTO 2022), which is
+% the house style of the lattice zero-knowledge literature: one framed figure
+% carrying a header of public and private information and the relation being
+% proved, a rule, then Prover and Verifier columns with labelled message
+% arrows between them and an "Accept iff" block closing the verifier's side.
+% Preferred over numbered pseudocode whenever who-knows-what and who-sends-when
+% are part of what the reader has to see.
+\newsavebox{\pqcprotobox}
+\newenvironment{protocol}
+  {\begin{lrbox}{\pqcprotobox}\begin{minipage}{0.93\textwidth}\small\vspace{2pt}}
+  {\vspace{2pt}\end{minipage}\end{lrbox}\centering\fbox{\usebox{\pqcprotobox}}}
+% Labelled fixed-length message arrows.
+\newcommand{\msgto}[1]{\xrightarrow{\makebox[2.3cm]{$\scriptstyle #1$}}}
+\newcommand{\msgfrom}[1]{\xleftarrow{\makebox[2.3cm]{$\scriptstyle #1$}}}
+% The header/interaction separator, and the column heads.
+\newcommand{\protorule}{\par\smallskip\hrule\smallskip}
+\newcommand{\Prover}{\underline{Prover}}
+\newcommand{\Verifier}{\underline{Verifier}}
+
 % ---- Reusable TikZ styles ----
 \tikzset{
   latticept/.style={circle, fill=pqcgray, inner sep=0pt, minimum size=3pt},
