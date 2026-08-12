@@ -729,18 +729,38 @@ The whole scheme is one line of linear algebra. Fix the ring
 $R_q=\mathbb{Z}_q[X]/(X^d+1)$ of Chapter~\ref{ch:mlwe} --- Greyhound's
 implementation takes $d=64$ --- and a norm bound $\beta$.
 
-\begin{algorithm}[H]
-\caption{The Ajtai (Module-SIS) commitment}
-\label{alg:ajtai-commit}
-\begin{algorithmic}[1]
-\Statex \textbf{Setup:}
-\State $\mathbf{A} \gets R_q^{\kappa\times n}$ uniformly at random \Comment{public; no trapdoor, no trusted setup}
-\Statex \textbf{Commit}$(\mathbf{s})$, for $\mathbf{s}\in R^{n}$ with $\|\mathbf{s}\|\le\beta$:
-\State \Return $\mathbf{t} \gets \mathbf{A}\mathbf{s} \bmod q \;\in R_q^{\kappa}$
-\Statex \textbf{Verify}$(\mathbf{t},\mathbf{s})$:
-\State \Return $\mathbf{A}\mathbf{s} \stackrel{?}{=} \mathbf{t}$ \textbf{and} $\|\mathbf{s}\| \stackrel{?}{\le} \beta$
-\end{algorithmic}
-\end{algorithm}
+The figures in this section follow the convention of the lattice zero-knowledge
+literature~\cite{lnp2022} rather than the numbered pseudocode used elsewhere in
+this book: a header declaring what is public and what is private, then the two
+parties in columns with the messages between them, and the verifier's checks
+gathered into a closing \emph{Accept iff}. For these protocols the interesting
+content is who knows what and who sends when, and that convention shows it.
+
+\begin{figure}[H]
+\begin{protocol}
+\textbf{Public information:} $\mathbf{A} \in R_q^{\kappa\times n}$ uniformly
+random, norm bound $\beta$, commitment $\mathbf{t} \in R_q^{\kappa}$.\\
+\textbf{Private information:} $\mathbf{s} \in R^{n}$ such that
+\[
+  \mathbf{t} = \mathbf{A}\mathbf{s} \bmod q
+  \qquad\text{and}\qquad
+  \|\mathbf{s}\| \le \beta .
+\]
+\protorule
+\begin{tabular}{@{}p{0.30\linewidth}@{}p{0.30\linewidth}@{}p{0.36\linewidth}@{}}
+\Prover & & \Verifier \\[0.9em]
+ & \centering$\msgto{\mathbf{s}}$ & \\[0.6em]
+ & & Accept iff \\
+ & & \quad 1. $\|\mathbf{s}\| \le \beta$ \\
+ & & \quad 2. $\mathbf{A}\mathbf{s} = \mathbf{t}$ \\
+\end{tabular}
+\end{protocol}
+\caption{The Ajtai commitment and its opening. There is no trapdoor and no
+structured reference string: $\mathbf{A}$ is public randomness, exactly as a
+Merkle tree's hash function is. Note what is on the arrow --- the opening is the
+entire witness, which is the deficiency the rest of this section is about.}
+\label{fig:ajtai-commit}
+\end{figure}
 
 Three properties, each doing real work.
 
@@ -773,7 +793,7 @@ concrete and tightly used, but an algebraic assumption where the hash-based
 family has none.
 
 \paragraph{It does not hide, and that is deliberate.}
-Algorithm~\ref{alg:ajtai-commit} is a \emph{deterministic} function of
+Figure~\ref{fig:ajtai-commit} is a \emph{deterministic} function of
 $\mathbf{s}$, so it is binding but emphatically not hiding: to test a guess, recompute
 $\mathbf{A}\mathbf{s}$ and compare. Hiding has to be bought with randomness, by
 committing as
@@ -811,7 +831,7 @@ Merkle tree an opening is exact and composition is free. Here \textbf{norms are
 the currency}, and the parameters are a norm budget.
 
 \subsubsection{Why there is a proof system at all}
-Note what Algorithm~\ref{alg:ajtai-commit} does \emph{not} give: opening it means
+Note what Figure~\ref{fig:ajtai-commit} does \emph{not} give: opening it means
 sending $\mathbf{s}$, all $n$ ring elements of it. The commitment is short but
 its opening is as long as the witness --- the exact opposite of a Merkle tree,
 whose commitment is short \emph{and} whose openings are logarithmic, at the price
@@ -833,7 +853,7 @@ in the number of signatures, and had to replace the first iteration with an exac
 proof of smallness to make the argument close~\cite{falconagg2024}.
 
 \subsubsection{From a commitment to a polynomial commitment}
-Algorithm~\ref{alg:ajtai-commit} commits to a \emph{vector}. A proof system needs
+Figure~\ref{fig:ajtai-commit} commits to a \emph{vector}. A proof system needs
 to commit to a \textbf{polynomial} $f$ and later convince a verifier that
 $f(x)=y$ at a point $x$ chosen after the commitment --- a \textbf{polynomial
 commitment scheme}, or PCS. Two requirements: it is \emph{binding}, so no prover
@@ -879,7 +899,7 @@ largely unaffected.}
 \end{table}
 
 \paragraph{The square-root decomposition.}
-For the lattice row, the bridge from Algorithm~\ref{alg:ajtai-commit} to a PCS is
+For the lattice row, the bridge from Figure~\ref{fig:ajtai-commit} to a PCS is
 a reshaping. Write
 $f(X)=\sum_{i<N} f_i X^{i}$ with $N=n\cdot m$, arrange the coefficients into an
 $n\times m$ matrix $M$ with $M_{i,j}=f_{i+jn}$, and the evaluation factors:
@@ -895,25 +915,52 @@ $n\times m$ matrix $M$ with $M_{i,j}=f_{i+jn}$, and the evaluation factors:
 A quadratic form, and a commitment that is linearly homomorphic can be pushed
 through one side of it.
 
-\begin{algorithm}[H]
-\caption{Square-root evaluation argument (the shape Greyhound instantiates)}
-\label{alg:sqrt-pcs}
-\begin{algorithmic}[1]
-\Statex \textbf{Commit}$(f)$:
-\State commit to each column of $M$ with Algorithm~\ref{alg:ajtai-commit}
-\Statex \textbf{Prove} $f(x)=y$:
-\State prover sends $\mathbf{w} \gets M\,\mathbf{b}(x)$ \Comment{$n$ ring elements: $O(\sqrt{N})$ at $n=m=\sqrt{N}$}
-\State verifier checks $\langle \mathbf{a}(x), \mathbf{w}\rangle = y$
-\State verifier recomputes the commitment to $\mathbf{w}$ from the committed columns, using the homomorphism, and checks it against the prover's
-\State verifier checks $\|\mathbf{w}\|$ against the round's bound \Comment{without this the argument is unsound}
-\end{algorithmic}
-\end{algorithm}
+\begin{figure}[H]
+\begin{protocol}
+\textbf{Public information:} $\mathbf{A} \in R_q^{\kappa\times n}$, the column
+commitments $\mathbf{t}_j = \mathbf{A}M_{\cdot,j}$ for $j<m$, the evaluation
+point $x$, the claimed value $y$, a norm bound $B$.\\
+\textbf{Private information:} $M \in R^{n\times m}$, the coefficients of $f$,
+such that
+\[
+  \mathbf{a}(x)^{\!\top} M\, \mathbf{b}(x) = y .
+\]
+\protorule
+\begin{tabular}{@{}p{0.30\linewidth}@{}p{0.28\linewidth}@{}p{0.38\linewidth}@{}}
+\Prover & & \Verifier \\[0.9em]
+$\mathbf{w} := M\,\mathbf{b}(x)$ & & \\[0.6em]
+ & \centering$\msgto{\mathbf{w}}$ & \\[0.6em]
+ & & Accept iff \\
+ & & \quad 1. $\|\mathbf{w}\| \le B$ \\
+ & & \quad 2. $\langle \mathbf{a}(x), \mathbf{w}\rangle = y$ \\
+ & & \quad 3. $\mathbf{A}\mathbf{w} = \sum_{j<m} b_j(x)\,\mathbf{t}_j$ \\
+\end{tabular}
+\end{protocol}
+\caption{The square-root evaluation argument, in the shape Greyhound
+instantiates. Check 3 is the homomorphism doing the work: the verifier never
+sees the columns, but
+$\sum_j b_j \mathbf{A}M_{\cdot,j} = \mathbf{A}(M\mathbf{b}) = \mathbf{A}\mathbf{w}$,
+so it can derive the commitment the response \emph{should} have and compare.
+Check 1 is not a formality, for the reason overleaf. As drawn this is one round
+and it is not yet sound --- see the caveat below.}
+\label{fig:sqrt-pcs}
+\end{figure}
 
 Both the transcript and the verifier are $O(\sqrt{N})$: the prover sends one
 column's worth of data instead of the whole matrix, and the verifier does
 $O(\sqrt{N})$ ring operations instead of reading $f$.
 
-\paragraph{Why line 5 is not a formality.}
+\paragraph{Why the real protocol has three rounds.}
+The figure is the idea, and one step short of a protocol. The entries of
+$\mathbf{b}(x)$ are powers of $x$ and are not small, so $\mathbf{w}=M\mathbf{b}(x)$
+is not short either and check 1 cannot be satisfied at any useful bound. A real
+instantiation therefore inserts a round: the verifier sends a \emph{short}
+random challenge, the prover answers with a combination weighted by it, and the
+response stays inside the norm budget. That extra round is the difference between
+the picture and Greyhound, and it is a good illustration of the theme --- the
+algebra was never the hard part, the norms were.
+
+\paragraph{Why the norm check is not a formality.}
 It is tempting to read the norm check as a technicality bolted onto an otherwise
 clean argument. It is the opposite: \emph{without it there is no commitment at
 all}. The map $\mathbf{s}\mapsto\mathbf{A}\mathbf{s}$ from $R_q^{n}$ to
