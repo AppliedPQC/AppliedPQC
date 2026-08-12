@@ -764,10 +764,13 @@ entire witness, which is the deficiency the rest of this section is about.}
 
 Three properties, each doing real work.
 
-\paragraph{It compresses.}
+\paragraph{It compresses, in bytes and in security.}
 The commitment is $\kappa$ ring elements no matter how large $n$ is, so
-$\kappa d\lceil\log_2 q\rceil$ bits stand for a witness of any length. And
-$\mathbf{A}$ is public randomness --- there is no trusted setup and no
+$\kappa d\lceil\log_2 q\rceil$ bits stand for a witness of any length. The
+second half is easy to miss and is the better half: because the hardness of SIS
+does not really depend on the \emph{dimension} of the solution, lengthening the
+witness does not weaken the assumption either. A longer witness is free twice
+over. And $\mathbf{A}$ is public randomness --- no trusted setup and no
 structured reference string, exactly as for a Merkle root.
 
 \paragraph{Binding \emph{is} Module-SIS, with nothing in between.}
@@ -792,35 +795,56 @@ the sense in which the assumption is \emph{stronger} than a STARK's: falsifiable
 concrete and tightly used, but an algebraic assumption where the hash-based
 family has none.
 
-\paragraph{It does not hide, and that is deliberate.}
-Figure~\ref{fig:ajtai-commit} is a \emph{deterministic} function of
-$\mathbf{s}$, so it is binding but emphatically not hiding: to test a guess, recompute
-$\mathbf{A}\mathbf{s}$ and compare. Hiding has to be bought with randomness, by
-committing as
+\paragraph{Hiding is bought separately, and there are two ways to buy it.}
+As drawn, Figure~\ref{fig:ajtai-commit} is a \emph{deterministic} function of
+$\mathbf{s}$: it binds, but it emphatically does not hide, since testing a guess
+means recomputing $\mathbf{A}\mathbf{s}$ and comparing. That stripped form is
+what a succinct argument uses, for a reason returned to below. Stated in full,
+the Ajtai scheme carries randomness $\mathbf{s}_2$ alongside the message
+$\mathbf{s}_1$, both short:
 \[
-  \mathbf{t}_1 = \mathbf{A}_1\mathbf{r},
-  \qquad
-  \mathbf{t}_2 = \mathbf{A}_2\mathbf{r} + \mathbf{m},
-  \qquad \mathbf{r}\ \text{short and secret},
+  \mathbf{A}_1\mathbf{s}_1 + \mathbf{A}_2\mathbf{s}_2 = \mathbf{t} \bmod q .
 \]
-and then the proof is one hybrid step: replace $(\mathbf{A}_1\mathbf{r},
-\mathbf{A}_2\mathbf{r})$ by uniform, which is exactly decisional Module-LWE in
-knapsack form (Chapter~\ref{ch:mlwe}), and $\mathbf{t}_2$ becomes a one-time pad
-over $\mathbf{m}$. Binding from SIS, hiding from LWE --- the two hard problems of
-Part~\ref{part:lattices}, one each.
+Binding is the same subtraction as before. Hiding now follows because
+$(\mathbf{A}_2,\mathbf{A}_2\mathbf{s}_2)$ is indistinguishable from uniform,
+which is decisional Module-LWE (Chapter~\ref{ch:mlwe}). \textbf{Binding from
+SIS, hiding from LWE} --- the two hard problems of Part~\ref{part:lattices}, one
+each, on the same matrix.
 
-Both are computational, and that is forced: no commitment scheme is
-\emph{simultaneously} statistically binding and statistically hiding, since an
-unbounded adversary breaks whichever property was not paid for. Making
-$\mathbf{r}$ carry enough entropy for statistical hiding (a regularity argument
-over $R_q$) makes it long, and the opening has to stay short for binding to bite,
-so the parameters pull against each other.
+The alternative is the \textbf{BDLOP} commitment, where only the randomness
+$\mathbf{s}$ need be short and the message may be arbitrary modulo $q$:
+\[
+  \begin{bmatrix}\mathbf{A}\\ \mathbf{B}\end{bmatrix}\mathbf{s}
+  \;+\;\begin{bmatrix}\mathbf{0}\\ \mathbf{m}\end{bmatrix}
+  \;=\;\begin{bmatrix}\mathbf{t}_A\\ \mathbf{t}_B\end{bmatrix} \bmod q .
+\]
+The two trade against each other in a way worth knowing, because it explains the
+shape of every protocol built on them. Ajtai demands a \emph{short} message, but
+the message's dimension does not enlarge the commitment at all --- and since the
+hardness of SIS does not really depend on the dimension of the solution, a longer
+witness costs no security either. BDLOP accepts arbitrary messages and lets
+further elements be appended for one ring element apiece, but its commitment
+\emph{and} its opening grow linearly in the message. So one is for long witnesses
+with small coefficients and the other for short witnesses with large ones, and
+protocols need both: Lyubashevsky, Nguyen and Plan\c{c}on therefore fuse them
+into a single ABDLOP commitment~\cite{lnp2022}, putting the long witness in the
+Ajtai part and the low-dimensional auxiliary terms a protocol accumulates in the
+BDLOP part, which yields the Ajtai commitment for free because one $\mathbf{t}_A$
+serves both.
 
-A proof system does not need the hiding half unless it wants zero knowledge, and
-these do not by default --- LaBRADOR and Greyhound are arguments of
-\emph{knowledge}, with zero knowledge available as a costed variant. Which is
-worth knowing before assuming a ``commitment'' in a lattice argument conceals
-anything: usually it is there to bind a prover, not to keep a secret.
+Both properties are computational, and that is forced rather than chosen: no
+commitment is \emph{simultaneously} statistically binding and statistically
+hiding, since an unbounded adversary breaks whichever was not paid for. Pushing
+the randomness up to statistical hiding (a regularity argument over $R_q$) makes
+it long, and the opening has to stay short for binding to bite, so the parameters
+pull against each other.
+
+Which is why the stripped form is the one that appears in this section. A proof
+system needs the hiding half only if it wants zero knowledge, and these do not by
+default --- LaBRADOR and Greyhound are arguments of \emph{knowledge}, with zero
+knowledge available as a costed variant. Worth knowing before assuming that a
+``commitment'' inside a lattice argument conceals anything: usually it is there
+to bind a prover, not to keep a secret.
 
 \paragraph{It is linearly homomorphic --- and that is what costs.}
 $\mathbf{A}\mathbf{s}_1+\mathbf{A}\mathbf{s}_2=\mathbf{A}(\mathbf{s}_1+\mathbf{s}_2)$,
@@ -844,13 +868,29 @@ over $R_q$ to a smaller system of the same shape, commit, and repeat, so the
 transcript is a sequence of commitments rather than a witness.
 
 There is a price, and it is the one to remember. Extraction from such a proof
-does not recover a witness of norm $\beta$; it recovers one satisfying a
-\emph{relaxed} relation, with a larger norm. This gap is called
-\textbf{slack}, and it is not a proof artefact but a design constraint: when
-LaBRADOR was used to aggregate Falcon signatures the authors found its norm check
-``both approximate and with respect to the entire witness,'' with slack growing
-in the number of signatures, and had to replace the first iteration with an exact
-proof of smallness to make the argument close~\cite{falconagg2024}.
+does not hand back the witness that was committed. What it yields is a
+$\bar{\mathbf{s}}$ and a short polynomial $c$ with
+\[
+  \mathbf{A}\bar{\mathbf{s}} = c\,\mathbf{t} \bmod q,
+  \qquad \|\bar{\mathbf{s}}\| \ \text{larger than}\ \|\mathbf{s}\| ,
+\]
+which is a different equation: the norm has grown, and an unknown multiplicand
+has appeared. That gap is called \textbf{slack}, and it is not a proof artefact
+to be tidied away later.
+
+Two consequences show why. Practically, a scheme downstream of such a proof
+inherits the $c$. In lattice verifiable encryption this was for years the reason
+the decryptor had to \emph{guess} $c$ in order to decrypt, making expected
+decryption time track the adversary's running time --- so the scheme could only
+be deployed where an attacker's time could be bounded~\cite{lnp2022}. And in
+parameters, slack compounds: a larger extracted solution demands a larger modulus
+for SIS security, which demands a larger dimension for LWE security, which
+enlarges everything again. It is the same wall that aggregating Falcon signatures
+hit, where LaBRADOR's norm check proved ``both approximate and with respect to
+the entire witness,'' with the slack growing in the number of signatures, forcing
+the first iteration to be replaced with an exact proof of
+smallness~\cite{falconagg2024}. Removing slack is not polish; it is what a
+decade of work in this area has largely been about.
 
 \subsubsection{From a commitment to a polynomial commitment}
 Figure~\ref{fig:ajtai-commit} commits to a \emph{vector}. A proof system needs
