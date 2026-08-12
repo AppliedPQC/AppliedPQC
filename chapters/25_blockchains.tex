@@ -718,25 +718,150 @@ fast they run.
         choice: an elliptic-curve accumulator had been placed inside a system
         whose commitment assumed nothing of the kind.
   \item \textbf{Lattice-based} commitments --- the LaBRADOR
-        line~\cite{labrador2023} --- commit with an Ajtai/Module-SIS commitment
-        (Chapter~\ref{ch:mlwe}) that is opened by \emph{ring arithmetic} rather
-        than by hashing. There is no per-level hash in the opening at all, which
-        is the structural difference: a Merkle path costs a hash per level,
-        while a module-lattice opening costs a multiplication in
-        $\mathbb{Z}_q[X]/(X^d+1)$ --- an NTT, the transform of
-        Chapter~\ref{ch:ntt}.
+        line~\cite{labrador2023} --- commit with an \textbf{Ajtai commitment},
+        which is a matrix--vector product over the module of
+        Chapter~\ref{ch:mlwe} and is opened by ring arithmetic rather than by
+        hashing. There is no hash anywhere in the opening.
 \end{itemize}
 
+\subsubsection{The commitment, in full}
+The whole scheme is one line of linear algebra. Fix the ring
+$R_q=\mathbb{Z}_q[X]/(X^d+1)$ of Chapter~\ref{ch:mlwe} --- Greyhound's
+implementation takes $d=64$ --- and a norm bound $\beta$.
+
+\begin{algorithm}[H]
+\caption{The Ajtai (Module-SIS) commitment}
+\label{alg:ajtai-commit}
+\begin{algorithmic}[1]
+\Statex \textbf{Setup:}
+\State $\mathbf{A} \gets R_q^{\kappa\times n}$ uniformly at random \Comment{public; no trapdoor, no trusted setup}
+\Statex \textbf{Commit}$(\mathbf{s})$, for $\mathbf{s}\in R^{n}$ with $\|\mathbf{s}\|\le\beta$:
+\State \Return $\mathbf{t} \gets \mathbf{A}\mathbf{s} \bmod q \;\in R_q^{\kappa}$
+\Statex \textbf{Verify}$(\mathbf{t},\mathbf{s})$:
+\State \Return $\mathbf{A}\mathbf{s} \stackrel{?}{=} \mathbf{t}$ \textbf{and} $\|\mathbf{s}\| \stackrel{?}{\le} \beta$
+\end{algorithmic}
+\end{algorithm}
+
+Three properties, each doing real work.
+
+\paragraph{It compresses.}
+The commitment is $\kappa$ ring elements no matter how large $n$ is, so
+$\kappa d\lceil\log_2 q\rceil$ bits stand for a witness of any length. And
+$\mathbf{A}$ is public randomness --- there is no trusted setup and no
+structured reference string, exactly as for a Merkle root.
+
+\paragraph{Binding \emph{is} Module-SIS, with nothing in between.}
+Suppose $\mathbf{s}\ne\mathbf{s}'$ both open $\mathbf{t}$. Subtracting the two
+verification equations gives
+\[
+  \mathbf{A}(\mathbf{s}-\mathbf{s}') = \mathbf{0} \bmod q,
+  \qquad
+  \mathbf{s}-\mathbf{s}' \ne \mathbf{0},
+  \qquad
+  \|\mathbf{s}-\mathbf{s}'\| \le 2\beta ,
+\]
+which is precisely a solution to Module-SIS at bound $2\beta$. The reduction is
+one subtraction; there is no random oracle in it and no hash function to model.
+This is the sense in which the assumption is \emph{stronger} than a STARK's:
+falsifiable and concrete, but an algebraic assumption where the hash-based
+family has none.
+
+\paragraph{It is linearly homomorphic --- and that is what costs.}
+$\mathbf{A}\mathbf{s}_1+\mathbf{A}\mathbf{s}_2=\mathbf{A}(\mathbf{s}_1+\mathbf{s}_2)$,
+which is why witnesses can be folded and batched at all. But the bound moves
+with them: the sum opens to something of norm up to $2\beta$, a challenge-weighted
+combination to more, and every round of folding must budget for the growth. In a
+Merkle tree an opening is exact and composition is free. Here \textbf{norms are
+the currency}, and the parameters are a norm budget.
+
+\subsubsection{Why there is a proof system at all}
+Note what Algorithm~\ref{alg:ajtai-commit} does \emph{not} give: opening it means
+sending $\mathbf{s}$, all $n$ ring elements of it. The commitment is short but
+its opening is as long as the witness --- the exact opposite of a Merkle tree,
+whose commitment is short \emph{and} whose openings are logarithmic, at the price
+of a hash per level.
+
+So the entire lattice proof-system literature exists to answer one question:
+\emph{how do you convince a verifier that a short opening exists without sending
+it?} LaBRADOR's answer is recursion --- reduce a system of quadratic relations
+over $R_q$ to a smaller system of the same shape, commit, and repeat, so the
+transcript is a sequence of commitments rather than a witness.
+
+There is a price, and it is the one to remember. Extraction from such a proof
+does not recover a witness of norm $\beta$; it recovers one satisfying a
+\emph{relaxed} relation, with a larger norm. This gap is called
+\textbf{slack}, and it is not a proof artefact but a design constraint: when
+LaBRADOR was used to aggregate Falcon signatures the authors found its norm check
+``both approximate and with respect to the entire witness,'' with slack growing
+in the number of signatures, and had to replace the first iteration with an exact
+proof of smallness to make the argument close~\cite{falconagg2024}.
+
+\subsubsection{From a commitment to a polynomial commitment}
+A proof system needs to commit to a \emph{polynomial} and later prove an
+evaluation. The bridge is a square-root decomposition. Write
+$f(X)=\sum_{i<N} f_i X^{i}$ with $N=n\cdot m$, arrange the coefficients into an
+$n\times m$ matrix $M$ with $M_{i,j}=f_{i+jn}$, and the evaluation factors:
+\[
+  f(x)\;=\;\sum_{j<m} x^{jn} \sum_{i<n} f_{i+jn}\,x^{i}
+       \;=\;\mathbf{a}(x)^{\!\top} M\, \mathbf{b}(x),
+  \qquad
+  \begin{aligned}
+    \mathbf{a}(x)&=(1,x,\dots,x^{n-1}),\\
+    \mathbf{b}(x)&=(1,x^{n},\dots,x^{(m-1)n}).
+  \end{aligned}
+\]
+A quadratic form, and a commitment that is linearly homomorphic can be pushed
+through one side of it.
+
+\begin{algorithm}[H]
+\caption{Square-root evaluation argument (the shape Greyhound instantiates)}
+\label{alg:sqrt-pcs}
+\begin{algorithmic}[1]
+\Statex \textbf{Commit}$(f)$:
+\State commit to each column of $M$ with Algorithm~\ref{alg:ajtai-commit}
+\Statex \textbf{Prove} $f(x)=y$:
+\State prover sends $\mathbf{w} \gets M\,\mathbf{b}(x)$ \Comment{$n$ ring elements: $O(\sqrt{N})$ at $n=m=\sqrt{N}$}
+\State verifier checks $\langle \mathbf{a}(x), \mathbf{w}\rangle = y$
+\State verifier recomputes the commitment to $\mathbf{w}$ from the committed columns, using the homomorphism, and checks it against the prover's
+\State verifier checks $\|\mathbf{w}\|$ against the round's bound \Comment{without this the argument is unsound}
+\end{algorithmic}
+\end{algorithm}
+
+Both the transcript and the verifier are $O(\sqrt{N})$. Greyhound's contribution
+is a three-round protocol of this shape with the norm control that lattices
+require, and then a \emph{composition}: run LaBRADOR over the resulting statement
+to compress the $O(\sqrt{N})$ transcript to polylogarithmic
+size~\cite{greyhound2024}.
+
+It is worth being exact about what that composition buys, because it is easy to
+overstate. The sublinear \emph{verifier} is already there in the base protocol;
+LaBRADOR shrinks the \emph{proof} and preserves it. Composing does not make
+verification succinct, and Greyhound's verifier remains $O(\sqrt{N})$.
+
+\subsubsection{What the verifier actually computes}
+The natural summary --- ``a lattice opening is a ring multiplication, so it is an
+NTT'' --- is the right intuition and the wrong implementation. A proof modulus is
+chosen to make the \emph{security} argument work, not to be NTT-friendly, and
+Greyhound's is not: its implementation states plainly that NTT-based
+multiplication cannot be used directly for $R_q$, and instead multiplies modulo
+several small primes of 12 to 14 bits that \emph{do} split fully in
+$\mathbb{Z}[X]/(X^{64}+1)$, recombining by explicit CRT~\cite{greyhound2024}.
+
+So the transform of Chapter~\ref{ch:ntt} is still what runs --- several of them,
+plus a CRT reconstruction, per multiplication. For a script or a contract paying
+per operation, that constant factor is part of the design, not an implementation
+detail to be optimized away later.
+
 \paragraph{Smallest is not cheapest.}
-Lattice arguments produce the smallest post-quantum proofs by a wide margin:
-LaBRADOR proves an R1CS with $2^{20}$ constraints in \textbf{58\,kB} at the
-128-bit level, against megabytes for the hash-based family. The cost has moved
-rather than disappeared, and it has moved to the verifier. LaBRADOR's verifier
-is \emph{linear} in the witness, and Greyhound --- the polynomial commitment
-built on it --- measures \textbf{2.80\,s} to verify a degree-$2^{30}$ evaluation,
+With the mechanism in view the headline numbers read correctly. Lattice arguments
+produce the smallest post-quantum proofs by a wide margin: LaBRADOR proves an
+R1CS with $2^{20}$ constraints in \textbf{58\,kB} at the 128-bit level, against
+megabytes for the hash-based family. The cost has moved rather than disappeared,
+and it has moved to the verifier --- LaBRADOR's is \emph{linear} in the witness,
+and Greyhound measures \textbf{2.80\,s} to verify a degree-$2^{30}$ evaluation,
 which its own authors put at roughly twice Ligero's~\cite{greyhound2024}. A
-system that must verify inside a smart contract or a script is buying bytes with
-time, and should confirm it wants that trade.
+verifier living inside a contract or a script is buying bytes with time, and
+should confirm it wants that trade.
 
 Published figures in this line also need reading carefully, because no two of
 them measure the same object: Greyhound's headline 53\,kB is an \emph{evaluation}
@@ -754,6 +879,14 @@ otherwise~\cite{falconagg2024}. Two qualifications matter before anyone plans
 around it. The parameters are at 121-bit security rather than 128, and every
 size is an analytic estimate --- there is no prover or verifier implementation
 to measure.
+
+The mechanism also shows why aggregation is not free even when it works. Beyond
+the exact-smallness repair above, the proof cannot run over Falcon's own modulus
+at all: the projection the argument uses needs room that $q=12289$ does not have,
+so the statement is lifted to a proof modulus of \emph{61 bits} for FN-DSA-512
+and 63 for FN-DSA-1024~\cite{falconagg2024}. Aggregating signatures means proving
+statements about them in a different arithmetic from the one they were signed
+in.
 
 The third qualification is the interesting one. The result \textbf{does not
 transfer to ML-DSA}, and not for want of engineering: its soundness proof
