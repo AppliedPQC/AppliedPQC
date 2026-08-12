@@ -114,11 +114,11 @@ So to invert $F$ on a target $a$: pick random values for the vinegar variables, 
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[node distance=10mm and 20mm, every node/.style={font=\small}]
+\begin{tikzpicture}[node distance=10mm and 9mm, every node/.style={font=\small}]
   % signing lane (right-to-left inversion), drawn left-to-right for reading
   \node[keynode, text width=2.0cm] (y) {digest\\ $y=\mathcal{H}(M)$};
   \node[keynode, text width=1.5cm, right=of y] (Si) {$S^{-1}$};
-  \node[keynode, text width=2.3cm, right=of Si] (Fi) {$F^{-1}$\\[1pt]\scriptsize trapdoor};
+  \node[keynode, text width=2.1cm, right=of Si] (Fi) {$F^{-1}$\\[1pt]\scriptsize trapdoor};
   \node[keynode, text width=1.5cm, right=of Fi] (Ti) {$T^{-1}$};
   \node[keynode, text width=1.9cm, right=of Ti] (x) {signature $x$};
   \draw[flowarrow] (y) -- (Si);
