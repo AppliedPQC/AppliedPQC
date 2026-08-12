@@ -797,8 +797,54 @@ in the number of signatures, and had to replace the first iteration with an exac
 proof of smallness to make the argument close~\cite{falconagg2024}.
 
 \subsubsection{From a commitment to a polynomial commitment}
-A proof system needs to commit to a \emph{polynomial} and later prove an
-evaluation. The bridge is a square-root decomposition. Write
+Algorithm~\ref{alg:ajtai-commit} commits to a \emph{vector}. A proof system needs
+to commit to a \textbf{polynomial} $f$ and later convince a verifier that
+$f(x)=y$ at a point $x$ chosen after the commitment --- a \textbf{polynomial
+commitment scheme}, or PCS. Two requirements: it is \emph{binding}, so no prover
+can answer two different values at the same point; and it is \emph{succinct}, so
+the commitment and the evaluation proof are far smaller than $f$ itself.
+
+\paragraph{The PCS is the unit of migration.}
+This is worth stating precisely, because it is what makes the rest of the section
+actionable. Most modern argument systems --- STARKs, PLONK and their descendants
+--- factor into two independent pieces:
+\begin{enumerate}
+  \item a \textbf{polynomial interactive oracle proof}, in which the prover hands
+        the verifier idealized oracles for some polynomials and the verifier
+        queries them. This half is \emph{information-theoretic}: it assumes
+        nothing, and a quantum adversary gains nothing against it.
+  \item a \textbf{compiler} that replaces each oracle with a polynomial
+        commitment, and each interaction with Fiat--Shamir.
+\end{enumerate}
+Every computational assumption in the system enters through the second step.
+That is why ``is this proof system post-quantum?'' is nearly always a question
+about its PCS, and why the Ziren repair earlier in this section is a primitive
+swap rather than a redesign: the protocol above the commitment does not know or
+care what the commitment is made of.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{2.3cm}p{3.5cm}p{3.4cm}p{2.2cm}p{2.4cm}@{}}
+\toprule
+PCS & Commitment is & Rests on & Setup & Survives Shor? \\
+\midrule
+KZG & one group element & pairings; discrete log & structured, trusted & \textbf{no} \\
+FRI / WHIR & a Merkle root & random oracle; collision resistance & transparent & yes \\
+Ajtai & $\mathbf{t}=\mathbf{A}\mathbf{s}$, $\kappa$ ring elements & Module-SIS (+ random oracle once compiled) & transparent & yes \\
+\bottomrule
+\end{tabular}
+\caption{The three polynomial commitment families, which is the row that decides
+whether an argument system is post-quantum. Ethereum's stated plan to ``move KZG
+commitments to STARK- or lattice-based alternatives'' (Section~\ref{sec:eth-two-front})
+is a move from the first row to one of the others; the protocol layered on top is
+largely unaffected.}
+\label{tab:pcs-families}
+\end{table}
+
+\paragraph{The square-root decomposition.}
+For the lattice row, the bridge from Algorithm~\ref{alg:ajtai-commit} to a PCS is
+a reshaping. Write
 $f(X)=\sum_{i<N} f_i X^{i}$ with $N=n\cdot m$, arrange the coefficients into an
 $n\times m$ matrix $M$ with $M_{i,j}=f_{i+jn}$, and the evaluation factors:
 \[
@@ -827,11 +873,46 @@ through one side of it.
 \end{algorithmic}
 \end{algorithm}
 
-Both the transcript and the verifier are $O(\sqrt{N})$. Greyhound's contribution
-is a three-round protocol of this shape with the norm control that lattices
-require, and then a \emph{composition}: run LaBRADOR over the resulting statement
-to compress the $O(\sqrt{N})$ transcript to polylogarithmic
-size~\cite{greyhound2024}.
+Both the transcript and the verifier are $O(\sqrt{N})$: the prover sends one
+column's worth of data instead of the whole matrix, and the verifier does
+$O(\sqrt{N})$ ring operations instead of reading $f$.
+
+\paragraph{Why line 5 is not a formality.}
+It is tempting to read the norm check as a technicality bolted onto an otherwise
+clean argument. It is the opposite: \emph{without it there is no commitment at
+all}. The map $\mathbf{s}\mapsto\mathbf{A}\mathbf{s}$ from $R_q^{n}$ to
+$R_q^{\kappa}$ with $n\gg\kappa$ is wildly non-injective --- every $\mathbf{t}$
+has on the order of $q^{d(n-\kappa)}$ preimages, and Gaussian elimination finds
+one in polynomial time. Anyone can open an Ajtai commitment to anything they
+like, provided they are allowed to answer with a large vector.
+
+What is hard is finding a \emph{short} preimage, and finding \emph{two} short
+preimages of the same $\mathbf{t}$ is exactly the Module-SIS problem of the
+binding argument above. So the norm bound is not a side condition on the scheme;
+it \emph{is} the scheme. Every message in every round carries one, every
+operation that combines messages has to account for the growth, and a protocol
+that loses track of a bound anywhere has lost binding everywhere. This is why
+lattice arguments read like an exercise in bookkeeping, and why the extraction
+slack of the previous subsection is the natural failure mode rather than a
+surprise.
+
+\paragraph{A different mechanism, not a tuning of the same one.}
+It is worth seeing how little this resembles FRI, because the two are often
+filed together as ``the post-quantum options.'' FRI never proves an algebraic
+identity: it establishes that a committed word is \emph{close} to a low-degree
+codeword, by folding the word and opening a few positions, and its cost is
+therefore counted in queries and Merkle paths --- which is precisely why a
+verifier written in Bitcoin Script spends nearly all of its budget on hashing.
+The lattice PCS proves the identity directly, and its cost is counted in ring
+multiplications and in norm growth. They are different mechanisms with different
+cost centres, and a system that swaps one for the other is not tuning a
+parameter.
+
+\paragraph{Composition.}
+Greyhound's contribution is a three-round protocol of the shape above with the
+norm control that lattices require, and then a \emph{composition}: run LaBRADOR
+over the resulting statement to compress the $O(\sqrt{N})$ transcript to
+polylogarithmic size~\cite{greyhound2024}.
 
 It is worth being exact about what that composition buys, because it is easy to
 overstate. The sublinear \emph{verifier} is already there in the base protocol;
