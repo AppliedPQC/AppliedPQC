@@ -28,14 +28,34 @@
 \newsavebox{\pqcprotobox}
 \newenvironment{protocol}
   {\begin{lrbox}{\pqcprotobox}\begin{minipage}{0.93\textwidth}\small\vspace{2pt}}
-  {\vspace{2pt}\end{minipage}\end{lrbox}\centering\fbox{\usebox{\pqcprotobox}}}
-% Labelled fixed-length message arrows.
-\newcommand{\msgto}[1]{\xrightarrow{\makebox[2.3cm]{$\scriptstyle #1$}}}
-\newcommand{\msgfrom}[1]{\xleftarrow{\makebox[2.3cm]{$\scriptstyle #1$}}}
+  {\vspace{2pt}\end{minipage}\end{lrbox}\centering
+   {\setlength{\fboxsep}{6pt}\fbox{\usebox{\pqcprotobox}}}}
+% Labelled message arrows. The arrow stretches to the width of whatever
+% column it sits in, so a send visually spans the gap between the two
+% parties instead of floating as a fixed-length stub; the payload rides
+% above the shaft, as in the LNP figures.
+\newcommand{\msgto}[1]{\ensuremath{\xrightarrow{\makebox[0.88\linewidth][c]{$\scriptstyle #1$}}}}
+\newcommand{\msgfrom}[1]{\ensuremath{\xleftarrow{\makebox[0.88\linewidth][c]{$\scriptstyle #1$}}}}
 % The header/interaction separator, and the column heads.
 \newcommand{\protorule}{\par\smallskip\hrule\smallskip}
 \newcommand{\Prover}{\underline{Prover}}
 \newcommand{\Verifier}{\underline{Verifier}}
+
+% ---- Two-party message-sequence diagrams ----
+% One vocabulary for every "A sends, B replies" picture in the book (the
+% KEM handshake, Fiat--Shamir, the TLS hybrid): bold party names over
+% dashed lifelines, protocol messages as blue arrows whose emission point
+% is marked on the sending lifeline, local computation as muted side
+% notes, and an orange result strip when the parties end up sharing
+% something. Blue is reserved for what actually crosses the wire, so a
+% reader can tell a message from a structural arrow at a glance.
+\tikzset{
+  seqparty/.style={font=\small\bfseries},
+  seqlife/.style={pqcgray!45, dashed},
+  seqmsg/.style={{Circle[length=3pt]}-{Latex[length=2.5mm]}, pqcblue, semithick},
+  seqnote/.style={pqcgray},
+  seqresult/.style={keynode, align=center},
+}
 
 % ---- Reusable TikZ styles ----
 \tikzset{
@@ -55,6 +75,18 @@
 \floatname{algorithm}{Algorithm}
 \renewcommand{\algorithmicrequire}{\textbf{Input:}}
 \renewcommand{\algorithmicensure}{\textbf{Output:}}
+
+% ---- Code and diagrams never straddle a page break ----
+% TikZ pictures, tabulars and [H] floats are unbreakable boxes already;
+% a code listing is the one display element TeX will happily split across
+% pages. Boxing every listing in a minipage forbids the split, and with
+% \raggedbottom below, a listing that no longer fits simply moves whole
+% to the next page. Safe because every listing in the book is well under
+% a page (the longest is 43 lines); a listing taller than \textheight
+% would overflow the bottom margin and must be split up at the source.
+\usepackage{etoolbox}
+\BeforeBeginEnvironment{lstlisting}{\par\noindent\begin{minipage}{\linewidth}}
+\AfterEndEnvironment{lstlisting}{\end{minipage}\par}
 
 % ---- Vertical spacing ----
 % book.cls flush-bottoms every page by stretching whatever glue it offers,
