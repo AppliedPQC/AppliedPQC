@@ -293,8 +293,8 @@ key generation, signature generation, and signature verification, across all
 twelve parameter sets in both the pure and pre-hash forms -- and reproduces
 them byte for byte.
 
-One practical caveat is worth stating plainly, because it is a property of
-the scheme and not of the code. Signing with an \textbf{s} parameter set
+One practical caveat is a property of the scheme rather than of this
+implementation. Signing with an \textbf{s} parameter set
 requires rebuilding whole XMSS trees: SLH-DSA-128s traverses on the order of
 a million hash calls per signature, which in Sage takes about sixteen
 seconds, and the 256-bit variants about twice that. The quick test run

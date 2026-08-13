@@ -198,7 +198,7 @@ CC(1 + 2*I)
 These domains become relevant later when discussing numerical methods, Fourier-style transforms, and related implementation ideas.
 
 \section{Finite fields}
-Finite fields are among the most important structures in modern cryptography. A finite field is usually written as $\mathrm{GF}(q)$ or $\mathbb{F}_q$. Before computing with them, it is worth stating precisely what they are, because the whole book rests on them.
+Finite fields are among the most important structures in modern cryptography. A finite field is usually written as $\mathrm{GF}(q)$ or $\mathbb{F}_q$. Before computing with them, we define them precisely; they underlie every construction in this book.
 
 \begin{definition}[Field]
 A \emph{field} is a set $\mathbb{F}$ with addition and multiplication such that $(\mathbb{F},+)$ and $(\mathbb{F}\setminus\{0\},\cdot)$ are both abelian groups (with identities $0$ and $1$) and multiplication distributes over addition. Concretely: one can add, subtract, multiply, and divide by anything nonzero.
