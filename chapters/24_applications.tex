@@ -136,10 +136,9 @@ Hybrids only work if systems can \emph{negotiate} which algorithms they use rath
 \subsection{Where hybrid does not fit}
 \label{sec:hybrid-limits}
 
-Hybrid is the right default for the protocols above, and it is worth being
-explicit about \emph{why}, because the reasons are properties of those protocols
-rather than facts about cryptography --- and one important class of system has
-none of them.
+Hybrid is the appropriate default for the protocols above. The reasons are
+properties of those protocols rather than facts about cryptography, and one
+important class of system has none of them.
 
 In TLS, a hybrid transition is nearly free. The extra classical key exchange
 costs a few hundred bytes on a connection that is discarded seconds later, both
@@ -191,9 +190,9 @@ cryptographic. NIST SP~800-56C approves HKDF with two shared secrets on the
 condition that the \emph{first} comes from a FIPS-approved key-establishment
 scheme. X25519 is not one, so ML-KEM must lead. In the two \texttt{SecP} groups
 the ECDHE share \emph{is} approved, so there the order reverses and ECDHE leads.
-The consequence is worth knowing: which of the two implementations needs FIPS
-certification depends on the group you negotiate. Reading the ordering as a
-security judgement gets it backwards.
+The practical consequence: which of the two implementations needs FIPS
+certification depends on the negotiated group. The ordering is a compliance
+artifact, not a security judgement.
 \end{remark}
 
 \begin{figure}[H]

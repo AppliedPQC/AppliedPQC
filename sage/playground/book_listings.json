@@ -1238,7 +1238,7 @@
       "A published analysis of this question for Bitcoin reports a required downtime on the order of a few months of exclusive blockspace, under its own assumptions about which outputs must move and what a migration spend costs. The exercise below builds a cruder model and gets a larger answer; the discrepancy is the instructive part, and reconciling the two is the point.",
       "remark[Why this reframes the whole chapter] Every other quantity in this chapter is contested: when Q-Day arrives, whether a freeze is legitimate, which signature scheme wins. The throughput bound is not. It follows from block size, signature size, and arithmetic, and it says that even a perfectly coordinated ecosystem with universal agreement and instant wallet support could not complete the migration quickly. That is the strongest available argument for starting early, and it does not require winning any argument about quantum hardware. remark",
       "*Exercise: compute the bound",
-      "The formula above is worth evaluating rather than reading, because the sensitivity to w is the lesson. Using the tools of the \u201cSageMath Basics for Post-Quantum Cryptography\u201d chapter:"
+      "The sensitivity of the formula to w is best seen by evaluating it. Using the tools of the \u201cSageMath Basics for Post-Quantum Cryptography\u201d chapter:"
      ],
      "n": 1,
      "note": "",
