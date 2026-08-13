@@ -151,16 +151,16 @@ Because $H$ behaves like an unpredictable random function, the prover cannot ste
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[font=\scriptsize]
-  \node[font=\small\bfseries] at (1.5,3.5) {Interactive identification};
-  \node[flownode] (P) at (0,2.9) {Prover};
-  \node[flownode] (V) at (3,2.9) {Verifier};
-  \draw[pqcgray!45, dashed] (0,2.5) -- (0,0.1);
-  \draw[pqcgray!45, dashed] (3,2.5) -- (3,0.1);
-  \draw[flowarrow] (0,2.0) -- node[above]{commitment $w$} (3,2.0);
-  \draw[flowarrow] (3,1.35) -- node[above]{random $c$} (0,1.35);
-  \draw[flowarrow] (0,0.7) -- node[above]{response $z$} (3,0.7);
-  \node[pqcteal] at (3,0.25) {check};
-  \node[pqcorange, font=\Large] at (4.7,1.6) {$\Rightarrow$};
+  \node[font=\small\bfseries] at (1.75,3.5) {Interactive identification};
+  \node[seqparty] (P) at (0,2.9) {Prover};
+  \node[seqparty] (V) at (3.5,2.9) {Verifier};
+  \draw[seqlife] (0,2.6) -- (0,0.1);
+  \draw[seqlife] (3.5,2.6) -- (3.5,0.1);
+  \draw[seqmsg] (0,2.0) -- node[above]{commitment $w$} (3.5,2.0);
+  \draw[seqmsg] (3.5,1.35) -- node[above]{random $c$} (0,1.35);
+  \draw[seqmsg] (0,0.7) -- node[above]{response $z$} (3.5,0.7);
+  \node[seqnote, left] at (3.35,0.3) {checks $(w,c,z,t)$};
+  \node[pqcorange, font=\Large] at (5.1,1.6) {$\Rightarrow$};
   \node[font=\small\bfseries] at (8.2,3.5) {Non-interactive (Fiat--Shamir)};
   \node[flownode, align=center] (P2) at (8.2,2.3) {Prover computes $w$,\\then $c=H(w\,\|\,m)$ itself};
   \node[keynode] (sig) at (8.2,1.0) {signature $\sigma=(c,z)$};

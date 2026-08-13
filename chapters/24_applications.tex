@@ -199,13 +199,14 @@ security judgement gets it backwards.
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[font=\scriptsize]
-  \node[font=\small\bfseries] at (1.4,3.4) {Client};
-  \node[font=\small\bfseries] at (8.6,3.4) {Server};
-  \draw[pqcgray!45, dashed] (1.4,3.1) -- (1.4,0.0);
-  \draw[pqcgray!45, dashed] (8.6,3.1) -- (8.6,0.0);
-  \draw[flowarrow] (1.4,2.5) -- node[above]{X25519 share $+$ ML-KEM key (encapsulation key)} (8.6,2.5);
-  \draw[flowarrow] (8.6,1.7) -- node[above]{X25519 share $+$ ML-KEM ciphertext $+$ certificate} (1.4,1.7);
-  \node[keynode, align=center] at (5,0.55) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
+  \node[seqparty] at (1.4,3.4) {Client};
+  \node[seqparty] at (8.6,3.4) {Server};
+  \draw[seqlife] (1.4,3.1) -- (1.4,-0.1);
+  \draw[seqlife] (8.6,3.1) -- (8.6,-0.1);
+  \draw[seqmsg] (1.4,2.55) -- node[above]{X25519 share $+$ ML-KEM key (encapsulation key)} (8.6,2.55);
+  \node[seqnote, left] at (8.45,2.0) {Encaps $\to (ss_{\text{ML-KEM}}, ct)$};
+  \draw[seqmsg] (8.6,1.35) -- node[above]{X25519 share $+$ ML-KEM ciphertext $+$ certificate} (1.4,1.35);
+  \node[seqresult] at (5,0.35) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
 \end{tikzpicture}
 \caption{Hybrid key exchange in TLS 1.3, as specified by RFC~9954~\cite{rfc9954}. Both an elliptic-curve share and an ML-KEM contribution travel in the handshake, and the TLS key schedule binds both secrets together with the handshake transcript. The order shown is that of \texttt{X25519MLKEM768}; it reverses in the \texttt{SecP} groups, for the reason given above. Post-quantum certificate authentication is a separate deployment track.}
 \label{fig:tls-hybrid}
