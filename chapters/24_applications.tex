@@ -245,7 +245,15 @@ mainstream browsers and in OpenSSH~\cite{opensshpq}, and the share of
 human-initiated HTTPS traffic reaching Cloudflare under a post-quantum key
 agreement passed roughly one half during 2025~\cite{cloudflarepq2025}. Major
 cloud key-management and transport services offer post-quantum KEMs as a
-supported option. A reader who has browsed the web or opened an SSH session
+supported option. Google Cloud's roadmap, published in August 2026, is
+representative and carries dates: hybrid ML-KEM already serves its public API
+endpoints and, on an opt-in basis, its load balancers; ML-KEM, ML-DSA and
+SLH-DSA are generally available in its key-management service; and the stated
+target is quantum-safe infrastructure by 2029, aligned with the 2030--2035
+deprecation timelines of CNSA 2.0 and NIST IR 8547~\cite{googlecloudpqc2026}.
+The same roadmap instantiates the asymmetry described next: its key-exchange
+items are marked complete, while its certificate-issuance and signing items
+are scheduled for 2027 and 2028. A reader who has browsed the web or opened an SSH session
 recently has, with high probability, already used ML-KEM.
 
 Authentication is the opposite story, and the contrast is the useful part.
