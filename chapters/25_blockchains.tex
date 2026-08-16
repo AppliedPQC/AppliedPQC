@@ -768,7 +768,7 @@ rather than in how fast they run.
         hashing. There is no hash anywhere in the opening.
 \end{itemize}
 
-\subsubsection{The commitment, in full}
+\subsubsection{The Ajtai commitment}
 The whole scheme is one line of linear algebra. Fix the ring
 $R_q=\mathbb{Z}_q[X]/(X^d+1)$ of Chapter~\ref{ch:mlwe} --- Greyhound's
 implementation takes $d=64$ --- and a norm bound $\beta$.
@@ -912,7 +912,7 @@ recursion --- reduce a system of quadratic relations
 over $R_q$ to a smaller system of the same shape, commit, and repeat, so the
 transcript is a sequence of commitments rather than a witness.
 
-\subsubsection{LaBRADOR, in outline}
+\subsubsection{The LaBRADOR argument}
 \label{sec:labrador-outline}
 LaBRADOR~\cite{labrador2023} is a proof of knowledge for one fixed shape of
 statement, the \textbf{dot-product constraint system}: the witness is $r$ short
@@ -968,7 +968,7 @@ statement is small enough to answer in the clear.
         treats this new statement as the input to another round.
 \end{enumerate}
 
-Figure~\ref{fig:labrador-round} writes one round out in the convention of the
+Figure~\ref{fig:labrador-round} writes one round in the convention of the
 rest of this section.
 
 \begin{figure}[H]
