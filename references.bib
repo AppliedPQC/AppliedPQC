@@ -1,0 +1,690 @@
+% Generated from chapters/99_references.tex; edit this file from now on.
+
+@misc{fips203,
+  author = {{National Institute of Standards and Technology}},
+  title = {{Module-Lattice-Based Key-Encapsulation Mechanism Standard}},
+  note = {FIPS 203, 2024}
+}
+
+@misc{fips204,
+  author = {{National Institute of Standards and Technology}},
+  title = {{Module-Lattice-Based Digital Signature Standard}},
+  note = {FIPS 204, 2024}
+}
+
+@misc{fips205,
+  author = {{National Institute of Standards and Technology}},
+  title = {{Stateless Hash-Based Digital Signature Standard}},
+  note = {FIPS 205, 2024}
+}
+
+@misc{fips206,
+  author = {{National Institute of Standards and Technology}},
+  title = {{FN-DSA (Fast-Fourier, NTRU) Digital Signature Standard}},
+  note = {FIPS 206. Listed by NIST as ``in development'' at this book's standards snapshot: no initial public draft had been released, so the round-3 Falcon submission (Fouque et al., 2020) remains the authoritative specification}
+}
+
+@misc{acvp,
+  author = {{National Institute of Standards and Technology}},
+  title = {{Automated Cryptographic Validation Protocol (ACVP): test vectors for ML-KEM, ML-DSA, and SLH-DSA}},
+  url = {https://github.com/usnistgov/ACVP-Server}
+}
+
+@misc{cosmossdkpq,
+  author = {{Cosmos SDK contributors}},
+  title = {{UPGRADING.md: ML-DSA-65 validator consensus keys}},
+  note = {Cosmos SDK v0.55, 2026},
+  url = {https://github.com/cosmos/cosmos-sdk/blob/main/UPGRADING.md}
+}
+
+@misc{cosmospqdocs,
+  author = {{Cosmos SDK documentation}},
+  title = {{Post-quantum keys; Enable ML-DSA keys; Migrate a validator to ML-DSA}},
+  url = {https://docs.cosmos.network/sdk/latest/keys/post-quantum-keys}
+}
+
+@misc{leanvm,
+  author = {{Lean Ethereum}},
+  title = {{leanVM: a minimal hash-based zkVM for a Post-Quantum Ethereum}},
+  note = {\url{https://github.com/leanEthereum/leanVM}; see also},
+  url = {https://pq.ethereum.org/}
+}
+
+@misc{googlecloudpqc2026,
+  author = {J.~Haridas and M.~Bachman},
+  title = {{PQC in Plaintext: Google Cloud's post-quantum cryptography roadmap}},
+  note = {Google Cloud blog, 11 August 2026},
+  url = {https://cloud.google.com/blog/products/identity-security/pqc-in-plaintext-google-clouds-post-quantum-cryptography-roadmap}
+}
+
+@misc{efbinary2026,
+  author = {J.~Drake},
+  title = {{Announcement of the Ethereum Foundation's pivot from Poseidon to standard hash functions over binary-field proof systems for lean Ethereum}},
+  note = {August 2026; see also \url{https://pq.ethereum.org/}},
+  url = {https://x.com/drakefjustin/status/2087905684180418733}
+}
+
+@misc{ziren276,
+  author = {{ProjectZKM}},
+  title = {{Replace hash-to-curve in multiset hash by quantum safe primitives}},
+  note = {Ziren issue \#276, opened 14 August 2025; prototype branch \texttt{feat/lthash}},
+  url = {https://github.com/ProjectZKM/Ziren/issues/276}
+}
+
+@misc{zisklthash,
+  author = {{Zisk}},
+  title = {{Secure challenge derivation in Zisk: lattice-based multiset hashing}},
+  url = {https://zisk.technology/secure-challenge-derivation-in-zisk/}
+}
+
+@misc{lnp2022,
+  author = {V.~Lyubashevsky and N.~K. Nguyen and M.~Plan\c{c}on},
+  title = {{Lattice-Based Zero-Knowledge Proofs and Applications: Shorter, Simpler, and More General}},
+  note = {CRYPTO 2022, LNCS 13508, pp.~71--101. The source of the protocol-figure convention used in this section},
+  url = {https://eprint.iacr.org/2022/284}
+}
+
+@misc{labrador2023,
+  author = {W.~Beullens and G.~Seiler},
+  title = {{LaBRADOR: Compact Proofs for R1CS from Module-SIS}},
+  note = {CRYPTO 2023, LNCS 14085, pp.~518--548. The 58\,kB figure is stated at the 128-bit level in the published version; the ePrint abstract omits the level},
+  url = {https://eprint.iacr.org/2022/1341}
+}
+
+@misc{greyhound2024,
+  author = {N.~K. Nguyen and G.~Seiler},
+  title = {{Greyhound: Fast Polynomial Commitments from Lattices}},
+  note = {CRYPTO 2024. Timings measured single-threaded on one Intel Xeon Sapphire Rapids core; the implementation requires AVX-512},
+  url = {https://eprint.iacr.org/2024/1293}
+}
+
+@misc{salsaa2025,
+  title = {{SALSAA: Sumcheck-Aided Lattice-based Succinct Arguments and Applications}},
+  note = {Cryptology ePrint Archive, Paper 2025/2124. The 73\,kB and 2.28\,ms figures are for the folding scheme on linear relations; the general-purpose argument is 979\,kB at the same witness size},
+  url = {https://eprint.iacr.org/2025/2124}
+}
+
+@misc{falconagg2024,
+  author = {M.~Aardal and D.~F. Aranha and K.~Boudgoust and S.~Kolby and A.~Takahashi},
+  title = {{Aggregating Falcon Signatures with LaBRADOR}},
+  note = {CRYPTO 2024. Sizes are analytic estimates at 121-bit security; no prover or verifier implementation is reported},
+  url = {https://eprint.iacr.org/2024/311}
+}
+
+@misc{obliviouslwe2024,
+  author = {T.~Debris-Alazard and P.~Fallahpour and D.~Stehl\'{e}},
+  title = {{Quantum Oblivious LWE Sampling and Insecurity of Standard Model Lattice-Based SNARKs}},
+  note = {STOC 2024},
+  url = {https://eprint.iacr.org/2024/030}
+}
+
+@misc{btcl2pqc,
+  author = {S.~Duan and W.~Li},
+  title = {{Post-quantum migration for Bitcoin layer 2s}},
+  note = {Applied PQC research report, 2026},
+  url = {https://github.com/AppliedPQC/pqc-research}
+}
+
+@misc{bernstein2009,
+  author = {D.~J. Bernstein},
+  title = {{Introduction to post-quantum cryptography}},
+  note = {In \emph{Post-Quantum Cryptography}, pages 1--14. Springer, 2009}
+}
+
+@misc{micciancioregev2009,
+  author = {D.~Micciancio and O.~Regev},
+  title = {{Lattice-based cryptography}},
+  note = {In \emph{Post-Quantum Cryptography}, pages 147--191. Springer, 2009}
+}
+
+@misc{peikert2014,
+  author = {C.~Peikert},
+  title = {{Lattice cryptography for the internet}},
+  note = {In \emph{Post-Quantum Cryptography (PQCrypto 2014)}, pages 197--219. Springer, 2014}
+}
+
+@misc{shor1997,
+  author = {P.~W. Shor},
+  title = {{Polynomial-time algorithms for prime factorization and discrete logarithms on a quantum computer}},
+  note = {\emph{SIAM Journal on Computing}, 26(5):1484--1509, 1997}
+}
+
+@misc{grover1996,
+  author = {L.~K. Grover},
+  title = {{A fast quantum mechanical algorithm for database search}},
+  note = {In \emph{Proc.\ 28th ACM Symposium on Theory of Computing (STOC)}, pages 212--219, 1996}
+}
+
+@misc{bht1997,
+  author = {G.~Brassard and P.~H\o yer and A.~Tapp},
+  title = {{Quantum cryptanalysis of hash and claw-free functions}},
+  note = {In \emph{Latin American Symposium on Theoretical Informatics}, pages 163--169. Springer, 1998}
+}
+
+@misc{regev2009,
+  author = {O.~Regev},
+  title = {{On lattices, learning with errors, random linear codes, and cryptography}},
+  note = {\emph{Journal of the ACM}, 56(6):1--40, 2009. Preliminary version in STOC 2005}
+}
+
+@misc{ajtai1996,
+  author = {M.~Ajtai},
+  title = {{Generating hard instances of lattice problems}},
+  note = {In \emph{Proc.\ 28th ACM Symposium on Theory of Computing (STOC)}, pages 99--108, 1996}
+}
+
+@misc{micciancioregev2007,
+  author = {D.~Micciancio and O.~Regev},
+  title = {{Worst-case to average-case reductions based on Gaussian measures}},
+  note = {\emph{SIAM Journal on Computing}, 37(1):267--302, 2007}
+}
+
+@misc{peikert2009,
+  author = {C.~Peikert},
+  title = {{Public-key cryptosystems from the worst-case shortest vector problem}},
+  note = {In \emph{Proc.\ 41st ACM Symposium on Theory of Computing (STOC)}, pages 333--342, 2009}
+}
+
+@misc{blprs2013,
+  author = {Z.~Brakerski and A.~Langlois and C.~Peikert and O.~Regev and D.~Stehl\'{e}},
+  title = {{Classical hardness of learning with errors}},
+  note = {In \emph{Proc.\ 45th ACM Symposium on Theory of Computing (STOC)}, pages 575--584, 2013}
+}
+
+@misc{lindnerpeikert2011,
+  author = {R.~Lindner and C.~Peikert},
+  title = {{Better key sizes (and attacks) for LWE-based encryption}},
+  note = {In \emph{Topics in Cryptology -- CT-RSA 2011}, pages 319--339, 2011}
+}
+
+@misc{aps2015,
+  author = {M.~R. Albrecht and R.~Player and S.~Scott},
+  title = {{On the concrete hardness of learning with errors}},
+  note = {\emph{Journal of Mathematical Cryptology}, 9(3):169--203, 2015}
+}
+
+@misc{lpr2010,
+  author = {V.~Lyubashevsky and C.~Peikert and O.~Regev},
+  title = {{On ideal lattices and learning with errors over rings}},
+  note = {In \emph{Advances in Cryptology -- EUROCRYPT 2010}, pages 1--23, 2010}
+}
+
+@misc{langlois2015,
+  author = {A.~Langlois and D.~Stehl\'{e}},
+  title = {{Worst-case to average-case reductions for module lattices}},
+  note = {\emph{Designs, Codes and Cryptography}, 75(3):565--599, 2015}
+}
+
+@misc{lll1982,
+  author = {A.~K. Lenstra and H.~W. Lenstra and L.~Lov\'{a}sz},
+  title = {{Factoring polynomials with rational coefficients}},
+  note = {\emph{Mathematische Annalen}, 261(4):515--534, 1982}
+}
+
+@misc{babai1986,
+  author = {L.~Babai},
+  title = {{On Lov\'{a}sz' lattice reduction and the nearest lattice point problem}},
+  note = {\emph{Combinatorica}, 6(1):1--13, 1986}
+}
+
+@misc{ntru1998,
+  author = {J.~Hoffstein and J.~Pipher and J.~H. Silverman},
+  title = {{NTRU: A ring-based public key cryptosystem}},
+  note = {In \emph{Algorithmic Number Theory (ANTS-III)}, pages 267--288, 1998}
+}
+
+@misc{gpv2008,
+  author = {C.~Gentry and C.~Peikert and V.~Vaikuntanathan},
+  title = {{Trapdoors for hard lattices and new cryptographic constructions}},
+  note = {In \emph{Proc.\ 40th ACM Symposium on Theory of Computing (STOC)}, pages 197--206, 2008}
+}
+
+@misc{ggh1997,
+  author = {O.~Goldreich and S.~Goldwasser and S.~Halevi},
+  title = {{Public-key cryptosystems from lattice reduction problems}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 1997}, pages 112--131, 1997}
+}
+
+@misc{ntrusign2003,
+  author = {J.~Hoffstein and N.~Howgrave-Graham and J.~Pipher and J.~H. Silverman and W.~Whyte},
+  title = {{NTRUSign: Digital signatures using the NTRU lattice}},
+  note = {In \emph{Topics in Cryptology -- CT-RSA 2003}, pages 122--140, 2003}
+}
+
+@misc{nguyenregev2006,
+  author = {P.~Q. Nguyen and O.~Regev},
+  title = {{Learning a parallelepiped: Cryptanalysis of GGH and NTRU signatures}},
+  note = {In \emph{Advances in Cryptology -- EUROCRYPT 2006}, pages 271--288, 2006}
+}
+
+@misc{fiatshamir1986,
+  author = {A.~Fiat and A.~Shamir},
+  title = {{How to prove yourself: Practical solutions to identification and signature problems}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 1986}, pages 186--194, 1986}
+}
+
+@misc{fo1999,
+  author = {E.~Fujisaki and T.~Okamoto},
+  title = {{Secure integration of asymmetric and symmetric encryption schemes}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 1999}, pages 537--554, 1999}
+}
+
+@misc{hhk2017,
+  author = {D.~Hofheinz and K.~H\"ovelmanns and E.~Kiltz},
+  title = {{A modular analysis of the Fujisaki--Okamoto transformation}},
+  note = {In \emph{Theory of Cryptography (TCC 2017)}, pages 341--371, 2017}
+}
+
+@misc{qrom2011,
+  author = {D.~Boneh and \"O.~Dagdelen and M.~Fischlin and A.~Lehmann and C.~Schaffner and M.~Zhandry},
+  title = {{Random oracles in a quantum world}},
+  note = {In \emph{Advances in Cryptology -- ASIACRYPT 2011}, LNCS 7073, pages 41--69, 2011}
+}
+
+@misc{sxy2018,
+  author = {T.~Saito and K.~Xagawa and T.~Yamakawa},
+  title = {{Tightly-secure key-encapsulation mechanism in the quantum random oracle model}},
+  note = {In \emph{Advances in Cryptology -- EUROCRYPT 2018}, pages 520--551, 2018}
+}
+
+@misc{cooleytukey1965,
+  author = {J.~W. Cooley and J.~W. Tukey},
+  title = {{An algorithm for the machine calculation of complex Fourier series}},
+  note = {\emph{Mathematics of Computation}, 19(90):297--301, 1965}
+}
+
+@misc{lamport1979,
+  author = {L.~Lamport},
+  title = {{Constructing digital signatures from a one-way function}},
+  note = {Technical Report SRI-CSL-98, SRI International, 1979}
+}
+
+@misc{merkle1987,
+  author = {R.~C. Merkle},
+  title = {{A digital signature based on a conventional encryption function}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 1987}, pages 369--378, 1987}
+}
+
+@misc{kyber2018,
+  author = {J.~Bos and L.~Ducas and E.~Kiltz and T.~Lepoint and V.~Lyubashevsky and J.~M. Schanck and P.~Schwabe and G.~Seiler and D.~Stehl\'{e}},
+  title = {{CRYSTALS-Kyber: A CCA-secure module-lattice-based KEM}},
+  note = {In \emph{IEEE European Symposium on Security and Privacy (EuroS\&P)}, pages 353--367, 2018}
+}
+
+@misc{dilithium2018,
+  author = {L.~Ducas and E.~Kiltz and T.~Lepoint and V.~Lyubashevsky and P.~Schwabe and G.~Seiler and D.~Stehl\'{e}},
+  title = {{CRYSTALS-Dilithium: A lattice-based digital signature scheme}},
+  note = {\emph{IACR Transactions on Cryptographic Hardware and Embedded Systems}, 2018(1):238--268, 2018}
+}
+
+@misc{falcon2020,
+  author = {P.-A. Fouque and J.~Hoffstein and P.~Kirchner and V.~Lyubashevsky and T.~Pornin and T.~Prest and T.~Ricosset and G.~Seiler and W.~Whyte and Z.~Zhang},
+  title = {{Falcon: Fast-Fourier lattice-based compact signatures over NTRU}},
+  note = {NIST Post-Quantum Cryptography standardization submission, 2020}
+}
+
+@misc{sphincsplus2019,
+  author = {D.~J. Bernstein and A.~H\"{u}lsing and S.~K\"{o}lbl and R.~Niederhagen and J.~Rijneveld and P.~Schwabe},
+  title = {{The SPHINCS\textsuperscript{+} signature framework}},
+  note = {In \emph{ACM Conference on Computer and Communications Security (CCS)}, pages 2129--2146, 2019}
+}
+
+@misc{mceliece1978,
+  author = {R.~J. McEliece},
+  title = {{A public-key cryptosystem based on algebraic coding theory}},
+  note = {\emph{JPL Deep Space Network Progress Report}, 42-44:114--116, 1978}
+}
+
+@misc{goppa1970,
+  author = {V.~D. Goppa},
+  title = {{A new class of linear correcting codes}},
+  note = {\emph{Problemy Peredachi Informatsii}, 6(3):24--30, 1970}
+}
+
+@misc{patterson1975,
+  author = {N.~J. Patterson},
+  title = {{The algebraic decoding of Goppa codes}},
+  note = {\emph{IEEE Transactions on Information Theory}, 21(2):203--207, 1975}
+}
+
+@misc{niederreiter1986,
+  author = {H.~Niederreiter},
+  title = {{Knapsack-type cryptosystems and algebraic coding theory}},
+  note = {\emph{Problems of Control and Information Theory}, 15(2):159--166, 1986}
+}
+
+@misc{bmvt1978,
+  author = {E.~R. Berlekamp and R.~J. McEliece and H.~C.~A. van Tilborg},
+  title = {{On the inherent intractability of certain coding problems}},
+  note = {\emph{IEEE Transactions on Information Theory}, 24(3):384--386, 1978}
+}
+
+@misc{classicmceliece,
+  author = {D.~J. Bernstein and T.~Chou and T.~Lange and I.~von Maurich and R.~Misoczki and R.~Niederhagen and E.~Persichetti and C.~Peters and P.~Schwabe and N.~Sendrier and J.~Szefer and W.~Wang},
+  title = {{Classic McEliece}},
+  note = {NIST Post-Quantum Cryptography standardization submission, 2017--2022}
+}
+
+@misc{ss1992,
+  author = {V.~M. Sidelnikov and S.~O. Shestakov},
+  title = {{On insecurity of cryptosystems based on generalized Reed--Solomon codes}},
+  note = {\emph{Discrete Mathematics and Applications}, 2(4):439--444, 1992}
+}
+
+@misc{fgopt2013,
+  author = {J.-C. Faug\`{e}re and V.~Gauthier-Uma\~{n}a and A.~Otmani and L.~Perret and J.-P. Tillich},
+  title = {{A distinguisher for high-rate McEliece cryptosystems}},
+  note = {\emph{IEEE Transactions on Information Theory}, 59(10):6830--6844, 2013}
+}
+
+@misc{ran2025,
+  author = {H.~Randriambololona},
+  title = {{The syzygy distinguisher}},
+  note = {In \emph{EUROCRYPT 2025}, LNCS 15606, pages 324--354. Springer, 2025}
+}
+
+@misc{hw2025,
+  author = {T.~Hemmert and A.~Wiemers},
+  title = {{Distinguishing Goppa codes using higher-order vanishing}},
+  note = {Cryptology ePrint Archive, Paper 2025/1661, 2025. To appear in CRYPTO 2026}
+}
+
+@misc{gijs2026,
+  author = {A.~Ghoshal and Y.~Ishai and A.~Jain and N.~Sun},
+  title = {{Quasipolynomial cryptanalysis of the McEliece cryptosystem (or: PIR meets McEliece)}},
+  note = {Cryptology ePrint Archive, Paper 2026/1630, 2026}
+}
+
+@misc{hqc2017,
+  author = {C.~Aguilar-Melchor and N.~Aragon and S.~Bettaieb and L.~Bidoux and O.~Blazy and J.-C. Deneuville and P.~Gaborit and E.~Persichetti and G.~Z\'{e}mor and others},
+  title = {{Hamming Quasi-Cyclic (HQC)}},
+  note = {NIST Post-Quantum Cryptography standardization submission, 2017--2025}
+}
+
+@misc{ding2006,
+  author = {J.~Ding and J.~E. Gower and D.~S. Schmidt},
+  title = {{Multivariate Public Key Cryptosystems}, volume~25 of \emph{Advances in Information Security}},
+  note = {Springer, 2006}
+}
+
+@misc{kpg1999,
+  author = {A.~Kipnis and J.~Patarin and L.~Goubin},
+  title = {{Unbalanced oil and vinegar signature schemes}},
+  note = {In \emph{Advances in Cryptology -- EUROCRYPT 1999}, pages 206--222, 1999}
+}
+
+@misc{beullens2022,
+  author = {W.~Beullens},
+  title = {{Breaking Rainbow takes a weekend on a laptop}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 2022}, pages 464--479, 2022}
+}
+
+@misc{jaodefeo2011,
+  author = {D.~Jao and L.~De~Feo},
+  title = {{Towards quantum-resistant cryptosystems from supersingular elliptic curve isogenies}},
+  note = {In \emph{Post-Quantum Cryptography (PQCrypto 2011)}, pages 19--34. Springer, 2011}
+}
+
+@misc{castryckdecru2023,
+  author = {W.~Castryck and T.~Decru},
+  title = {{An efficient key recovery attack on SIDH}},
+  note = {In \emph{Advances in Cryptology -- EUROCRYPT 2023}, pages 423--447, 2023}
+}
+
+@misc{sqisign2020,
+  author = {L.~De~Feo and D.~Kohel and A.~Leroux and C.~Petit and B.~Wesolowski},
+  title = {{SQIsign: Compact post-quantum signatures from quaternions and isogenies}},
+  note = {In \emph{Advances in Cryptology -- ASIACRYPT 2020}, pages 64--93, 2020}
+}
+
+@misc{kocher1996,
+  author = {P.~C. Kocher},
+  title = {{Timing attacks on implementations of Diffie-Hellman, RSA, DSS, and other systems}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 1996}, pages 104--113, 1996}
+}
+
+@misc{kjj1999,
+  author = {P.~Kocher and J.~Jaffe and B.~Jun},
+  title = {{Differential power analysis}},
+  note = {In \emph{Advances in Cryptology -- CRYPTO 1999}, pages 388--397, 1999}
+}
+
+@misc{gidney2025,
+  author = {C.~Gidney and S.~Schmieg},
+  title = {{Tracking the cost of quantum factoring}},
+  note = {Google Security Blog, May 2025}
+}
+
+@misc{gidneyekera2021,
+  author = {C.~Gidney and M.~Eker\aa},
+  title = {{How to factor 2048 bit RSA integers in 8 hours using 20 million noisy qubits}},
+  note = {\emph{Quantum}, 5:433, 2021}
+}
+
+@misc{gidney2025qubits,
+  author = {C.~Gidney},
+  title = {{How to factor 2048 bit RSA integers with less than a million noisy qubits}},
+  note = {arXiv preprint arXiv:2505.15917, 2025}
+}
+
+@misc{gouziensangouard2021,
+  author = {\'E.~Gouzien and N.~Sangouard},
+  title = {{Factoring 2048-bit RSA integers in 177 days with 13,436 qubits and a multimode memory}},
+  note = {\emph{Physical Review Letters}, 127:140503, 2021}
+}
+
+@misc{litinski2023,
+  author = {D.~Litinski},
+  title = {{How to compute a 256-bit elliptic curve private key with only 50 million Toffoli gates}},
+  note = {arXiv preprint arXiv:2306.08585, 2023}
+}
+
+@misc{googleqec2025,
+  author = {{Google Quantum AI and Collaborators}},
+  title = {{Quantum error correction below the surface code threshold}},
+  note = {\emph{Nature}, 638:920--926, 2025}
+}
+
+@misc{bravyi2024,
+  author = {S.~Bravyi and A.~W. Cross and J.~M. Gambetta and D.~Maslov and P.~Rall and T.~J. Yoder},
+  title = {{High-threshold and low-overhead fault-tolerant quantum memory}},
+  note = {\emph{Nature}, 627:778--782, 2024}
+}
+
+@misc{mosca2025,
+  author = {M.~Mosca and M.~Piani},
+  title = {{Quantum Threat Timeline Report}},
+  note = {Global Risk Institute and evolutionQ, published annually; the 2025 edition is the most recent at this book's standards snapshot}
+}
+
+@misc{nistir8547,
+  author = {{National Institute of Standards and Technology}},
+  title = {{Transition to Post-Quantum Cryptography Standards}},
+  note = {NIST IR 8547 (initial public draft), 2024}
+}
+
+@misc{ncscpqc2025,
+  author = {{National Cyber Security Centre (UK)}},
+  title = {{Timelines for migration to post-quantum cryptography}},
+  note = {NCSC guidance, 2025}
+}
+
+@misc{ghp2018,
+  author = {F.~Giacon and F.~Heuer and B.~Poettering},
+  title = {{KEM combiners}},
+  note = {In \emph{Public-Key Cryptography (PKC 2018)}. Cryptology ePrint Archive, Paper 2018/024}
+}
+
+@misc{bbfgs2019,
+  author = {N.~Bindel and J.~Brendel and M.~Fischlin and B.~Goncalves and D.~Stebila},
+  title = {{Hybrid key encapsulation mechanisms and authenticated key exchange}},
+  note = {In \emph{Post-Quantum Cryptography (PQCrypto 2019)}. Cryptology ePrint Archive, Paper 2018/903}
+}
+
+@misc{xwing2024,
+  author = {M.~Barbosa and D.~Connolly and J.~D. Duarte and A.~Kaiser and P.~Schwabe and K.~Varner and B.~Westerbaan},
+  title = {{X-Wing: the hybrid KEM you've been looking for}},
+  note = {\emph{IACR Communications in Cryptology}, 2024. Cryptology ePrint Archive, Paper 2024/039. Specification: \emph{draft-connolly-cfrg-xwing-kem}, IETF}
+}
+
+@misc{rfc9954,
+  author = {D.~Stebila and S.~Fluhrer and S.~Gueron},
+  title = {{Hybrid Key Exchange in TLS 1.3}},
+  note = {RFC 9954, Informational, July 2026}
+}
+
+@misc{tlsecdhemlkem,
+  author = {K.~Kwiatkowski and P.~Kampanakis and B.~E. Westerbaan and D.~Stebila},
+  title = {{Post-Quantum Traditional (PQ/T) Hybrid Key Agreement Mechanisms for TLS 1.3}},
+  note = {Internet-Draft \texttt{draft-ietf-tls-ecdhe-mlkem}, IETF Transport Layer Security Working Group}
+}
+
+@misc{nistsp800227,
+  author = {G.~Alagic and E.~Barker and L.~Chen and D.~Moody and A.~Robinson and H.~Silberg and N.~Waller},
+  title = {{Recommendations for Key-Encapsulation Mechanisms}},
+  note = {NIST Special Publication 800-227, September 2025}
+}
+
+@misc{rfc7748,
+  author = {A.~Langley and M.~Hamburg and S.~Turner},
+  title = {{Elliptic Curves for Security}},
+  note = {RFC 7748, January 2016}
+}
+
+@misc{rfc5869,
+  author = {H.~Krawczyk and P.~Eronen},
+  title = {{HMAC-based Extract-and-Expand Key Derivation Function (HKDF)}},
+  note = {RFC 5869, May 2010}
+}
+
+@misc{cnsa2,
+  author = {{National Security Agency}},
+  title = {{Commercial National Security Algorithm Suite 2.0 (CNSA 2.0)}},
+  note = {NSA cybersecurity advisory, updated 2025}
+}
+
+@misc{pont2024,
+  author = {J.~J. Pont and others},
+  title = {{Downtime required for Bitcoin quantum-safety}},
+  note = {arXiv preprint arXiv:2410.16965, 2024}
+}
+
+@misc{eddsapq2025,
+  author = {F.~Baldimtsi and others},
+  title = {{Post-quantum readiness in EdDSA chains}},
+  note = {IACR Cryptology ePrint Archive, Report 2025/1368, 2025}
+}
+
+@misc{rfc8032,
+  author = {S.~Josefsson and I.~Liusvaara},
+  title = {{Edwards-Curve Digital Signature Algorithm (EdDSA)}},
+  note = {RFC 8032, IETF, 2017}
+}
+
+@misc{blockstreamlattice2026,
+  author = {D.~Zakharov and M.~Kudinov and V.~Balatska and Y.~Chopa},
+  title = {{Lattice-based Signature Schemes for Bitcoin}},
+  note = {Blockstream Research, August 2026}
+}
+
+@misc{bip32,
+  author = {P.~Wuille},
+  title = {{BIP-32: Hierarchical deterministic wallets}},
+  note = {Bitcoin Improvement Proposals, Final, 2012}
+}
+
+@misc{cloudflarepq2025,
+  author = {{Cloudflare}},
+  title = {{The state of post-quantum adoption (Radar year-in-review and \emph{PQ 2025})}},
+  note = {Cloudflare blog and Cloudflare Radar, 2025--2026}
+}
+
+@misc{opensshpq,
+  author = {{OpenSSH Project}},
+  title = {{Post-quantum cryptography in OpenSSH}},
+  note = {, accessed 2026},
+  url = {https://www.openssh.com/pq.html}
+}
+
+@misc{quantumhorizon2026,
+  author = {{Anonymous}},
+  title = {{Quantum Horizon: An evaluation of quantum computing as a threat to Bitcoin and Ethereum}},
+  note = {arXiv preprint arXiv:2606.14484, 2026 (not peer-reviewed)}
+}
+
+@misc{chaincodepq2025,
+  author = {A.~Milton and C.~Shikhelman},
+  title = {{Bitcoin and quantum computing: Current status and future directions}},
+  note = {Chaincode Labs technical report, 2025}
+}
+
+@misc{bip360,
+  author = {H.~Beast and E.~Heilman and I.~Foxen~Duke},
+  title = {{BIP-360: Pay-to-Merkle-Root (P2MR)}},
+  note = {Bitcoin Improvement Proposals, Draft, 2024--}
+}
+
+@misc{bip361,
+  author = {J.~Lopp and C.~Papathanasiou and I.~Smith and J.~Ross and S.~Vaile and P.-L. Dallaire-Demers},
+  title = {{BIP-361: Post-quantum migration and legacy signature sunset}},
+  note = {Bitcoin Improvement Proposals, Draft, 2026--}
+}
+
+@misc{buterinquantum2024,
+  author = {V.~Buterin},
+  title = {{How to hard-fork to save most users' funds in a quantum emergency}},
+  note = {ethresear.ch, March 2024}
+}
+
+@misc{eip7702,
+  author = {V.~Buterin and S.~Wilson and A.~Dietrichs and lightclient},
+  title = {{EIP-7702: Set code for EOAs}},
+  note = {Ethereum Improvement Proposals, Final (shipped in the Pectra upgrade), 2024--2025}
+}
+
+@misc{eip8141,
+  author = {V.~Buterin et~al},
+  title = {{EIP-8141: Frame transaction}},
+  note = {Ethereum Improvement Proposals, Draft, 2026--}
+}
+
+@misc{ethpqroadmap,
+  author = {{Ethereum Foundation}},
+  title = {{Post-quantum cryptography (roadmap: future-proofing)}},
+  note = {ethereum.org, accessed 2026}
+}
+
+@misc{zkpacademylattice,
+  author = {{ZKP Academy (coset-io)}},
+  title = {{\emph{Lattice Course: lattice-based SNARKs from the mathematics to the polynomial commitment to the implementation}, June--July 2025}},
+  note = {Eleven lectures with slides, recordings and notes; lectures 5, 8, 9 and 10 cover Ajtai commitments, LaBRADOR, Greyhound and their implementations},
+  url = {https://github.com/coset-io/zkp-academy/tree/main/lattice}
+}
+
+@misc{quorus2025,
+  author = {A.~Bienstock and L.~de~Castro and D.~Escudero and A.~Polychroniadou and A.~Takahashi},
+  title = {{Quorus: Efficient, Scalable Threshold ML-DSA Signatures from MPC}},
+  note = {USENIX Security 2026},
+  url = {https://eprint.iacr.org/2025/1163}
+}
+
+@misc{thresholdmldsa2026,
+  author = {S.~Celi and R.~del~Pino and T.~Espitau and G.~Niot and T.~Prest},
+  title = {{Efficient Threshold ML-DSA}},
+  note = {Cryptology ePrint Archive, Paper 2026/013, 2026},
+  url = {https://eprint.iacr.org/2026/013}
+}
+
+@misc{boudgousttakahashi2023,
+  author = {K.~Boudgoust and A.~Takahashi},
+  title = {{Sequential Half-Aggregation of Lattice-Based Signatures}},
+  note = {ESORICS 2023},
+  url = {https://eprint.iacr.org/2023/159}
+}
+
+@misc{nistthreshold,
+  author = {{National Institute of Standards and Technology}},
+  title = {{NIST First Call for Multi-Party Threshold Schemes}},
+  note = {NIST IR 8214C, final version 20 January 2026},
+  url = {https://csrc.nist.gov/projects/threshold-cryptography}
+}

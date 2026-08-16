@@ -15,3 +15,5 @@ sage/specs/
 site/
 site-repo/
 build/
+*.bcf
+*.run.xml

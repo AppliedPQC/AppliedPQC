@@ -18,7 +18,22 @@ SAGE ?= sage
 
 all: $(TARGET)
 
-$(TARGET): $(BASENAME).tex $(wildcard chapters/*.tex)
+BIBER ?= biber
+ifeq ($(shell command -v $(BIBER) 2>/dev/null),)
+  ifneq ($(shell command -v docker 2>/dev/null),)
+    BIBER_CMD = docker run --rm -v "$$(pwd)":/work -w /work $(DOCKER_IMAGE) biber
+  else
+    BIBER_CMD = $(BIBER)
+  endif
+else
+  BIBER_CMD = $(BIBER)
+endif
+
+# pdflatex, biber, pdflatex twice: the per-chapter reference lists are
+# resolved by biber from references.bib.
+$(TARGET): $(BASENAME).tex $(wildcard chapters/*.tex) references.bib
+	$(LATEX_CMD) -interaction=nonstopmode -halt-on-error $(BASENAME).tex
+	$(BIBER_CMD) $(BASENAME)
 	$(LATEX_CMD) -interaction=nonstopmode -halt-on-error $(BASENAME).tex
 	$(LATEX_CMD) -interaction=nonstopmode -halt-on-error $(BASENAME).tex
 
@@ -34,7 +49,7 @@ kat-full: vectors
 	cd sage && $(SAGE) test_kat.sage --full
 
 clean:
-	rm -f *.aux *.bbl *.blg *.log *.out *.toc *.pdf *.fdb_latexmk *.fls
+	rm -f *.aux *.bbl *.blg *.bcf *.run.xml *.log *.out *.toc *.pdf *.fdb_latexmk *.fls
 
 # Regenerate the playground's copy of the book listings.  Run after adding or
 # editing a code listing in any chapter; CI checks the result is in sync.
