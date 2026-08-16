@@ -835,10 +835,19 @@ commitment key are the same uniform $\mathbf{A}$, so nothing has to be
 simulated), and its output is converted into a solution by a single
 subtraction. There
 is no rewinding, no random oracle, and no loss:
-$\mathrm{Adv}^{\mathrm{bind}} \le \mathrm{Adv}^{\text{M-SIS}}_{2\beta}$. This is
-the sense in which the assumption is \emph{stronger} than a STARK's: falsifiable,
-concrete and tightly used, but an algebraic assumption where the hash-based
-family has none.
+$\mathrm{Adv}^{\mathrm{bind}} \le \mathrm{Adv}^{\text{M-SIS}}_{2\beta}$.
+
+The comparison with a Merkle commitment cuts both ways. Binding here rests on
+the hardness of one specific algebraic problem, Module-SIS in a fixed ring at a
+fixed bound, where a Merkle commitment asks only that some hash function be
+collision-resistant; in that sense the lattice assumption is the stronger one,
+and structure is where the failures earlier in this section came from. Against
+that, M-SIS is a falsifiable, parameterized assumption used through a tight
+reduction, whereas a STARK's soundness argument goes through the random-oracle
+model, an idealization of the hash rather than an assumption about it, together
+with the proximity-gap conjectures of its proof of proximity. The lattice
+commitment assumes more, and states precisely what it assumes; the hash-based
+one assumes less, through a model that cannot be falsified.
 
 \paragraph{Hiding.}
 As drawn, Figure~\ref{fig:ajtai-commit} is a \emph{deterministic} function of
