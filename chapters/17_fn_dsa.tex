@@ -222,6 +222,33 @@ Only $s_2$ needs to be sent: the verifier can recover $s_1 = c - s_2 h \bmod q$.
 
 Verification is cheap: one multiplication to recover $s_1$, then a norm check. A forger without the good basis would have to solve the closest-vector problem in the NTRU lattice using only $h$ -- exactly the hardness Part~\ref{part:lattices} established.
 
+\subsection{Where the signature bytes go}
+\label{sec:falcon-sizes}
+
+The sizes in the parameter table (Section~\ref{sec:falcon-params}) are not rounded estimates but sums of fixed fields, and each field follows from something already on the page. A Falcon signature is
+\[
+\underbrace{1}_{\text{header}} \;+\; \underbrace{40}_{\text{salt }r} \;+\; \underbrace{\ell_n}_{\textsc{Compress}(s_2)} \quad\text{bytes},
+\qquad \ell_{512}=625,\quad \ell_{1024}=1239,
+\]
+giving $666$ and $1280$ bytes. The header byte records the encoding and $\log_2 n$; the salt is the 320-bit value hashed with the message. Everything that varies with the security level is in $\ell_n$, and $\ell_n$ is set by two facts: how wide the sampler's Gaussian is, and how the coefficients are coded.
+
+\paragraph{The width.} The fast Fourier sampler outputs $(s_1,s_2)$ with each coefficient a discrete Gaussian of standard deviation
+\[
+\sigma \;=\; 1.17\,\sqrt{q}\;\eta_\varepsilon(\mathbb{Z}^{2n}),
+\]
+where $\eta_\varepsilon$ is the smoothing parameter of Section~\ref{sec:gpv} at the $\varepsilon$ the specification fixes; the specification tabulates $\eta_\varepsilon \approx 1.278$ for $n=512$ and $1.298$ for $n=1024$, so $\sigma \approx 165.7$ and $168.4$. The factor $1.17\sqrt{q}$ is the Gram--Schmidt quality that key generation guarantees for the secret basis (Section~\ref{sec:falcon-keygen}); a coefficient of $s_2$ is thus an integer of typical magnitude a hundred or two, out of a range of $q=12289$.
+
+\paragraph{The code.} A coefficient stored as a raw residue costs $\lceil\log_2 q\rceil = 14$ bits, which would put $s_2$ alone at $896$ bytes for $n=512$. \textsc{Compress} instead writes each coefficient $c$ as one sign bit, the low seven bits of $|c|$ verbatim, and the remaining high part $\lfloor |c|/128\rfloor$ in unary ($k$ zero bits followed by a one). With $\sigma\approx166$, $|c|<128$ for about $56\%$ of coefficients and $|c|<256$ for about $88\%$, so the unary part averages roughly $0.6$ bits, and the expected cost is
+\[
+1 + 7 + (0.6 + 1) \;\approx\; 9.6\ \text{bits per coefficient},
+\]
+about $613$ bytes for $n=512$. The information-theoretic floor for a Gaussian of this width, $\log_2\bigl(\sigma\sqrt{2\pi e}\bigr)\approx 9.4$ bits, shows the code is within a few percent of optimal.
+
+\paragraph{The fixed length.} A variable-length signature would leak the size of $s_2$ and complicate every parser downstream, so the specification fixes $\ell_n$ slightly above the mean: $625$ bytes for $n=512$ is $9.77$ bits per coefficient, $1239$ for $n=1024$ is $9.68$. An encoding that comes up short is padded with zero bits; the rare draw whose encoding would exceed $\ell_n$ is discarded and the signer samples again. That resampling is why the table's figures can be exact rather than typical.
+
+The public key has no such structure to exploit. Its single polynomial $h$ has coefficients uniform modulo $q$, so it costs the full $14n/8$ bytes plus a header byte: $897$ for $n=512$ and $1793$ for $n=1024$. The asymmetry is the whole design in one line: the key is a random-looking ring element and must be stored as one, while the signature is a short Gaussian vector and is stored as one.
+
+
 \section{Why Falcon is the hardest to implement}
 \label{sec:falcon-hard}
 
@@ -441,6 +468,7 @@ Gaussian sampler discussed in the next section -- the part that is hardest to
 specify, hardest to implement, and hardest to test.
 
 \section{Parameter sets}
+\label{sec:falcon-params}
 
 \begin{table}[H]
 \centering
@@ -448,11 +476,11 @@ specify, hardest to implement, and hardest to test.
 \toprule
 Scheme & $n$ & NIST level & Public key & Signature \\
 \midrule
-FN-DSA-512  & 512  & 1 & $\approx 897$ B & $\approx 666$ B \\
-FN-DSA-1024 & 1024 & 5 & $\approx 1793$ B & $\approx 1280$ B \\
+FN-DSA-512  & 512  & 1 & 897 B & 666 B \\
+FN-DSA-1024 & 1024 & 5 & 1793 B & 1280 B \\
 \bottomrule
 \end{tabular}
-\caption{The two FN-DSA (Falcon) parameter sets, both with $q=12289$. Signatures and keys are markedly smaller than ML-DSA's or SLH-DSA's -- the reason Falcon exists.}
+\caption{The two FN-DSA (Falcon) parameter sets, both with $q=12289$. Signatures and keys are markedly smaller than ML-DSA's or SLH-DSA's -- the reason Falcon exists. Section~\ref{sec:falcon-sizes} derives the byte counts.}
 \end{table}
 
 \paragraph{Why there is no Level 3.}
