@@ -10,6 +10,19 @@
 % Lets the appendix and bibliography leave the last \part's bookmark subtree;
 % without it hyperref nests every later chapter under Part VI.
 \usepackage{bookmark}
+% Per-chapter reference lists: every chapter is its own reference section and
+% closes with the works it cites, numbered from 1 within the chapter.
+\usepackage[backend=biber,style=numeric,sorting=none,refsection=chapter,
+            maxbibnames=99,giveninits=false,doi=false,isbn=false]{biblatex}
+\addbibresource{references.bib}
+\defbibheading{chapterrefs}{\section*{References}}
+% Titles italic, as in the manual bibliography this replaces.
+\DeclareFieldFormat[misc]{title}{\mkbibemph{#1}}
+% Let long URLs break inside the reference lists.
+\setcounter{biburlnumpenalty}{9000}
+\setcounter{biburlucpenalty}{9000}
+\setcounter{biburllcpenalty}{9000}
+\appto{\bibsetup}{\sloppy}
 \usepackage{tocloft}
 \usepackage{enumitem}
 \usepackage{booktabs}
@@ -121,8 +134,5 @@ this book are identified by their exact publication or draft version.}
 \phantomsection
 \addcontentsline{toc}{part}{Appendix}
 \input{chapters/28_goppa_appendix}
-
-\bookmarksetup{startatroot}
-\input{chapters/99_references}
 
 \end{document}

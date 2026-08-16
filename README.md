@@ -43,12 +43,16 @@ make          # compiles apqc.tex into apqc.pdf
 make clean    # remove generated files
 ```
 
-The Makefile runs `pdflatex` twice, which is enough to resolve the
-cross-references and the (manual) bibliography -- no BibTeX pass is needed.
+The Makefile runs `pdflatex`, then `biber`, then `pdflatex` twice. Every
+chapter closes with its own reference list, numbered from 1 within the
+chapter; the entries live in `references.bib` and are resolved by biblatex
+with `refsection=chapter`, so `biber` is required.
 
 ### Manual build
 
 ```bash
+pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
+biber apqc
 pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
 pdflatex -interaction=nonstopmode -halt-on-error apqc.tex
 ```
