@@ -9,24 +9,91 @@ This chapter is a draft-oriented walkthrough of FN-DSA, NIST's planned standardi
 After finishing this chapter, you should be able to:
 
 \begin{enumerate}
-  \item contrast hash-and-sign with the Fiat--Shamir approach of ML-DSA;
+  \item contrast hash-and-sign with the Fiat--Shamir approach of ML-DSA, and state the GPV framework and its security requirement;
   \item describe the NTRU lattice and why a short secret basis is a trapdoor;
   \item explain how signing is a nearest-lattice-point problem solved with a Gaussian sampler;
   \item connect the sampler back to discrete Gaussians, good vs.\ bad bases, and CVP from Part~\ref{part:lattices};
   \item understand why Falcon's floating-point arithmetic makes constant-time implementation hard.
 \end{enumerate}
 
-\section{Review: hash-and-sign versus Fiat--Shamir}
+\section{Two routes from a lattice to a signature}
+\label{sec:hash-and-sign-vs-fs}
 
-ML-DSA built a signature from an interactive identification protocol collapsed by a hash. Falcon uses the older, more direct \emph{hash-and-sign} paradigm, the same shape as classical RSA signatures:
+A signature scheme needs a public key that anyone can check against, a secret that only the signer holds, and a way to bind the two to a message. On lattices there are two standard ways to arrange this, and the two lattice signature standards take one each. ML-DSA (Chapter~\ref{ch:mldsa}) is built from an identification protocol collapsed by a hash: the signer commits, hashes the commitment together with the message to obtain a challenge, and answers the challenge with a response whose distribution must be made independent of the secret by rejection sampling. Falcon takes the other route, \emph{hash-and-sign}, and this section sets the two side by side before the chapter follows Falcon's route in detail.
+
+\subsection{Hash-and-sign}
+
+Hash-and-sign is the older paradigm and has the same shape as textbook RSA signatures. A public function $f_{\mathrm{pk}}$ is easy to compute but hard to invert; the signer holds a trapdoor that makes inversion easy. To sign, the signer hashes the message to a point in the range of $f_{\mathrm{pk}}$ and uses the trapdoor to produce a preimage:
+\begin{enumerate}
+  \item hash the message to a target point $c = H(M)$;
+  \item use the secret trapdoor to find a preimage $s$ with $f_{\mathrm{pk}}(s) = c$;
+  \item the verifier recomputes $c$ and checks that $f_{\mathrm{pk}}(s) = c$.
+\end{enumerate}
+The signature is the preimage $s$ itself, together with any salt used in the hash. Nothing interactive is happening, and no challenge is drawn: the message determines the target, and the trapdoor answers it.
+
+On a lattice, the public function is a short-integer-solution map. With a public matrix $\mathbf{A}$, the function $f_{\mathbf{A}}(\mathbf{s}) = \mathbf{A}\mathbf{s} \bmod q$ restricted to \emph{short} inputs is easy to evaluate, and inverting it (finding a short $\mathbf{s}$ with $\mathbf{A}\mathbf{s} = c$) is an inhomogeneous SIS instance, hard without extra information (Section~\ref{sec:sis}). The trapdoor is a short basis of the lattice $\Lambda^{\perp}_q(\mathbf{A}) = \{\mathbf{z} : \mathbf{A}\mathbf{z} = \mathbf{0} \bmod q\}$: given any solution $\mathbf{s}_0$ of $\mathbf{A}\mathbf{s}_0 = c$, a good basis lets the signer find a lattice point close to $\mathbf{s}_0$, and the difference is a short solution. In lattice terms, signing is a closest-vector problem, and the trapdoor is exactly the good basis that Chapters~\ref{ch:lattice}--\ref{ch:svp} identified as the thing that makes CVP tractable.
+
+\subsection{Fiat--Shamir}
+
+Fiat--Shamir starts from the other end. There is no trapdoor function to invert; instead the secret is used to answer a random challenge in a way that a party without the secret could not. Section~\ref{sec:fiat-shamir} gave the three-move identification protocol (commitment $w$, challenge $c$, response $z$) and the transform $c = H(w \,\|\, M)$ that removes the verifier. In ML-DSA the commitment is $\mathbf{w} = \mathbf{A}\mathbf{y}$ for a fresh masking vector $\mathbf{y}$, and the response is $\mathbf{z} = \mathbf{y} + c\,\mathbf{s}_1$. Correctness follows from linearity. Security needs $\mathbf{z}$ to reveal nothing about $\mathbf{s}_1$, and since $\mathbf{y}$ is bounded rather than Gaussian, the sum $\mathbf{y} + c\,\mathbf{s}_1$ is not automatically independent of $\mathbf{s}_1$; the abort loop of Section~\ref{sec:fiat-shamir} discards the responses that would leak.
+
+\subsection{The comparison}
+
+Both routes end at the same requirement, that the object released to the verifier be distributed independently of the secret, but they meet it differently, and the difference drives everything that follows in this chapter.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.20\textwidth}p{0.36\textwidth}p{0.36\textwidth}}
+\toprule
+ & Fiat--Shamir with aborts (ML-DSA) & Hash-and-sign (Falcon) \\
+\midrule
+Public key & $(\mathbf{A}, \mathbf{t} = \mathbf{A}\mathbf{s}_1 + \mathbf{s}_2)$; an LWE-style instance & $h = g f^{-1}$; the bad basis of an NTRU lattice \\
+Secret & short $(\mathbf{s}_1, \mathbf{s}_2)$ & a short basis of the same lattice \\
+Signing & commit, hash a challenge, respond, retry if the response would leak & hash to a target, sample a short preimage with the trapdoor \\
+What hides the secret & rejection sampling on the response & the sampler's output distribution \\
+Randomness in signing & fresh mask $\mathbf{y}$ per attempt & a salt in the hash and a Gaussian sampler \\
+Failure mode if done wrong & released responses correlate with $\mathbf{s}_1$ & released preimages leak the basis \\
+Arithmetic & integer, constant-time by construction & floating-point Gaussian sampling \\
+Signature size, smallest set & 2420 bytes (ML-DSA-44, level 2) & about 666 bytes (Falcon-512, level 1) \\
+\bottomrule
+\end{tabular}
+\caption{The two lattice signature routes side by side. Both must ensure the released object is independent of the secret; Fiat--Shamir enforces this by rejection, hash-and-sign by the choice of preimage distribution.}
+\label{tab:hash-and-sign-vs-fs}
+\end{table}
+
+The size gap in the last row is the reason Falcon exists as a second standard, and the arithmetic row is its price. A Fiat--Shamir response is a sum of a uniformly bounded mask and a small multiple of the secret, so it costs the mask's full width in bytes; a hash-and-sign preimage is as short as the trapdoor allows, which for a well-conditioned basis is a fraction of that. Sampling such a preimage without leaking the basis, however, requires a discrete Gaussian of controlled width, and that is where floating point enters.
+
+\subsection{The GPV framework}
+\label{sec:gpv}
+
+The lattice version of hash-and-sign was proposed before it was made secure. Goldreich, Goldwasser and Halevi~\cite{ggh1997} and later NTRUSign~\cite{ntrusign2003} signed by rounding the target $c$ to a nearby lattice point using the secret good basis, exactly Babai's algorithm from Chapter~\ref{ch:lll}. Each signature is then a point of the parallelepiped spanned by the secret basis, shifted to $c$, and a collection of signatures traces out that parallelepiped. Nguyen and Regev~\cite{nguyenregev2006} recovered the secret basis of both schemes from a few hundred signatures by fitting the parallelepiped's shape. The lesson is the one that Section~\ref{sec:fiat-shamir} drew for ML-DSA: a deterministic function of the secret, released repeatedly, is a sample from a distribution that depends on the secret.
+
+Gentry, Peikert and Vaikuntanathan~\cite{gpv2008} gave the framework that repairs this, referred to as \textbf{GPV} after its authors, and the name this chapter uses from here on. It replaces the rounding step by a sampling step. Rather than the nearest lattice point, the signer draws a lattice point from a discrete Gaussian centered at the target, and outputs the short difference. The framework has three components.
 
 \begin{enumerate}
-  \item hash the message to a target point $c$;
-  \item use the secret trapdoor to produce a short vector that ``explains'' $c$;
-  \item the verifier checks the vector is short and consistent with $c$.
+  \item \textbf{Trapdoor generation.} Output a public matrix $\mathbf{A}$ (or, for Falcon, a public polynomial $h$) together with a short basis $\mathbf{B}$ of the corresponding lattice, such that $\mathbf{A}$ alone is indistinguishable from a random matrix.
+  \item \textbf{Preimage sampling.} Given a target $c$ and the short basis $\mathbf{B}$, output $\mathbf{s}$ with $\mathbf{A}\mathbf{s} = c$ and $\mathbf{s}$ distributed as a discrete Gaussian of parameter $\sigma$ over the solution coset, with $\sigma$ a small multiple of the largest Gram--Schmidt length of $\mathbf{B}$.
+  \item \textbf{Verification.} Accept if $\mathbf{A}\mathbf{s} = H(M)$ and $\|\mathbf{s}\| \le \beta$, where $\beta$ is a fixed multiple of $\sigma\sqrt{m}$.
 \end{enumerate}
 
-The difficulty that stalled lattice hash-and-sign for years was that a naive short vector \emph{leaks the secret basis}: every signature is a hint about the trapdoor. Falcon's core contribution is a sampler whose output distribution is provably independent of the secret -- a discrete Gaussian over the lattice, in the hash-and-sign framework of Gentry, Peikert, and Vaikuntanathan~\cite{gpv2008} --- \textbf{GPV}, after its authors, and the name this chapter uses for it from here on. This is the same ``the mask must hide the secret'' principle as ML-DSA's aborts, achieved by a different mechanism.
+Two properties of the sampler carry the security argument, and both are properties of the discrete Gaussian rather than of any particular trapdoor.
+
+\begin{proposition}[Preimages independent of the trapdoor]
+If $\sigma$ exceeds the smoothing parameter of the lattice, then the distribution of the sampled preimage $\mathbf{s}$ depends only on $\mathbf{A}$, $c$ and $\sigma$, and not on which short basis $\mathbf{B}$ was used to sample it. In particular, an adversary who sees any number of signatures learns nothing about $\mathbf{B}$ that it could not have simulated from $\mathbf{A}$ alone.
+\end{proposition}
+
+This is what the rounding schemes lacked. Babai rounding produces a distribution shaped like the secret parallelepiped; a wide enough Gaussian produces a distribution shaped like the lattice, which is public. The width required is where the Gram--Schmidt lengths of $\mathbf{B}$ enter: a better basis permits a narrower Gaussian, hence shorter signatures, without violating the condition. That is why key generation in Falcon works to make the secret basis as orthogonal as it can (Section~\ref{sec:falcon-keygen}).
+
+\begin{proposition}[Security from SIS]
+In the random-oracle model, a forger against the GPV signature yields a solver for SIS on $\mathbf{A}$ with norm bound $2\beta$.
+\end{proposition}
+
+The argument runs as follows. The reduction answers each hash query $H(M_i)$ by first sampling a short $\mathbf{s}_i$ from the Gaussian and then \emph{defining} $H(M_i) := \mathbf{A}\mathbf{s}_i$; because $\mathbf{A}\mathbf{s}_i$ is nearly uniform for a wide enough Gaussian, the forger cannot tell these programmed values from random ones, and the reduction can answer signing queries without any trapdoor. When the forger outputs a valid $(M^{*}, \mathbf{s}^{*})$ with $\mathbf{A}\mathbf{s}^{*} = H(M^{*})$, the reduction already holds its own short preimage $\mathbf{s}$ of the same target, and with good probability $\mathbf{s} \neq \mathbf{s}^{*}$, since a Gaussian of parameter above the smoothing parameter has min-entropy: the forger cannot guess which preimage the reduction drew. Then $\mathbf{s} - \mathbf{s}^{*}$ is a nonzero vector of norm at most $2\beta$ in $\Lambda^{\perp}_q(\mathbf{A})$, an SIS solution.
+
+The proof isolates the requirement that governs Falcon's implementation, and it is stated here because it recurs in Section~\ref{sec:falcon-determinism} in an implementation setting: \emph{the signer must never release two distinct short preimages of the same target}. If it did, their difference would be exactly the SIS solution the reduction extracts, handed over for free. In the framework this is guaranteed by the salt, which makes each target fresh, and by the sampler itself, which is randomized so that even a repeated target does not produce a correlated pair. Any implementation detail that breaks either guarantee, a reused salt or a sampler whose output on the same input differs across platforms, breaks the scheme with no side channel involved.
+
+Falcon is the GPV framework instantiated on the NTRU lattice: the trapdoor is the short NTRU basis, the preimage sampler is the fast Fourier sampler over that basis, and the hash is \textsc{HashToPoint} with a salt. The rest of the chapter follows those three components in order.
 
 \section{The NTRU lattice and its trapdoor}
 
@@ -72,6 +139,7 @@ for two more short polynomials $F, G$. The pair of rows $(g, -f)$ and $(G, -F)$ 
 \end{figure}
 
 \section{Phase 1: key generation}
+\label{sec:falcon-keygen}
 
 \begin{algorithm}[H]
 \caption{FN-DSA.KeyGen (teaching form)}
@@ -160,13 +228,14 @@ Verification is cheap: one multiplication to recover $s_1$, then a norm check. A
 The Gaussian sampler needs high-precision \emph{floating-point} arithmetic (FFT over the reals) to get the output distribution exactly right. Floating-point operations are notoriously variable-time and platform-dependent, which makes a \emph{constant-time} implementation -- one that leaks nothing through timing -- genuinely difficult. If the sampler's timing or rounding depends on the secret basis, an attacker can gradually reconstruct it. This is the direct motivation for the final chapter on side-channel security, and it is the main reason Falcon, despite its elegance and compactness, is the most demanding of the three standards to deploy safely.
 
 \subsection{Non-determinism is a second, separate problem}
+\label{sec:falcon-determinism}
 
 Timing is the familiar hazard, and it is not the only one. The same floating-point
 operation can give slightly different results on a different processor, compiler,
 or optimization level, and that alone can break the scheme --- with no side
 channel involved at all.
 
-The reason is the security requirement underneath the GPV framework: a signer must
+The reason is the security requirement stated in Section~\ref{sec:gpv}: a signer must
 never release \emph{two distinct short preimages for the same digest}. Two short
 vectors $s, s'$ with $As = As' = c$ give their difference $s - s'$, a short
 non-zero vector in the lattice $\Lambda^{\perp}_q(A)$ --- which is a solution to
