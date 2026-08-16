@@ -695,6 +695,54 @@ drop-in replacement (Section~\ref{sec:eth-two-front}). Any system whose design
 depends on aggregation should expect its post-quantum migration to be an
 architectural project, not a key-type change.
 
+The word \emph{aggregation} covers three different requirements, and the
+post-quantum options differ for each.
+
+\paragraph{Recovering aggregation with a proof system.}
+The Ethereum route replaces the aggregate with a proof: each validator signs
+with a hash-based scheme, and a zkVM proves that $N$ signatures verified. It
+recovers a constant-size object for any $N$ and any set of messages, at the cost
+of an entire proving pipeline, and it is the only route with a credible path to
+$N$ in the hundreds of thousands.
+
+\paragraph{Threshold signing.}
+Most bridge and committee designs need less than general aggregation: many
+signers, \emph{one} message, accepted once a threshold of them has signed. That
+is the shape a \textbf{threshold signature} has natively --- $t$ of $n$ parties
+run a protocol and jointly emit a single \emph{ordinary} signature under a joint
+public key --- and unlike aggregation it leaves the verifier untouched: the
+chain keeps checking one FIPS~204 signature with a stock verifier, whatever the
+size of the signing set. Two 2026 constructions make this concrete for ML-DSA
+and differ in the dimension that matters for a committee.
+\textbf{Quorus}~\cite{quorus2025} supports any $t$-of-$n$ by evaluating the
+ML-DSA signing algorithm inside a multi-party computation, at roughly
+$100$\,kB of communication per party per rejection-sampling round;
+\textbf{Celi et al.}~\cite{thresholdmldsa2026} give a lighter protocol limited to
+about six parties at up to 1\,MB per party. Both produce signatures and keys
+byte-identical to single-signer ML-DSA. For a signing set in the tens only the
+first scales.
+
+The price is a change in \emph{signing shape} rather than in key type. Today
+each committee member signs independently and offline and a bitmap records who
+did; threshold signing replaces that with a live multi-round protocol among the
+selected quorum, so a liveness-tolerant design acquires a signing-time
+availability requirement. And none of it is standardized: NIST's first call for
+multi-party threshold schemes, IR~8214C~\cite{nistthreshold}, was finalized only
+in January 2026. For a peg or bridge trust root, depending on a construction
+with no FIPS number is a governance decision as much as a technical one, which
+argues for migrating any key that needs no aggregation first.
+
+\paragraph{Post-hoc aggregation.}
+The option that sounds best --- compress $N$ existing signatures into one small
+object without changing how anyone signs --- works worst. The first aggregate
+signature for Fiat--Shamir-with-aborts schemes~\cite{boudgousttakahashi2023}
+reports ``quite small compression rates'' in its authors' words, and aggregates
+\emph{distinct} messages where a committee has one. The strong result in this
+line, aggregating with LaBRADOR (Section~\ref{sec:pq-proof-systems}), applies
+to Falcon and not to ML-DSA. If aggregability is a first-order requirement, it
+is a consideration in \emph{which} post-quantum scheme to adopt, not a problem
+to solve afterwards.
+
 \subsection{The commitments inside the proof system}
 \label{sec:pq-proof-systems}
 The question of the preceding subsections --- what does each layer carry ---
@@ -720,7 +768,7 @@ rather than in how fast they run.
         hashing. There is no hash anywhere in the opening.
 \end{itemize}
 
-\subsubsection{The commitment, in full}
+\subsubsection{The Ajtai commitment}
 The whole scheme is one line of linear algebra. Fix the ring
 $R_q=\mathbb{Z}_q[X]/(X^d+1)$ of Chapter~\ref{ch:mlwe} --- Greyhound's
 implementation takes $d=64$ --- and a norm bound $\beta$.
@@ -787,10 +835,19 @@ commitment key are the same uniform $\mathbf{A}$, so nothing has to be
 simulated), and its output is converted into a solution by a single
 subtraction. There
 is no rewinding, no random oracle, and no loss:
-$\mathrm{Adv}^{\mathrm{bind}} \le \mathrm{Adv}^{\text{M-SIS}}_{2\beta}$. This is
-the sense in which the assumption is \emph{stronger} than a STARK's: falsifiable,
-concrete and tightly used, but an algebraic assumption where the hash-based
-family has none.
+$\mathrm{Adv}^{\mathrm{bind}} \le \mathrm{Adv}^{\text{M-SIS}}_{2\beta}$.
+
+The comparison with a Merkle commitment cuts both ways. Binding here rests on
+the hardness of one specific algebraic problem, Module-SIS in a fixed ring at a
+fixed bound, where a Merkle commitment asks only that some hash function be
+collision-resistant; in that sense the lattice assumption is the stronger one,
+and structure is where the failures earlier in this section came from. Against
+that, M-SIS is a falsifiable, parameterized assumption used through a tight
+reduction, whereas a STARK's soundness argument goes through the random-oracle
+model, an idealization of the hash rather than an assumption about it, together
+with the proximity-gap conjectures of its proof of proximity. The lattice
+commitment assumes more, and states precisely what it assumes; the hash-based
+one assumes less, through a model that cannot be falsified.
 
 \paragraph{Hiding.}
 As drawn, Figure~\ref{fig:ajtai-commit} is a \emph{deterministic} function of
@@ -863,6 +920,133 @@ verifier that a short opening exists without sending it. LaBRADOR's answer is
 recursion --- reduce a system of quadratic relations
 over $R_q$ to a smaller system of the same shape, commit, and repeat, so the
 transcript is a sequence of commitments rather than a witness.
+
+\subsubsection{The LaBRADOR argument}
+\label{sec:labrador-outline}
+LaBRADOR~\cite{labrador2023} is a proof of knowledge for one fixed shape of
+statement, the \textbf{dot-product constraint system}: the witness is $r$ short
+vectors $\mathbf{s}_1,\dots,\mathbf{s}_r\in R_q^{n}$ with
+$\sum_i\|\mathbf{s}_i\|^2\le\beta^2$, and the constraints are polynomial
+identities that are quadratic in the inner products,
+\[
+  \sum_{i,j} a_{ij}\,\langle \mathbf{s}_i,\mathbf{s}_j\rangle
+  \;+\;\sum_i \langle \boldsymbol{\varphi}_i,\mathbf{s}_i\rangle
+  \;+\; b \;=\; 0 \qquad\text{in } R_q ,
+\]
+one such equation per constraint. R1CS, and the verification equations of
+lattice signatures, translate into this form; that is what makes it a
+general-purpose argument rather than a proof of one relation.
+
+A single round of the protocol turns one such statement into a smaller one of
+the same shape, and the proof is the transcript of repeating that until the
+statement is small enough to answer in the clear.
+
+\begin{enumerate}
+  \item \textbf{Commit.} The prover commits to each $\mathbf{s}_i$ with an
+        Ajtai commitment $\mathbf{t}_i=\mathbf{A}\mathbf{s}_i$
+        (Figure~\ref{fig:ajtai-commit}), then commits again to the vector of
+        all the $\mathbf{t}_i$, split into low-norm digits, so that what is sent
+        is one short \emph{outer} commitment rather than $r$ inner ones. The
+        same is done for the inner products
+        $g_{ij}=\langle\mathbf{s}_i,\mathbf{s}_j\rangle$ that the quadratic
+        constraints will need.
+  \item \textbf{Prove the norm by projection.} The verifier sends random
+        matrices $\Pi_i$ with entries in $\{-1,0,1\}$ and the prover returns
+        the projection $\mathbf{p}=\sum_i\Pi_i\mathbf{s}_i$, a vector of $256$
+        integers regardless of $r$ and $n$. By the Johnson--Lindenstrauss
+        lemma, $\|\mathbf{p}\|$ is, with overwhelming probability, within a
+        constant factor of $\sqrt{\smash[b]{\textstyle\sum_i\|\mathbf{s}_i\|^2}}$,
+        so a short $\mathbf{p}$ certifies the norm bound at a cost independent
+        of the witness size. Verifying that $\mathbf{p}$ really is the
+        projection is itself a linear constraint on the $\mathbf{s}_i$, and is
+        folded into the next step.
+  \item \textbf{Aggregate and amortize.} The verifier sends random weights, and
+        all the constraints are combined into a few. It then sends short
+        polynomial challenges $c_1,\dots,c_r$, and the prover answers with the
+        single vector $\mathbf{z}=\sum_i c_i\mathbf{s}_i$. The verifier checks
+        $\mathbf{A}\mathbf{z}=\sum_i c_i\mathbf{t}_i$, which the homomorphism
+        makes possible without seeing any $\mathbf{s}_i$, and checks the
+        combined constraint against $\mathbf{z}$ and the committed $g_{ij}$,
+        using $\langle\mathbf{z},\mathbf{z}\rangle=\sum_{i,j}c_ic_j\,g_{ij}$.
+  \item \textbf{Recurse.} What the verifier now holds is a claim that
+        $\mathbf{z}$, together with the openings of the outer commitments, is
+        short and satisfies a dot-product constraint system --- the same shape
+        as the input, with the $r$ witness vectors replaced by one (plus the
+        digit vectors of the commitments), and with the norm bound grown by
+        the size of the challenges. Instead of sending $\mathbf{z}$, the prover
+        treats this new statement as the input to another round.
+\end{enumerate}
+
+Figure~\ref{fig:labrador-round} writes one round in the convention of the
+rest of this section.
+
+\begin{figure}[H]
+\begin{protocol}
+\textbf{Public information:} $\mathbf{A}\in R_q^{\kappa\times n}$ and
+$\mathbf{B},\mathbf{B}'$ for the outer commitments; the constraint system
+$\{(a^{(k)}_{ij},\boldsymbol{\varphi}^{(k)}_i,b^{(k)})\}_k$; norm bound
+$\beta$; a challenge set $\mathcal{C}\subset R$ of short polynomials.\\
+\textbf{Private information:} $\mathbf{s}_1,\dots,\mathbf{s}_r\in R^{n}$ with
+$\sum_i\|\mathbf{s}_i\|^2\le\beta^2$, satisfying every constraint
+$\sum_{i,j}a^{(k)}_{ij}\langle\mathbf{s}_i,\mathbf{s}_j\rangle
++\sum_i\langle\boldsymbol{\varphi}^{(k)}_i,\mathbf{s}_i\rangle+b^{(k)}=0$.
+\protorule
+\begin{tabular}{@{}p{0.34\linewidth}@{}p{0.26\linewidth}@{}p{0.40\linewidth}@{}}
+\Prover & & \Verifier \\[0.6em]
+$\mathbf{t}_i:=\mathbf{A}\mathbf{s}_i$ for all $i$; & & \\
+$\mathbf{u}_1:=\mathbf{B}\,G^{-1}(\mathbf{t}_1\|\cdots\|\mathbf{t}_r)$ & & \\[0.3em]
+ & \centering$\msgto{\mathbf{u}_1}$ & \\[0.3em]
+ & \centering$\msgfrom{\Pi_1,\dots,\Pi_r}$ & $\Pi_i\leftarrow\{-1,0,1\}^{256\times nd}$ \\[0.3em]
+$\mathbf{p}:=\sum_i\Pi_i\,\mathbf{s}_i\in\mathbb{Z}^{256}$ & & \\[0.3em]
+ & \centering$\msgto{\mathbf{p}}$ & \\[0.3em]
+ & \centering$\msgfrom{\text{weights}}$ & fold all constraints, and \\
+ & & ``$\mathbf{p}$ is the projection'', into one \\[0.3em]
+$g_{ij}:=\langle\mathbf{s}_i,\mathbf{s}_j\rangle$,\ $h_{ij}$ from the folded linear parts; & & \\
+$\mathbf{u}_2:=\mathbf{B}'\,G^{-1}(g\|h)$ & & \\[0.3em]
+ & \centering$\msgto{\mathbf{u}_2}$ & \\[0.3em]
+ & \centering$\msgfrom{c_1,\dots,c_r}$ & $c_i\leftarrow\mathcal{C}$ \\[0.3em]
+$\mathbf{z}:=\sum_i c_i\,\mathbf{s}_i$ & & \\[0.3em]
+ & \centering$\msgto{\mathbf{z},\ G^{-1}(\mathbf{t}),\ G^{-1}(g\|h)}$ & \\[0.3em]
+ & & Accept iff \\
+ & & \quad 1. $\|\mathbf{p}\|\le\sqrt{128}\,\beta$, and $\mathbf{z}$ and both digit vectors are short \\
+ & & \quad 2. $\mathbf{B}\,G^{-1}(\mathbf{t})=\mathbf{u}_1$,\ $\mathbf{B}'\,G^{-1}(g\|h)=\mathbf{u}_2$ \\
+ & & \quad 3. $\mathbf{A}\mathbf{z}=\sum_i c_i\,\mathbf{t}_i$ \\
+ & & \quad 4. $\langle\mathbf{z},\mathbf{z}\rangle=\sum_{i,j}c_ic_j\,g_{ij}$ \\
+ & & \quad 5. $\bigl\langle\sum_i c_i\boldsymbol{\varphi}_i,\ \mathbf{z}\bigr\rangle=\sum_{i,j}c_ic_j\,h_{ij}$ \\
+ & & \quad 6. the folded constraint is zero on $(g,h)$ \\
+\end{tabular}
+\end{protocol}
+\caption{One round of LaBRADOR, in teaching form. Read as a stand-alone
+protocol, the last message opens everything and the verifier's checks are as
+listed. In the recursive protocol the last message is \emph{not} sent: checks
+1--6 are a statement about the short vectors $\mathbf{z}$, $G^{-1}(\mathbf{t})$
+and $G^{-1}(g\|h)$ that is again a dot-product constraint system, and it becomes
+the input to the next round. Check 1 is the Johnson--Lindenstrauss step: $256$
+integers stand in for the norm of the whole witness. Check 5 is where the
+verifier's linear cost enters, since $\sum_ic_i\boldsymbol{\varphi}_i$ ranges
+over the original public statement.}
+\label{fig:labrador-round}
+\end{figure}
+
+Each round shrinks the witness by roughly the factor $r$ that amortization
+buys, and the total transcript is a handful of commitments and one
+$256$-entry projection per round, plus the final small witness sent in the
+clear. That is where the size comes from: about $58$\,kB for an R1CS instance
+of $2^{20}$ constraints at the 128-bit level, essentially independent of the
+statement size beyond a few rounds. And it is where the verifier's cost comes
+from: to check the combined constraint the verifier must form
+$\sum_i c_i\boldsymbol{\varphi}_i$ over the \emph{original} public statement,
+so its work is linear in the statement even though the proof is not. Greyhound
+(below) is the construction that supplies a sublinear verifier, and it uses
+LaBRADOR only to compress its transcript.
+
+The outline above compresses two papers into a page. A lecture-length treatment
+of the same path --- Ajtai commitments and Lyubashevsky-style proofs, then
+LaBRADOR, then Greyhound, then the LaBRADOR and Greyhound proof-of-concept
+implementations --- with slides, recordings and participants' notes, is the
+lattice course of the ZKP Academy~\cite{zkpacademylattice}, and it is the
+recommended companion to this section for a reader who wants the protocols in
+full rather than in outline.
 
 Extraction from such a proof carries a cost. It does not hand back the witness
 that was committed. What it yields is a
@@ -994,7 +1178,73 @@ instantiation therefore inserts a round: the verifier sends a \emph{short}
 random challenge, the prover answers with a combination weighted by it, and the
 response stays inside the norm budget. That extra round is the difference between
 the picture and Greyhound; the difficulty lies in the norm bounds rather than
-in the algebra.
+in the algebra. Figure~\ref{fig:greyhound-eval} gives the protocol as Greyhound
+runs it. It differs from the sketch in two further respects: what is public,
+and which side of the quadratic form the challenge lands on.
+
+\paragraph{Inner and outer commitments.}
+Figure~\ref{fig:sqrt-pcs} lists the column commitments $\mathbf{t}_j$ as public.
+In Greyhound they are not; only a commitment \emph{to} them is. The reason is
+size. Each $\mathbf{t}_j=\mathbf{A}\mathbf{f}_j$ is a binding Ajtai commitment
+to a short column, but there are $m=O(\sqrt{N})$ of them, so a commitment to
+$f$ consisting of all the $\mathbf{t}_j$ would be $O(\sqrt{N})$ long. Greyhound
+therefore commits twice: the \textbf{inner} commitments
+$\mathbf{t}_j=\mathbf{A}\mathbf{f}_j$, and an \textbf{outer} commitment
+\[
+  \mathbf{u}\;=\;\mathbf{B}\,G^{-1}(\mathbf{t}_1\|\cdots\|\mathbf{t}_m)
+\]
+to the concatenation of all of them. The gadget inverse $G^{-1}$ is not
+optional: the $\mathbf{t}_j$ are uniform modulo $q$, and an Ajtai commitment
+binds only short inputs, so they are first split into low-norm digits and the
+digit vector is what $\mathbf{B}$ commits. The polynomial commitment is
+$\mathbf{u}$, a handful of ring elements whatever $N$ is; the $\mathbf{t}_j$
+are revealed inside the evaluation proof and checked against it. This is the
+same two-level pattern as step 1 of the LaBRADOR outline in
+Section~\ref{sec:labrador-outline}.
+
+\paragraph{Where the challenge lands.}
+The response that must be short is a combination of \emph{columns} weighted
+by a short challenge, $\mathbf{z}=F\mathbf{c}$; the partial evaluations
+$w_j=\langle\mathbf{a}(x),\mathbf{f}_j\rangle$ are sent in the clear and need
+not be short at all, because $\mathbf{z}$ pins them.
+
+\begin{figure}[H]
+\begin{protocol}
+\textbf{Public information:} $\mathbf{A}\in R_q^{\kappa\times n}$,
+$\mathbf{B}$, the outer commitment $\mathbf{u}$, the evaluation point $x$, the
+claimed value $y$, a norm bound $B_z$, a challenge set $\mathcal{C}$.\\
+\textbf{Private information:} short columns
+$F=[\mathbf{f}_1|\cdots|\mathbf{f}_m]\in R^{n\times m}$ with
+$\mathbf{a}(x)^{\!\top}F\,\mathbf{b}(x)=y$, and
+$\mathbf{u}=\mathbf{B}\,G^{-1}(\mathbf{t})$ for
+$\mathbf{t}_j=\mathbf{A}\mathbf{f}_j$.
+\protorule
+\begin{tabular}{@{}p{0.34\linewidth}@{}p{0.26\linewidth}@{}p{0.40\linewidth}@{}}
+\Prover & & \Verifier \\[0.6em]
+$\mathbf{d}:=G^{-1}(\mathbf{t}_1\|\cdots\|\mathbf{t}_m)$; & & \\
+$w_j:=\langle\mathbf{a}(x),\mathbf{f}_j\rangle$ for $j<m$ & & \\[0.3em]
+ & \centering$\msgto{\mathbf{d},\ \mathbf{w}}$ & \\[0.3em]
+ & \centering$\msgfrom{\mathbf{c}}$ & $\mathbf{c}=(c_1,\dots,c_m)\leftarrow\mathcal{C}^m$ \\[0.3em]
+$\mathbf{z}:=F\mathbf{c}=\sum_j c_j\,\mathbf{f}_j$ & & \\[0.3em]
+ & \centering$\msgto{\mathbf{z}}$ & \\[0.3em]
+ & & Accept iff \\
+ & & \quad 1. $\mathbf{d}$ is a valid digit vector and $\|\mathbf{z}\|\le B_z$ \\
+ & & \quad 2. $\mathbf{B}\mathbf{d}=\mathbf{u}$; set $\mathbf{t}:=G\mathbf{d}$ \\
+ & & \quad 3. $\langle\mathbf{w},\mathbf{b}(x)\rangle=y$ \\
+ & & \quad 4. $\mathbf{A}\mathbf{z}=\sum_j c_j\,\mathbf{t}_j$ \\
+ & & \quad 5. $\langle\mathbf{a}(x),\mathbf{z}\rangle=\sum_j c_j\,w_j$ \\
+\end{tabular}
+\end{protocol}
+\caption{Greyhound's evaluation protocol, in teaching form. Check 2 opens the
+outer commitment and recovers the inner ones; check 4 is the homomorphism of
+Figure~\ref{fig:sqrt-pcs} applied to a \emph{short} challenge combination, so
+the norm bound in check 1 can be met; check 5 ties the claimed partial
+evaluations to that same combination, and check 3 finishes the evaluation from
+them. Prover message and verifier work are both $O(m+n)=O(\sqrt{N})$. The
+composition with LaBRADOR proves that a transcript satisfying checks 1--5
+exists, instead of sending $\mathbf{d}$, $\mathbf{w}$ and $\mathbf{z}$.}
+\label{fig:greyhound-eval}
+\end{figure}
 
 \paragraph{The role of the norm check.}
 Without the norm check there is no commitment at all. The map $\mathbf{s}\mapsto\mathbf{A}\mathbf{s}$ from $R_q^{n}$ to
@@ -1025,9 +1275,13 @@ different cost centres; replacing one with the other changes the system's cost
 profile, not a parameter.
 
 \paragraph{Composition.}
-Greyhound's contribution is a three-round protocol of the shape above with the
-norm control that lattices require, and then a \emph{composition}: run LaBRADOR
-over the resulting statement to compress the $O(\sqrt{N})$ transcript to
+Greyhound's contribution is the three-round protocol of
+Figure~\ref{fig:greyhound-eval} with the norm control that lattices require,
+and then a \emph{composition}: checks 1--5 of that figure are linear and
+quadratic relations in the short vectors $\mathbf{d}$ and $\mathbf{z}$, which is
+a dot-product constraint system in the sense of
+Section~\ref{sec:labrador-outline}, so LaBRADOR can prove that a satisfying
+transcript exists and compress the $O(\sqrt{N})$ transcript to
 polylogarithmic size~\cite{greyhound2024}.
 
 The composition affects only the proof size. The sublinear verifier is already
