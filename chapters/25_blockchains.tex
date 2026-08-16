@@ -978,7 +978,7 @@ statement is small enough to answer in the clear.
   \item \textbf{Commit.} The prover commits to each $\mathbf{s}_i$ with an
         Ajtai commitment $\mathbf{t}_i=\mathbf{A}\mathbf{s}_i$
         (Figure~\ref{fig:ajtai-commit}), then commits again to the vector of
-        all the $\mathbf{t}_i$, split into low-norm digits, so that what is sent
+        all the $\mathbf{t}_i$, split into short digits, so that what is sent
         is one short \emph{outer} commitment rather than $r$ inner ones. The
         same is done for the inner products
         $g_{ij}=\langle\mathbf{s}_i,\mathbf{s}_j\rangle$ that the quadratic
@@ -1231,7 +1231,7 @@ $\mathbf{t}_j=\mathbf{A}\mathbf{f}_j$, and an \textbf{outer} commitment
 \]
 to the concatenation of all of them. The gadget inverse $G^{-1}$ is not
 optional: the $\mathbf{t}_j$ are uniform modulo $q$, and an Ajtai commitment
-binds only short inputs, so they are first split into low-norm digits and the
+binds only short inputs, so they are first split into short digits and the
 digit vector is what $\mathbf{B}$ commits. The polynomial commitment is
 $\mathbf{u}$, a handful of ring elements whatever $N$ is; the $\mathbf{t}_j$
 are revealed inside the evaluation proof and checked against it. This is the
@@ -1281,6 +1281,102 @@ composition with LaBRADOR proves that a transcript satisfying checks 1--5
 exists, instead of sending $\mathbf{d}$, $\mathbf{w}$ and $\mathbf{z}$.}
 \label{fig:greyhound-eval}
 \end{figure}
+
+\subsubsection{SageMath experiment: the commitment and the evaluation protocol}
+The two figures are short enough to run. The first listing is
+Figure~\ref{fig:ajtai-commit} in a toy ring, $R_q=\mathbb{Z}_{12289}[x]/(x^{16}+1)$
+with $\kappa=2$ and $n=8$: a uniformly random $\mathbf{A}$, a ternary witness,
+the commitment $\mathbf{t}=\mathbf{A}\mathbf{s}$, and the verifier's two checks.
+The parameters are far too small for security; they are chosen so that every
+object can be printed.
+
+\begin{lstlisting}[language=Python]
+# The Ajtai commitment in a toy ring: t = A s with s short.
+q, d, kappa, n = 12289, 16, 2, 8
+R.<x> = PolynomialRing(GF(q)); Rq.<X> = R.quotient(x^d + 1)
+
+def centered(v):        # coefficients of a ring element in (-q/2, q/2]
+    return [c - q if c > q // 2 else c for c in map(Integer, v.lift().list() + [0]*d)][:d]
+def norm2(vec):         # squared Euclidean norm of a vector of ring elements
+    return sum(c^2 for v in vec for c in centered(v))
+def short(k, bound=1):  # k ring elements with coefficients in [-bound, bound]
+    return vector(Rq, [Rq([randint(-bound, bound) for _ in range(d)]) for _ in range(k)])
+
+A = random_matrix(Rq, kappa, n)      # public randomness, no trapdoor
+s = short(n)                          # the witness
+t = A * s                             # the commitment: kappa ring elements
+beta2 = n * d                         # every coefficient at most 1 in size
+
+def open_ok(t, s):                    # the verifier of Figure 28.2
+    return A * s == t and norm2(s) <= beta2
+
+print("opens:", open_ok(t, s))
+s_long = short(n, bound=q // 4)       # long vectors fail the norm check, whatever A s is
+print("long vector passes the norm check:", norm2(s_long) <= beta2)
+\end{lstlisting}
+
+The second listing continues from the first and runs
+Figure~\ref{fig:greyhound-eval}: an $n\times m$ matrix $F$ of short ring
+elements, the $m$ inner commitments, the gadget decomposition into base-16
+digits and the outer commitment $\mathbf{u}$, then the three rounds and the
+five checks. \texttt{digits} is $G^{-1}$ and \texttt{undigits} is $G$; the
+verifier never sees $F$ or the $\mathbf{t}_j$ except through
+$\mathbf{u}$ and the digits it is handed. Tampering with one partial
+evaluation makes check~5 fail, which is the consistency that $\mathbf{z}$
+enforces.
+
+\begin{lstlisting}[language=Python]
+# The square-root PCS: inner and outer commitments, then the
+# three-round evaluation protocol.  Continues from the Ajtai listing.
+m = 4                                  # F is n x m: N = n*m short ring elements
+ell, base = 4, 16                      # 16^4 > q: four digits per coefficient
+
+def digits(vec):                       # G^{-1}: split each coefficient in base 16
+    out = []
+    for v in vec:
+        cs = [Integer(c) for c in v.lift().list() + [0]*d][:d]
+        for j in range(ell):
+            out.append(Rq([(c >> (4*j)) & 15 for c in cs]))
+    return vector(Rq, out)
+def undigits(dv):                      # G: the inverse map
+    return vector(Rq, [sum(dv[i*ell + j] * base^j for j in range(ell))
+                       for i in range(len(dv) // ell)])
+
+B = random_matrix(Rq, kappa, kappa * m * ell)   # for the outer commitment
+F = matrix(Rq, n, m, lambda i, j: short(1)[0])  # the committed coefficients
+T = [A * F.column(j) for j in range(m)]         # inner commitments t_j
+tvec = vector(Rq, sum((list(t) for t in T), []))
+u = B * digits(tvec)                             # outer commitment: the PCS commitment
+
+xpt = Rq.random_element()                        # evaluation point
+a = vector(Rq, [xpt^i for i in range(n)]); b = vector(Rq, [xpt^(n*j) for j in range(m)])
+y = a * F * b                                    # the claimed value f(x)
+
+# Round 1: prover sends the digits and the partial evaluations.
+dvec = digits(tvec); w = vector(Rq, [a * F.column(j) for j in range(m)])
+# Round 2: verifier sends a short challenge.  Round 3: prover answers with z.
+c = short(m); z = F * c
+
+def verify(dvec, w, c, z):                       # the five checks of the evaluation figure
+    digit_ok = all(0 <= Integer(v) < base for dd in dvec for v in dd.lift().list())
+    tv = undigits(dvec); tj = [tv[i*kappa:(i+1)*kappa] for i in range(m)]
+    return (digit_ok and norm2(z) <= n * d * (m * d)^2   # 1. digits and shortness
+            and B * dvec == u                    # 2. outer commitment opens
+            and w * b == y                       # 3. the evaluation
+            and A * z == sum(c[j] * tj[j] for j in range(m))   # 4. inner homomorphism
+            and a * z == sum(c[j] * w[j] for j in range(m)))   # 5. w is consistent with z
+
+print("honest transcript verifies:", verify(dvec, w, c, z))
+w_bad = vector(Rq, list(w)); w_bad[0] += 1
+print("with a tampered partial evaluation:", verify(dvec, w_bad, c, z))
+\end{lstlisting}
+
+What the experiment does not do is compress: the prover sends $\mathbf{d}$,
+$\mathbf{w}$ and $\mathbf{z}$ in the clear, $O(\sqrt{N})$ ring elements, and
+the verifier does $O(\sqrt{N})$ ring multiplications. Greyhound's remaining
+step is to hand the five checks, as a dot-product constraint system in
+$\mathbf{d}$ and $\mathbf{z}$, to LaBRADOR (Section~\ref{sec:labrador-outline}),
+which is what shrinks the transcript to tens of kilobytes.
 
 \paragraph{The role of the norm check.}
 Without the norm check there is no commitment at all. The map $\mathbf{s}\mapsto\mathbf{A}\mathbf{s}$ from $R_q^{n}$ to
