@@ -933,9 +933,42 @@ identities that are quadratic in the inner products,
   \;+\;\sum_i \langle \boldsymbol{\varphi}_i,\mathbf{s}_i\rangle
   \;+\; b \;=\; 0 \qquad\text{in } R_q ,
 \]
-one such equation per constraint. R1CS, and the verification equations of
-lattice signatures, translate into this form; that is what makes it a
+one such equation per constraint. The public data of a constraint are of
+three kinds. The $a_{ij}\in R_q$ are scalar coefficients on the quadratic
+terms, the inner products of two witness vectors. Each
+$\boldsymbol{\varphi}_i\in R_q^{n}$ is a public vector of the same length as
+$\mathbf{s}_i$, so that $\langle\boldsymbol{\varphi}_i,\mathbf{s}_i\rangle$ is
+the linear term in $\mathbf{s}_i$; the tuple
+$(\boldsymbol{\varphi}_1,\dots,\boldsymbol{\varphi}_r)$ is the linear
+coefficient vector of the constraint. And $b\in R_q$ is the constant. A
+constraint is therefore a quadratic form in the witness with the inner product
+as its only nonlinearity, and a purely linear constraint is the case in which
+every $a_{ij}$ is zero.
+
+Two examples show how a statement is written in this form. The opening of an
+Ajtai commitment, $\mathbf{A}\mathbf{s}=\mathbf{t}$ with
+$\mathbf{A}\in R_q^{\kappa\times n}$, is $\kappa$ linear constraints, the $k$-th
+of them having $r=1$, $\boldsymbol{\varphi}_1$ equal to the $k$-th row of
+$\mathbf{A}$, and $b=-t_k$; the shortness of $\mathbf{s}$ is not a constraint
+but the norm bound $\beta$ carried alongside the system. A claim about an inner
+product, such as $\langle\mathbf{s}_1,\mathbf{s}_2\rangle=v$, is one quadratic
+constraint with $a_{12}=1$, no linear part, and $b=-v$. R1CS, and the
+verification equations of lattice signatures, translate into collections of
+such constraints in the same way; that is what makes LaBRADOR a
 general-purpose argument rather than a proof of one relation.
+
+The split into a quadratic part and a linear part is not cosmetic, because the
+protocol treats the two differently. The quadratic terms are handled by
+committing to the inner products $g_{ij}=\langle\mathbf{s}_i,\mathbf{s}_j\rangle$
+themselves. The linear terms cannot be committed the same way, since after
+amortization the verifier holds a single combination
+$\mathbf{z}=\sum_ic_i\mathbf{s}_i$ and the cross terms
+$\langle\boldsymbol{\varphi}_i,\mathbf{s}_j\rangle$ mix; the prover commits
+the mixed values $h_{ij}$ and the verifier must form the combined coefficient
+vector $\sum_ic_i\boldsymbol{\varphi}_i$ itself. Forming it touches every
+$\boldsymbol{\varphi}_i$, and the $\boldsymbol{\varphi}_i$ together are as
+large as the public statement, which is where the linear verifier of the
+figure below comes from.
 
 A single round of the protocol turns one such statement into a smaller one of
 the same shape, and the proof is the transcript of repeating that until the
@@ -984,7 +1017,10 @@ rest of this section.
 \begin{protocol}
 \textbf{Public information:} $\mathbf{A}\in R_q^{\kappa\times n}$ and
 $\mathbf{B},\mathbf{B}'$ for the outer commitments; the constraint system
-$\{(a^{(k)}_{ij},\boldsymbol{\varphi}^{(k)}_i,b^{(k)})\}_k$; norm bound
+$\{(a^{(k)}_{ij},\boldsymbol{\varphi}^{(k)}_i,b^{(k)})\}_k$, where
+$a^{(k)}_{ij}\in R_q$ weights $\langle\mathbf{s}_i,\mathbf{s}_j\rangle$,
+$\boldsymbol{\varphi}^{(k)}_i\in R_q^{n}$ is the linear coefficient of
+$\mathbf{s}_i$, and $b^{(k)}\in R_q$ is the constant; norm bound
 $\beta$; a challenge set $\mathcal{C}\subset R$ of short polynomials.\\
 \textbf{Private information:} $\mathbf{s}_1,\dots,\mathbf{s}_r\in R^{n}$ with
 $\sum_i\|\mathbf{s}_i\|^2\le\beta^2$, satisfying every constraint
