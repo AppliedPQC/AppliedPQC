@@ -1229,6 +1229,28 @@
   {
    "listings": [
     {
+     "code": "# The Ajtai commitment in a toy ring: t = A s with s short.\nq, d, kappa, n = 12289, 16, 2, 8\nR.<x> = PolynomialRing(GF(q)); Rq.<X> = R.quotient(x^d + 1)\n\ndef centered(v):        # coefficients of a ring element in (-q/2, q/2]\n    return [c - q if c > q // 2 else c for c in map(Integer, v.lift().list() + [0]*d)][:d]\ndef norm2(vec):         # squared Euclidean norm of a vector of ring elements\n    return sum(c^2 for v in vec for c in centered(v))\ndef short(k, bound=1):  # k ring elements with coefficients in [-bound, bound]\n    return vector(Rq, [Rq([randint(-bound, bound) for _ in range(d)]) for _ in range(k)])\n\nA = random_matrix(Rq, kappa, n)      # public randomness, no trapdoor\ns = short(n)                          # the witness\nt = A * s                             # the commitment: kappa ring elements\nbeta2 = n * d                         # every coefficient at most 1 in size\n\ndef open_ok(t, s):                    # the verifier of Figure 28.2\n    return A * s == t and norm2(s) <= beta2\n\nprint(\"opens:\", open_ok(t, s))\ns_long = short(n, bound=q // 4)       # long vectors fail the norm check, whatever A s is\nprint(\"long vector passes the norm check:\", norm2(s_long) <= beta2)",
+     "intro": [
+      "The two figures are short enough to run. The first listing is the figure in the book in a toy ring, R_q=\u2124\u2081\u2082\u2082\u2088\u2089[x]/(x\u00b9\u2076+1) with =2 and n=8: a uniformly random A, a ternary witness, the commitment t=As, and the verifier's two checks. The parameters are far too small for security; they are chosen so that every object can be printed."
+     ],
+     "n": 1,
+     "note": "",
+     "requires": [],
+     "runnable": true,
+     "title": "SageMath experiment: the commitment and the evaluation protocol"
+    },
+    {
+     "code": "# The square-root PCS: inner and outer commitments, then the\n# three-round evaluation protocol.  Continues from the Ajtai listing.\nm = 4                                  # F is n x m: N = n*m short ring elements\nell, base = 4, 16                      # 16^4 > q: four digits per coefficient\n\ndef digits(vec):                       # G^{-1}: split each coefficient in base 16\n    out = []\n    for v in vec:\n        cs = [Integer(c) for c in v.lift().list() + [0]*d][:d]\n        for j in range(ell):\n            out.append(Rq([(c >> (4*j)) & 15 for c in cs]))\n    return vector(Rq, out)\ndef undigits(dv):                      # G: the inverse map\n    return vector(Rq, [sum(dv[i*ell + j] * base^j for j in range(ell))\n                       for i in range(len(dv) // ell)])\n\nB = random_matrix(Rq, kappa, kappa * m * ell)   # for the outer commitment\nF = matrix(Rq, n, m, lambda i, j: short(1)[0])  # the committed coefficients\nT = [A * F.column(j) for j in range(m)]         # inner commitments t_j\ntvec = vector(Rq, sum((list(t) for t in T), []))\nu = B * digits(tvec)                             # outer commitment: the PCS commitment\n\nxpt = Rq.random_element()                        # evaluation point\na = vector(Rq, [xpt^i for i in range(n)]); b = vector(Rq, [xpt^(n*j) for j in range(m)])\ny = a * F * b                                    # the claimed value f(x)\n\n# Round 1: prover sends the digits and the partial evaluations.\ndvec = digits(tvec); w = vector(Rq, [a * F.column(j) for j in range(m)])\n# Round 2: verifier sends a short challenge.  Round 3: prover answers with z.\nc = short(m); z = F * c\n\ndef verify(dvec, w, c, z):                       # the five checks of the evaluation figure\n    digit_ok = all(0 <= Integer(v) < base for dd in dvec for v in dd.lift().list())\n    tv = undigits(dvec); tj = [tv[i*kappa:(i+1)*kappa] for i in range(m)]\n    return (digit_ok and norm2(z) <= n * d * (m * d)^2   # 1. digits and shortness\n            and B * dvec == u                    # 2. outer commitment opens\n            and w * b == y                       # 3. the evaluation\n            and A * z == sum(c[j] * tj[j] for j in range(m))   # 4. inner homomorphism\n            and a * z == sum(c[j] * w[j] for j in range(m)))   # 5. w is consistent with z\n\nprint(\"honest transcript verifies:\", verify(dvec, w, c, z))\nw_bad = vector(Rq, list(w)); w_bad[0] += 1\nprint(\"with a tampered partial evaluation:\", verify(dvec, w_bad, c, z))",
+     "intro": [
+      "The second listing continues from the first and runs the figure in the book: an n\u00d7 m matrix F of short ring elements, the m inner commitments, the gadget decomposition into base-16 digits and the outer commitment u, then the three rounds and the five checks. digits is G^-1 and undigits is G; the verifier never sees F or the t_j except through u and the digits it is handed. Tampering with one partial evaluation makes check 5 fail, which is the consistency that z enforces."
+     ],
+     "n": 2,
+     "note": "",
+     "requires": [],
+     "runnable": true,
+     "title": "SageMath experiment: the commitment and the evaluation protocol"
+    },
+    {
      "code": "# Lower bound on migration time: every weight unit of every block, nothing else.\nBLOCK_WEIGHT   = 4_000_000   # weight units available per Bitcoin block\nBLOCKS_PER_DAY = 144         # one block per ten minutes\n\ndef migration_days(n_outputs, witness_bytes, base_bytes=80, share=1.0):\n    # SegWit discount: witness bytes cost 1 weight unit, the rest cost 4.\n    weight_per_tx = witness_bytes + 4 * base_bytes\n    per_block = BLOCK_WEIGHT // weight_per_tx\n    blocks = -(-n_outputs // per_block)          # ceiling division\n    return blocks / (BLOCKS_PER_DAY * share)\n\nSCHEMES = [(\"ed25519 (baseline)\",  64 + 32),      # signature + public key\n           (\"FN-DSA-512\",         666 +  897),\n           (\"FN-DSA-1024\",       1280 + 1793),\n           (\"ML-DSA-65\",         3309 + 1952),\n           (\"SLH-DSA-128s\",      7856 + 32)]\n\nfor label, n in [(\"every UTXO (~190M)\", 190_000_000),\n                 (\"exposed third (~63M)\", 63_000_000)]:\n    print(label)\n    for name, size in SCHEMES:\n        print(f\"  {name:20s} {migration_days(n, size):8.0f} days exclusive\"\n              f\"   {migration_days(n, size, share=0.10):8.0f} days at 10%\")",
      "intro": [
       "Here is the constraint that the roadmap debates tend to skip. Migrating a coin is not a database update; it is a transaction, and transactions compete for a fixed and quite small amount of blockspace. So there is a floor on how fast any migration can possibly proceed, and it depends only on arithmetic \u2014 the number of outputs to move, the size of a post-quantum spend, and the throughput of the chain.",
@@ -1240,7 +1262,7 @@
       "*Exercise: compute the bound",
       "The sensitivity of the formula to w is best seen by evaluating it. Using the tools of the \u201cSageMath Basics for Post-Quantum Cryptography\u201d chapter:"
      ],
-     "n": 1,
+     "n": 3,
      "note": "",
      "requires": [],
      "runnable": true,
