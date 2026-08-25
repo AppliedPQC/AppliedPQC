@@ -2,7 +2,7 @@
 \label{ch:applications}
 
 \section{Why this chapter matters}
-The previous parts built and analysed the algorithms. This chapter is about the harder half of the problem: getting them into real systems -- web protocols, digital certificates, and even smart contracts -- correctly and in time. The forcing function is \emph{harvest now, decrypt later} (Chapter~\ref{ch:quantum}): an adversary can record encrypted traffic today and decrypt it once a quantum computer exists, so any long-lived secret is already exposed. Migration must therefore begin before the threat arrives, not after, and migration is an engineering project at least as much as a mathematical one.
+The previous parts built and analysed the algorithms. This chapter is about the harder half of the problem: getting them into web protocols, digital certificates, and infrastructure correctly and in time. The forcing function is \emph{harvest now, decrypt later} (Chapter~\ref{ch:quantum}): an adversary can record encrypted traffic today and decrypt it once a quantum computer exists, so any long-lived secret is already exposed. Migration must therefore begin before the threat arrives, not after, and migration is an engineering project at least as much as a mathematical one.
 
 \section{Learning goals}
 After reading this chapter, you should be able to:
@@ -10,8 +10,8 @@ After reading this chapter, you should be able to:
 \begin{itemize}
   \item explain why real deployments use \emph{hybrid} classical-plus-postquantum cryptography, what crypto-agility means, and when hybrid is the wrong choice;
   \item describe how TLS 1.3 carries a hybrid key exchange and post-quantum certificates, and what the size costs are;
+  \item evaluate how those sizes interact with packet loss, QUIC amplification limits, deployment tooling, and PKI structure;
   \item say what has already shipped, and why key exchange migrated years ahead of signatures;
-  \item explain why verifying post-quantum signatures on-chain is expensive and how projects reduce that cost;
   \item weigh the size and performance trade-offs that drive scheme choice in practice.
 \end{itemize}
 
@@ -129,9 +129,9 @@ ML-KEM-768}, justified by that scheme's own proven properties. The transferable
 lesson is the one the definition above states abstractly: a combiner may be
 shortened only with a proof about the particular schemes, never by inspection.
 
-\begin{remark}[Crypto-agility]
-Hybrids only work if systems can \emph{negotiate} which algorithms they use rather than hardcoding one. \emph{Crypto-agility} -- designing protocols, certificate formats, and code so the algorithm can be swapped without re-architecting -- is the quiet prerequisite for the whole migration. The schemes will keep evolving; the plumbing must not assume any single one.
-\end{remark}
+Hybrid deployment also presupposes crypto-agility. The lifecycle requirements
+beyond algorithm negotiation are developed in
+Section~\ref{sec:crypto-agility}.
 
 \subsection{Where hybrid does not fit}
 \label{sec:hybrid-limits}
@@ -161,6 +161,51 @@ The generalizable rule is that hybrid is cheap where the redundant work is
 \emph{persistent, consensus-fixed, and user-visible}. Before adopting hybrid by
 reflex, check which of those two descriptions the system fits.
 
+\subsection{Crypto-agility as lifecycle engineering}
+\label{sec:crypto-agility}
+
+Crypto-agility is more than negotiating an identifier. Standards evolve, new
+cryptanalysis changes confidence, implementations require patches, and long-lived
+devices or roots may outlast an algorithm choice. Industry guidance therefore
+describes agility as the ability to discover cryptographic assets and replace or
+upgrade algorithms in a controlled way without breaking the business system
+\cite{keyfactoragility}.
+
+Four capabilities make that definition operational:
+
+\begin{enumerate}
+  \item \textbf{inventory}: locate algorithms, keys, certificates, HSM policies,
+        libraries, protocol endpoints, and data whose confidentiality lifetime is
+        relevant;
+  \item \textbf{abstraction}: prevent applications from depending on one concrete
+        key or object format where policy should make the choice;
+  \item \textbf{policy}: control allowed algorithms, parameter sets, hybrid rules,
+        expiry, and exceptions centrally enough to audit them;
+  \item \textbf{automation}: rotate, test, deploy, observe, and roll back at the
+        scale of the infrastructure.
+\end{enumerate}
+
+Agility is constrained by wire and consensus protocols. An API cannot negotiate
+an identifier the peer does not understand, shrink a fixed certificate field, or
+change a blockchain transaction format. Consequently, the migration unit is the
+algorithm, implementation, protocol, and infrastructure together.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=5mm and 8mm]
+  \node[flownode] (inventory) {asset\\inventory};
+  \node[flownode, right=of inventory] (policy) {algorithm and\\parameter policy};
+  \node[flownode, right=of policy] (deploy) {automated\\deployment};
+  \node[flownode, right=of deploy] (observe) {telemetry and\\cryptanalysis};
+  \draw[flowarrow] (inventory) -- (policy);
+  \draw[flowarrow] (policy) -- (deploy);
+  \draw[flowarrow] (deploy) -- (observe);
+  \draw[flowarrow] (observe.south) |- ++(0,-0.7) -| (inventory.south);
+\end{tikzpicture}
+\caption{Crypto-agility is a feedback loop, not a list of algorithms compiled into
+one release.}
+\end{figure}
+
 \section{Post-quantum TLS 1.3}
 TLS 1.3 secures most web traffic, and it is the first place post-quantum cryptography has reached production. Two independent parts of the handshake must be upgraded: the \emph{key exchange} (confidentiality) and the \emph{authentication} (signatures on certificates).
 
@@ -171,28 +216,28 @@ hybrid key exchange, and the concrete ECDHE--ML-KEM groups and their code points
 are given by a Transport Layer Security working-group
 draft~\cite{tlsecdhemlkem} --- \texttt{X25519MLKEM768} (code point $4588$,
 \texttt{0x11EC}), \texttt{SecP256r1MLKEM768}, and \texttt{SecP384r1MLKEM1024}.
-Enablement and release status remain implementation-dependent, but the wire
-format no longer is.
+The current revision specifies their wire formats precisely, but it remains an
+active Internet-Draft and must still be treated as work in progress.
 
 TLS takes the simpler route flagged in Section~\ref{sec:kem-combiner}: the two
-shared secrets are \emph{concatenated} and handed to the existing TLS 1.3 key
-schedule, whose HKDF~\cite{rfc5869} extract step already hashes the full
-handshake transcript --- and the transcript contains both key shares. The
-ciphertext binding that Algorithm~\ref{alg:hybrid-kem} performs itself is thus
-supplied by the protocol. RFC~9954 does require every component to have a
-\emph{fixed-length} shared secret, which is what stops the concatenation from
-being ambiguous.
+shared secrets are \emph{concatenated} and inserted in place of the ordinary
+(EC)DHE input to the existing TLS~1.3 key schedule. RFC~9954 requires every
+component to have a \emph{fixed-length} shared secret, which makes the
+concatenation unambiguous; under that condition its analysis identifies the
+construction with a dual-PRF combiner \cite{rfc9954}. HKDF-Extract~\cite{rfc5869}
+forms the handshake secret from the concatenated input. Subsequent
+\texttt{Derive-Secret} operations bind the handshake transcript, including the
+negotiated key shares; HKDF-Extract itself does not hash that transcript.
 
-\begin{remark}[Why ML-KEM's secret goes first, and why that flips]
+\begin{remark}[Why the shared-secret concatenation order differs]
 In \texttt{X25519MLKEM768} the concatenation is $ss_{\text{ML-KEM}} \|
 ss_{\text{X25519}}$, ML-KEM first --- and the reason is regulatory rather than
 cryptographic. NIST SP~800-56C approves HKDF with two shared secrets on the
 condition that the \emph{first} comes from a FIPS-approved key-establishment
 scheme. X25519 is not one, so ML-KEM must lead. In the two \texttt{SecP} groups
 the ECDHE share \emph{is} approved, so there the order reverses and ECDHE leads.
-The practical consequence: which of the two implementations needs FIPS
-certification depends on the negotiated group. The ordering is a compliance
-artifact, not a security judgement.
+The order satisfies the stated key-derivation compliance constraint; it is not a
+ranking of the components' security.
 \end{remark}
 
 \begin{figure}[H]
@@ -200,14 +245,20 @@ artifact, not a security judgement.
 \begin{tikzpicture}[font=\scriptsize]
   \node[seqparty] at (1.4,3.4) {Client};
   \node[seqparty] at (8.6,3.4) {Server};
-  \draw[seqlife] (1.4,3.1) -- (1.4,-0.1);
-  \draw[seqlife] (8.6,3.1) -- (8.6,-0.1);
-  \draw[seqmsg] (1.4,2.55) -- node[above]{X25519 share $+$ ML-KEM key (encapsulation key)} (8.6,2.55);
+  \draw[seqlife] (1.4,3.1) -- (1.4,-0.8);
+  \draw[seqlife] (8.6,3.1) -- (8.6,-0.8);
+  \draw[seqmsg] (1.4,2.55) -- node[above]{ML-KEM key (encapsulation key) $+$ X25519 share} (8.6,2.55);
   \node[seqnote, left] at (8.45,2.0) {Encaps $\to (ss_{\text{ML-KEM}}, ct)$};
-  \draw[seqmsg] (8.6,1.35) -- node[above]{X25519 share $+$ ML-KEM ciphertext $+$ certificate} (1.4,1.35);
-  \node[seqresult] at (5,0.35) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
+  \draw[seqmsg] (8.6,1.35) -- node[above]{ServerHello: ML-KEM ciphertext $+$ X25519 share} (1.4,1.35);
+  \draw[seqmsg] (8.6,0.55) -- node[above]{encrypted Certificate and CertificateVerify} (1.4,0.55);
+  \node[seqresult] at (5,-0.4) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
 \end{tikzpicture}
-\caption{Hybrid key exchange in TLS 1.3, as specified by RFC~9954~\cite{rfc9954}. Both an elliptic-curve share and an ML-KEM contribution travel in the handshake, and the TLS key schedule binds both secrets together with the handshake transcript. The order shown is that of \texttt{X25519MLKEM768}; it reverses in the \texttt{SecP} groups, for the reason given above. Post-quantum certificate authentication is a separate deployment track.}
+\caption{Hybrid key exchange in TLS 1.3, as specified by RFC~9954~\cite{rfc9954}.
+Both an elliptic-curve share and an ML-KEM contribution travel in the handshake.
+The wire order shown is specified for \texttt{X25519MLKEM768}; unlike the
+shared-secret order, the draft attributes this reversed share order to historical
+reasons. Certificate authentication follows \texttt{ServerHello} and remains a
+separate migration track.}
 \label{fig:tls-hybrid}
 \end{figure}
 
@@ -278,59 +329,107 @@ signature case.
 
 Implementation and deployment status changes rapidly. Before making a production decision, consult the current IETF document and the release notes of the selected browser, TLS library, or service for its supported groups, defaults, and authentication behaviour.
 
-\section{Verifying post-quantum signatures on-chain}
-\label{sec:onchain}
-A very different deployment target is the blockchain, where a smart contract may need to \emph{verify} a post-quantum signature -- for a quantum-resistant wallet, or a cross-chain bridge. Here the constraint is not bandwidth but \emph{gas}: every operation the Ethereum Virtual Machine (EVM) executes costs money, and a lattice verifier does a great deal of modular arithmetic.
+\section{Network and infrastructure effects}
 
-Direct verification of a post-quantum signature can be expensive in an EVM-like environment because it requires substantial hashing and modular arithmetic. The cost depends on the scheme, parameter set, contract implementation, chain, hard-fork gas schedule, and available precompiles. Claims about a dominant operation or a gas figure require a reproducible benchmark with those details.
+\subsection{TLS performance and network amplification}
 
-When even that is too expensive, an alternative is to avoid running the verifier on-chain at all.
+End-to-end TLS measurements show why ``PQC is slower'' is too crude. On a clean,
+high-bandwidth path, several KEMs have competitive computation. Performance can
+degrade when larger objects cross records, packets, initial congestion windows, or
+loss-recovery boundaries \cite{pqtlsperformance2023,pqtlspqcrypto2020}.
 
-\begin{itemize}
-  \item \textbf{Direct verification}: run the full verifier in the contract. It is conceptually simple and minimizes added trust assumptions, but may be expensive.
-  \item \textbf{ZK proof of verification}: prove off-chain that a signature verifies, then check a succinct proof on-chain. This moves work to the prover and introduces proof-system assumptions and costs.
-  \item \textbf{Optimistic or fraud-proof designs}: accept a claim subject to a challenge procedure. Their cost and trust trade-offs depend on the exact challenge game and security model.
-\end{itemize}
+If an exchange occupies $N$ independently lost packets with loss probability $p$,
+the probability that at least one is lost is
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=5mm and 10mm, every node/.style={font=\scriptsize}]
-  \node[flownode] (direct) {direct on-chain verify\\[-2pt]\scriptsize highest gas, simplest};
-  \node[flownode, right=of direct] (zk) {ZK proof of verify\\[-2pt]\scriptsize cheap check, costly prove};
-  \node[keynode, right=of zk] (nay) {optimistic / fraud proof\\[-2pt]\scriptsize needs challenge design};
-  \draw[flowarrow] (direct) -- (zk);
-  \draw[flowarrow] (zk) -- (nay);
-\end{tikzpicture}
-\caption{Three broad designs for on-chain post-quantum signature verification. They trade direct execution cost against prover work, challenge mechanisms, and security assumptions; there is no universal cost ordering without a specified benchmark and protocol.}
-\label{fig:onchain-verify}
-\end{figure}
+\[
+  1-(1-p)^N.
+\]
 
-\section{Sizes, performance, and implementation reality}
-Choosing a scheme in practice is mostly a negotiation among sizes, speed, and assumption strength.
+For the illustrative $N=16$, $p=0.05$ case used in early PQTLS evaluation, the
+result is about $56\%$. This is not a constant of PQTLS; it shows how extra bytes
+can move a connection into a qualitatively different loss regime.
 
-\begin{table}[H]
-\centering
-\begin{tabular}{llrr}
-\toprule
-Scheme & Role & Public key & Ciphertext / signature \\
-\midrule
-ML-KEM-768 (FIPS 203) & KEM & 1184 & 1088 \\
-ML-DSA-65 (FIPS 204)  & signature & 1952 & 3309 \\
-FN-DSA / Falcon-512 (FIPS 206 in development) & signature & 897 & $\approx 666$ \\
-SLH-DSA-128s (FIPS 205) & signature & 32 & $\approx 7856$ \\
-\bottomrule
-\end{tabular}
-\caption{Approximate sizes (in bytes) of published standards and the draft-dependent FN-DSA candidate. There is no universally best choice: SLH-DSA minimizes assumptions but has large signatures, while ML-DSA is a general-purpose published standard.}
-\label{tab:scheme-sizes}
-\end{table}
+Certificate authentication adds a second multiplier because signatures appear in
+certificate chains and in \texttt{CertificateVerify}. KEMTLS removes the server's
+online handshake signature by authenticating with a KEM while retaining the CA's
+offline certificate signature \cite{kemtls2020}. It demonstrates that protocol
+restructuring can outperform repeated attempts to optimize one signature object;
+it is an alternative design, not the deployed default of TLS~1.3.
 
-Two constraints cut across all of these. First, operations that handle secret keys,
+A reproducible PQTLS experiment should pin library and draft versions, compiler and
+build flags, CPU or accelerator configuration, and certificate-chain contents. It
+should control RTT, bandwidth, loss, and MTU; retain packet captures and TLS message
+sizes; and record the negotiated group and signature algorithm for every run.
+Otherwise a benchmark may silently measure a classical fallback or an
+unrepresentative clean path.
+
+\subsection{QUIC: when bytes alter a transport state machine}
+
+QUIC integrates TLS~1.3 with packetization, encryption levels, loss recovery, and
+address validation. Before validating a client's address, a server is limited to
+roughly three times the bytes it has received. Larger client Initial packets can
+increase the server's budget, but larger certificates and signatures can consume it
+quickly. The resulting behaviour depends on the number and timing of QUIC packets,
+not merely on the sum of TLS bytes \cite{rfc9000}.
+
+Measurements across QUIC implementations show that post-quantum objects change
+packet counts and handshake behaviour and can expose assumptions in buffering and
+recovery paths \cite{quantumquic2024}. Cloud-network experiments provide further
+evidence that large post-quantum signatures increase the number of handshake packets
+\cite{pqquiccloud2023}. This must be distinguished from IP fragmentation: a larger
+handshake creates more QUIC packets without necessarily fragmenting an IP packet.
+
+A useful QUIC evaluation records ClientHello and server-flight bytes at every
+encryption level; Initial, Handshake, and 1-RTT packet counts; anti-amplification
+blocking; retransmissions and PTOs; completion time and CPU cost; and results under
+several RTT, bandwidth, MTU, and loss regimes.
+
+\subsection{Industrial delivery chains and PKI}
+
+A standard becomes deployable only after libraries, protocol negotiation, build
+configuration, conformance tests, products, and both endpoints line up. Library
+support for ML-KEM or ML-DSA does not prove that a production connection negotiated
+it. OpenSSL, BoringSSL/Chrome, Cloudflare, and wolfSSL illustrate different links
+in this chain \cite{opensslpq2026,chromekyber2024,cloudflarepqmigration2026,wolfsslpq}.
+
+Section~\ref{sec:pq-adoption} explains why key establishment moved first. The
+remaining signature migration must coordinate keys, certificates, CAs, HSMs,
+relying-party software, revocation, and audit policy; library support for one
+primitive does not close that delivery-chain gap.
+
+Migration is also an opportunity to remove inherited redundancy. RPKI inherited a
+large part of the X.509 object model; adding larger post-quantum signatures without
+redesign can compound certificate and encoding overhead. iRPKI proposes removing
+unnecessary end-entity certificate structure, retaining the authorization and CA
+signature actually required, and using a more compact encoding \cite{irpki2026}.
+The broader rule is to eliminate architectural redundancy before paying to protect
+it with larger objects.
+
+\section{Implementation optimization across platforms}
+
+Primitive timings alone do not determine whether an implementation is deployable.
+On a constrained device, code size, peak stack and heap use, radio bytes, and energy
+per operation matter together; on a slow link, transmitting a larger certificate
+can cost more energy than the cryptographic arithmetic itself
+\cite{pqciotsurvey2024}. Embedded TLS measurements likewise show that post-quantum
+key establishment can be practical while certificate authentication remains the
+harder step \cite{pqtlsembedded2020}. A deployment should therefore test KEM,
+certificate, and online-signing capability separately instead of assigning one
+undifferentiated ``PQC-ready'' label.
+
+Typical constrained-device techniques include in-place polynomial transforms,
+buffer reuse between phases, and regenerating public matrices from seeds. Hardware
+accelerators instead trade look-up tables, memory ports, DSP blocks, power, and
+pipeline depth; server and GPU designs add batching, queueing, data-transfer, and
+tail-latency constraints. An optimization is meaningful only when its benefit
+survives serialization, transmission, and the workload in which the primitive is
+actually used. Section~\ref{sec:fndsa-acceleration} gives a concrete FN-DSA example.
+
+Operations that handle secret keys,
 ephemeral secrets, or secret-dependent sampling -- especially key generation, signing,
 and decapsulation -- require side-channel review against the applicable threat model
 (Chapter~\ref{ch:sidechannel}). Public-input verification has different confidentiality
-requirements, though it still needs robustness and denial-of-service review. Second,
-the sizes in Table~\ref{tab:scheme-sizes} are not academic -- they determine whether a
-scheme fits in a TLS handshake, a certificate chain, or a smart-contract call.
+requirements, though it still needs robustness and denial-of-service review.
 
 \section{Pitfalls}
 
@@ -353,7 +452,7 @@ The mathematics of the previous parts defeats Shor's algorithm, but that is wher
   \item \textbf{hybrid} classical-plus-postquantum deployment, with \textbf{crypto-agility}, is the mainstream migration strategy --- where the redundant work is ephemeral, negotiated, and invisible, and not where it is permanent, consensus-fixed, and user-visible;
   \item \textbf{TLS 1.3} hybrid key exchange is under standardization and deployment; protocol and implementation versions must be checked at the time of use;
   \item post-quantum \textbf{key exchange has already shipped} at scale, while \textbf{signature} migration has barely started --- because key exchange is ephemeral and two-party, and signatures are long-lived and multi-party;
-  \item verifying signatures \textbf{on-chain} has scheme- and environment-dependent costs, with direct, proof-based, and optimistic designs offering different trade-offs;
+  \item end-to-end performance depends on packetization, loss recovery, transport state, certificate structure, and the complete delivery chain, not primitive timings alone;
   \item scheme choice is a trade-off among size, speed, and assumption strength, with side-channel controls scoped to the secrets and threat model of each operation.
 \end{itemize}
 

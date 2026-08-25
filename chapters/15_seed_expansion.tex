@@ -462,7 +462,22 @@ secret key, so an attacker able to find failing ciphertexts learns something
 about $\mathbf{s}$, and the FO security bound degrades as the failure rate
 climbs. That is why the rate is driven far below anything a user would ever
 notice, and why parameter selection treats it as a security quantity rather than
-an engineering tolerance.
+an engineering tolerance. Attacks on earlier LWE-based designs such as LAC show
+how attacker-shaped ciphertexts and observable failure events can turn that
+correlation into a practical oracle \cite{laccca2019}; malformed inputs, timing,
+and retry behaviour must not reveal which internal check failed.
+
+\subsection{Compression beyond ML-KEM}
+
+ML-KEM already compresses polynomial coefficients by quantization. More aggressive
+research proposals treat a ciphertext as a structured communication signal and use
+lattice coding or packing, including in multi-recipient settings
+\cite{latticecodedkyber2025}. This is not ordinary lossless compression: the
+decoder, noise distribution, failure probability, decapsulation cost, and
+chosen-ciphertext proof all change together. A size claim is therefore incomplete
+unless it reports transmitted bytes, decoder work and memory, the failure
+probability under the actual noise model, and any additional assumption introduced
+by packing recipients together.
 
 \section{The random oracle model, and its quantum version}
 \label{sec:qrom}

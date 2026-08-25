@@ -114,6 +114,14 @@ Two Bitcoin Improvement Proposals anchor the response; both are \textbf{Draft an
 \subsection{Choice of signature scheme}
 \label{sec:bitcoin-scheme-choice}
 
+For Bitcoin, a signature is an economic object rather than only a cryptographic
+one. Replacing a tens-of-bytes ECDSA or Schnorr signature with a kilobyte-scale
+post-quantum signature changes transaction weight, fees, block capacity, storage,
+relay, and synchronization. Falcon is attractive for compactness but has a more
+demanding sampler and numerical implementation; ML-DSA is structurally simpler but
+larger. The relevant comparison must therefore include both wire footprint and
+implementation risk.
+
 BIP-360 deliberately leaves the scheme unspecified, so the question is open
 rather than settled; this subsection summarizes what the evidence constrains. A 2026 Blockstream Research review of the lattice
 candidates~\cite{blockstreamlattice2026} works the problem through for Bitcoin
@@ -263,6 +271,12 @@ BIP-361's sunset implies that coins whose owners never migrate -- and coins for 
 
 \section{Ethereum}
 \subsection{What is exposed}
+Ethereum has four distinct post-quantum migration surfaces: account authorization
+based on secp256k1/ECDSA, BLS consensus signatures, KZG commitments for data
+availability, and pairing- or discrete-log-based proof systems in applications and
+rollups. A roadmap that replaces only account signatures therefore leaves other
+quantum-vulnerable assumptions in the protocol stack.
+
 Ethereum addresses reveal an effectively public key once an ECDSA transaction has been
 sent. BLS validator signatures, pairing curves behind SNARK verifiers, and KZG
 commitments all rely on public-key assumptions threatened by Shor~\cite{ethpqroadmap,quantumhorizon2026}.
@@ -281,12 +295,20 @@ Vitalik Buterin's proposal ``How to hard-fork to save most users' funds in a qua
 \paragraph{Account abstraction as the migration vehicle.}
 The structural plan is to let accounts choose their own signature scheme. \textbf{EIP-7702} (``Set Code for EOAs,'' \emph{Final}, shipped in the 2025 Pectra upgrade)~\cite{eip7702} lets an externally-owned account delegate to contract code, turning it into a smart account with arbitrary verification logic -- although 7702 authorizations are themselves secp256k1-signed, so it is a stepping stone, not itself a post-quantum migration. The dedicated vehicle is \textbf{EIP-8141} (``Frame Transaction,'' \emph{Draft}, 2026, co-authored by Buterin)~\cite{eip8141}, which explicitly describes native account abstraction as ``a native off-ramp \dots{} to post-quantum secure systems,'' supporting a slot for an arbitrary (custom, post-quantum) signature scheme alongside the classical ones. At the consensus layer, the plan is to replace BLS aggregation with a hash-based signature of the XMSS/Winternitz family (Chapter~\ref{ch:hashots}), aggregated inside a purpose-built zero-knowledge virtual machine. Both pieces exist as public prototypes: \texttt{leanVM}, which describes itself as a ``minimal hash-based zkVM, for a Post-Quantum Ethereum,'' and \texttt{leanSig}, a Rust implementation of the proposed signature scheme whose README states plainly that it is unaudited and not for production~\cite{leanvm}, and to move KZG commitments to STARK- or lattice-based alternatives; the Ethereum Foundation's stated assessment targets first-layer post-quantum infrastructure around 2029~\cite{ethpqroadmap}. In August 2026 the Foundation announced a revision of this stack's cryptographic base: the proof system is to be built over binary fields, so that the hash function throughout --- in the signatures, in the Merkle commitments, and in the zkVM's own commitment scheme --- can be a standard one (SHA-2 or the BLAKE family) rather than an arithmetization-oriented hash such as Poseidon, on which the earlier prototypes relied. The announced schedule is a production-grade \texttt{leanVM} in 2027 and consensus-layer deployment in 2028~\cite{efbinary2026}.
 
-\subsection{On-chain verification, revisited}
+\subsection{On-chain verification choices}
+\label{sec:onchain}
 The structural migration path may introduce post-quantum signature verification on
 chain; the emergency path instead proposes a STARK proof of seed/preimage knowledge.
 These are different authentication mechanisms. Their costs are scheme-, parameter-,
 implementation-, chain-, and gas-schedule-dependent, so a benchmark must state those
 details, including code commit and measurement date, before comparing gas figures.
+
+Direct verification executes the post-quantum verifier in the contract. A
+proof-based design instead proves that verification occurred and checks only the
+proof on-chain. The latter changes both the cost model and the assumptions; the
+Layer~2 composition issues are developed in Section~\ref{sec:l2-composition}, and
+the post-quantum commitment choices inside such proofs in
+Section~\ref{sec:pq-proof-systems}.
 
 \begin{table}[H]
 \centering
@@ -732,6 +754,15 @@ in January 2026. For a peg or bridge trust root, depending on a construction
 with no FIPS number is a governance decision as much as a technical one, which
 argues for migrating any key that needs no aggregation first.
 
+Research schemes illustrate why there is no generic ``threshold wrapper.''
+Threshold Raccoon chooses a signing relation designed for collaborative
+computation and masks participant responses so that the masks cancel only in the
+aggregate \cite{thresholdraccoon2024}. Flood and Submerse tackles distributed key
+generation and robust signing by combining projection, Gaussian noise, and
+verifiable secret sharing to keep hidden shares within the correctness region
+\cite{floodsubmerse2024}. In both cases, rounds, communication, robustness, and the
+noise budget are part of the construction rather than implementation details.
+
 \paragraph{Post-hoc aggregation.}
 The option that sounds best --- compress $N$ existing signatures into one small
 object without changing how anyone signs --- works worst. The first aggregate
@@ -749,6 +780,13 @@ The question of the preceding subsections --- what does each layer carry ---
 applies to the proof system itself. There it becomes a question about the
 \textbf{polynomial commitment}, because that is where a quantum adversary
 attacks: the rest of a modern argument is field arithmetic over a transcript.
+
+A signature verifier that is fast in native code may still be expensive inside
+an arithmetic circuit. Loquat, for example, builds a succinct verification
+relation around the Legendre PRF and a multivariate polynomial commitment
+\cite{loquat2024}. Evaluating such a route requires constraint count, field
+compatibility, witness-generation time, proof size, verification cost, and the
+maturity of its assumptions---not CPU cycles alone.
 
 Two families of commitment are in use, and they differ in what they assume
 rather than in how fast they run.

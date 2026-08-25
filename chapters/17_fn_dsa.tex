@@ -262,6 +262,10 @@ operation can give slightly different results on a different processor, compiler
 or optimization level, and that alone can break the scheme --- with no side
 channel involved at all.
 
+Analyses of Falcon's floating-point sensitivity make this implementation boundary
+concrete: compiler, instruction, and rounding differences can perturb the sampled
+distribution in ways relevant to secret-key security \cite{sleepingfalcon2025}.
+
 The reason is the security requirement stated in Section~\ref{sec:gpv}: a signer must
 never release \emph{two distinct short preimages for the same digest}. Two short
 vectors $s, s'$ with $As = As' = c$ give their difference $s - s'$, a short
@@ -313,6 +317,35 @@ those are microcontrollers with tight RAM budgets. Note also that this cost
 compounds with the emulation penalty above, and that it is a \emph{per-signature}
 cost whenever a key signs only once --- which is exactly the recommended practice
 for a Bitcoin address.
+
+\section{Research directions in compactness and acceleration}
+\label{sec:fndsa-acceleration}
+
+Sections~\ref{sec:gpv} and~\ref{sec:falcon-sizes} explain how Falcon's sampler and
+encoding produce compact signatures. Recent analyses tighten GPV preimage sampling under
+weaker smoothness conditions and use R\'enyi divergence to measure the gap between
+Falcon's real and ideal samplers more precisely
+\cite{gpvweak2025,falconcloser2024}. Other work combines probability coding,
+sampling geometry, and modulus choices to shorten hash-and-sign lattice signatures
+\cite{shorterhashsign2022}. These results can reduce proof slack or transport size,
+but every saving must be reported together with its security margin and sampler
+requirements.
+
+MITAKA explores a different engineering point: it retains the NTRU hash-and-sign
+direction while replacing Falcon's fast Fourier sampler with a hybrid sampler and
+a stronger-quality trapdoor, producing a structure intended to be easier to
+parallelize and mask \cite{mitaka2022}. The comparison is useful precisely because
+MITAKA is a research construction rather than FN-DSA: simplifying an implementation
+may require changing the primitive, not merely optimizing Falcon code.
+
+Acceleration is equally workload-specific. FPGA and ASIC designs expose area,
+memory-port, power, and energy costs hidden by software benchmarks
+\cite{beckwithhw2022,beckwithhw2024}. GPU implementations can obtain very high
+Falcon batch throughput; GOLF, for example, reports results on an RTX~4090 using
+message-level parallelism, FFT kernels, and cache-locality optimization
+\cite{golf2025}. Such figures do not predict the latency of one interactive
+signature: batch size, transfer overhead, occupancy, tail latency, and tenant
+isolation must be measured separately.
 
 \section{SageMath experiment: the public NTRU relation}
 
