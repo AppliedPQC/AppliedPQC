@@ -59,6 +59,20 @@
   url = {https://cloud.google.com/blog/products/identity-security/pqc-in-plaintext-google-clouds-post-quantum-cryptography-roadmap}
 }
 
+@misc{googlecloudloadbalancingpqc2026,
+  author = {{Google Cloud}},
+  title = {{Post-quantum TLS: Cloud Load Balancing}},
+  note = {Product documentation, updated 26 August 2026},
+  url = {https://docs.cloud.google.com/load-balancing/docs/post-quantum-tls}
+}
+
+@misc{googlecloudkmsalgorithms2026,
+  author = {{Google Cloud}},
+  title = {{Cloud KMS key purposes and algorithms}},
+  note = {Product documentation, August 2026 snapshot},
+  url = {https://docs.cloud.google.com/kms/docs/algorithms}
+}
+
 @misc{efbinary2026,
   author = {J.~Drake},
   title = {{Announcement of the Ethereum Foundation's pivot from Poseidon to standard hash functions over binary-field proof systems for lean Ethereum}},
@@ -537,12 +551,82 @@
   note = {RFC 9954, Informational, July 2026}
 }
 
-@misc{tlsecdhemlkem,
+@misc{rfc10024,
   author = {K.~Kwiatkowski and P.~Kampanakis and B.~E. Westerbaan and D.~Stebila},
-  title = {{Post-quantum hybrid ECDHE-MLKEM Key Agreement for TLSv1.3}},
-  note = {Internet-Draft \texttt{draft-ietf-tls-ecdhe-mlkem-05}, IETF Transport Layer Security Working Group, May 2026},
-  year = {2026},
-  url = {https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/}
+  title = {{Post-Quantum Traditional (PQ/T) Hybrid Key Agreement Mechanisms for TLS 1.3}},
+  note = {RFC 10024, Standards Track, August 2026},
+  doi = {10.17487/RFC10024},
+  url = {https://www.rfc-editor.org/rfc/rfc10024.html}
+}
+
+@misc{rfc9881,
+  author = {J.~Massimo and P.~Kampanakis and S.~Turner and B.~E. Westerbaan},
+  title = {{Internet X.509 Public Key Infrastructure---Algorithm Identifiers for the Module-Lattice-Based Digital Signature Algorithm (ML-DSA)}},
+  note = {RFC 9881, Standards Track, October 2025},
+  doi = {10.17487/RFC9881},
+  url = {https://www.rfc-editor.org/rfc/rfc9881.html}
+}
+
+@misc{rfc9909,
+  author = {K.~Bashiri and S.~Fluhrer and S.~Gazdag and D.~Van Geest and S.~Kousidis},
+  title = {{Internet X.509 Public Key Infrastructure---Algorithm Identifiers for the Stateless Hash-Based Digital Signature Algorithm (SLH-DSA)}},
+  note = {RFC 9909, Standards Track, December 2025},
+  doi = {10.17487/RFC9909},
+  url = {https://www.rfc-editor.org/rfc/rfc9909.html}
+}
+
+@misc{rfc9935,
+  author = {S.~Turner and P.~Kampanakis and J.~Massimo and B.~E. Westerbaan},
+  title = {{Internet X.509 Public Key Infrastructure---Algorithm Identifiers for the Module-Lattice-Based Key-Encapsulation Mechanism (ML-KEM)}},
+  note = {RFC 9935, Standards Track, March 2026},
+  doi = {10.17487/RFC9935},
+  url = {https://www.rfc-editor.org/rfc/rfc9935.html}
+}
+
+@misc{rfc9936,
+  author = {J.~Prat and M.~Ounsworth and D.~Van Geest},
+  title = {{Use of ML-KEM in the Cryptographic Message Syntax (CMS)}},
+  note = {RFC 9936, Standards Track, March 2026},
+  doi = {10.17487/RFC9936},
+  url = {https://www.rfc-editor.org/rfc/rfc9936.html}
+}
+
+@misc{rfc9964,
+  author = {M.~Prorock and O.~Steele},
+  title = {{ML-DSA for JSON Object Signing and Encryption (JOSE) and CBOR Object Signing and Encryption (COSE)}},
+  note = {RFC 9964, Standards Track, May 2026},
+  doi = {10.17487/RFC9964},
+  url = {https://www.rfc-editor.org/rfc/rfc9964.html}
+}
+
+@misc{rfc9958,
+  author = {A.~Banerjee and T.~Reddy.K and D.~Schoinianakis and T.~Hollebeek and M.~Ounsworth},
+  title = {{Post-Quantum Cryptography for Engineers}},
+  note = {RFC 9958, Informational, June 2026},
+  doi = {10.17487/RFC9958},
+  url = {https://www.rfc-editor.org/rfc/rfc9958.html}
+}
+
+@misc{rfc9794,
+  author = {F.~Driscoll and M.~Parsons and B.~Hale},
+  title = {{Terminology for Post-Quantum Traditional Hybrid Schemes}},
+  note = {RFC 9794, Informational, June 2025},
+  doi = {10.17487/RFC9794},
+  url = {https://www.rfc-editor.org/rfc/rfc9794.html}
+}
+
+@misc{tlsmldsa2026,
+  author = {T.~Hollebeek and S.~Schmieg and B.~E. Westerbaan},
+  title = {{Use of ML-DSA in TLS 1.3}},
+  note = {Internet-Draft \texttt{draft-ietf-tls-mldsa-05}, July 2026},
+  url = {https://datatracker.ietf.org/doc/draft-ietf-tls-mldsa/}
+}
+
+@misc{plantsmtc2026,
+  author = {D.~Benjamin and D.~O'Brien and B.~E. Westerbaan and L.~Valenta and F.~Valsorda},
+  title = {{Merkle Tree Certificates}},
+  note = {Internet-Draft \texttt{draft-ietf-plants-merkle-tree-certs-05}, July 2026},
+  url = {https://datatracker.ietf.org/doc/draft-ietf-plants-merkle-tree-certs/}
 }
 
 @misc{nistsp800227,
@@ -877,6 +961,69 @@
   title = {{Post-Quantum Cryptography Deployment and Migration Reports}},
   year = {2026},
   url = {https://developers.cloudflare.com/ssl/post-quantum-cryptography/}
+}
+
+@misc{cloudflareroadmap2026,
+  author = {{Cloudflare}},
+  title = {{Cloudflare Targets 2029 for Full Post-Quantum Security}},
+  note = {Cloudflare Blog, 7 April 2026},
+  url = {https://blog.cloudflare.com/post-quantum-roadmap/}
+}
+
+@misc{cloudflareoriginauth2026,
+  author = {{Cloudflare}},
+  title = {{Post-Quantum Authentication to Origins Is Now Supported}},
+  note = {Cloudflare Blog, 29 July 2026},
+  url = {https://blog.cloudflare.com/post-quantum-authentication-to-origins/}
+}
+
+@misc{cloudflareipsec2026,
+  author = {{Cloudflare}},
+  title = {{Post-Quantum Encryption for Cloudflare IPsec Is Generally Available}},
+  note = {Cloudflare Blog, 30 April 2026},
+  url = {https://blog.cloudflare.com/post-quantum-ipsec/}
+}
+
+@misc{awspqtls2025,
+  author = {{Amazon Web Services}},
+  title = {{ML-KEM Post-Quantum TLS Now Supported in AWS KMS, ACM, and Secrets Manager}},
+  note = {AWS Security Blog, 7 April 2025},
+  url = {https://aws.amazon.com/blogs/security/ml-kem-post-quantum-tls-now-supported-in-aws-kms-acm-and-secrets-manager/}
+}
+
+@misc{awskmsmldsa2025,
+  author = {{Amazon Web Services}},
+  title = {{AWS KMS Adds Support for Post-Quantum ML-DSA Digital Signatures}},
+  note = {AWS What's New, 13 June 2025},
+  url = {https://aws.amazon.com/about-aws/whats-new/2025/06/aws-kms-post-quantum-ml-dsa-digital-signatures/}
+}
+
+@misc{awsprivatecamldsa2025,
+  author = {{Amazon Web Services}},
+  title = {{AWS Private CA Now Supports Post-Quantum Digital Certificates}},
+  note = {AWS What's New, 10 November 2025},
+  url = {https://aws.amazon.com/about-aws/whats-new/2025/11/aws-private-ca-post-quantum-digital-certificates/}
+}
+
+@misc{microsoftpqc2025,
+  author = {{Microsoft}},
+  title = {{Post-Quantum Cryptography APIs Now Generally Available on Microsoft Platforms}},
+  note = {Microsoft Security Blog, November 2025},
+  url = {https://techcommunity.microsoft.com/blog/microsoft-security-blog/post-quantum-cryptography-apis-now-generally-available-on-microsoft-platforms/4469093}
+}
+
+@misc{microsoftadcs2026,
+  author = {{Microsoft}},
+  title = {{Post-Quantum Cryptography in Active Directory Certificate Services Overview}},
+  note = {Microsoft Learn, updated 20 May 2026},
+  url = {https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/post-quantum-cryptography-overview}
+}
+
+@misc{alibabaesapqc2026,
+  author = {{Alibaba Cloud}},
+  title = {{ESA Post-Quantum Encryption (PQC)}},
+  note = {Edge Security Acceleration documentation, updated 2 June 2026},
+  url = {https://www.alibabacloud.com/help/en/edge-security-acceleration/esa/user-guide/post-quantum-encryption}
 }
 
 @misc{wolfsslpq,

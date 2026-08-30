@@ -209,15 +209,40 @@ one release.}
 \section{Post-quantum TLS 1.3}
 TLS 1.3 secures most web traffic, and it is the first place post-quantum cryptography has reached production. Two independent parts of the handshake must be upgraded: the \emph{key exchange} (confidentiality) and the \emph{authentication} (signatures on certificates).
 
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.20\textwidth}p{0.18\textwidth}p{0.52\textwidth}}
+\toprule
+Document & Status & Engineering role \\
+\midrule
+RFC 10024 & Standards Track & Concrete ECDHE--ML-KEM groups for TLS~1.3~\cite{rfc10024} \\
+RFC 9954 & Informational & Framework and analysis for hybrid key exchange in TLS~1.3~\cite{rfc9954} \\
+RFC 9881 & Standards Track & ML-DSA identifiers and encodings for X.509~\cite{rfc9881} \\
+RFC 9909 & Standards Track & SLH-DSA identifiers and encodings for X.509~\cite{rfc9909} \\
+RFC 9935 & Standards Track & ML-KEM identifiers and encodings for X.509~\cite{rfc9935} \\
+RFC 9936 & Standards Track & ML-KEM conventions for CMS~\cite{rfc9936} \\
+RFC 9964 & Standards Track & ML-DSA algorithm identifiers for JOSE and COSE~\cite{rfc9964} \\
+RFC 9958 & Informational & Post-quantum migration guidance for engineers~\cite{rfc9958} \\
+RFC 9794 & Informational & Common terminology for PQ/T hybrid schemes~\cite{rfc9794} \\
+\bottomrule
+\end{tabular}
+\caption{Selected post-quantum protocol documents as of August 2026. An
+Informational RFC can be authoritative guidance without defining a Standards
+Track interoperability requirement.}
+\label{tab:pqc-protocol-status-2026}
+\end{table}
+
 \subsection{Hybrid key exchange}
 \label{sec:tls-hybrid}
 The framework is settled: RFC~9954~\cite{rfc9954} specifies how TLS 1.3 carries a
-hybrid key exchange, and the concrete ECDHE--ML-KEM groups and their code points
-are given by a Transport Layer Security working-group
-draft~\cite{tlsecdhemlkem} --- \texttt{X25519MLKEM768} (code point $4588$,
-\texttt{0x11EC}), \texttt{SecP256r1MLKEM768}, and \texttt{SecP384r1MLKEM1024}.
-The current revision specifies their wire formats precisely, but it remains an
-active Internet-Draft and must still be treated as work in progress.
+hybrid key exchange, and RFC~10024~\cite{rfc10024} instantiates it with three
+ECDHE--ML-KEM groups and permanent code points: \texttt{X25519MLKEM768}
+($4588$, \texttt{0x11EC}), \texttt{SecP256r1MLKEM768} ($4587$), and
+\texttt{SecP384r1MLKEM1024} ($4589$). RFC~10024 is a Standards Track document,
+not an active Internet-Draft. Of the three groups, \texttt{X25519MLKEM768} is
+marked Recommended in the IANA registry; the two \texttt{SecP} groups serve
+more specialized regulatory and high-security requirements.
 
 TLS takes the simpler route flagged in Section~\ref{sec:kem-combiner}: the two
 shared secrets are \emph{concatenated} and inserted in place of the ordinary
@@ -253,10 +278,11 @@ ranking of the components' security.
   \draw[seqmsg] (8.6,0.55) -- node[above]{encrypted Certificate and CertificateVerify} (1.4,0.55);
   \node[seqresult] at (5,-0.4) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
 \end{tikzpicture}
-\caption{Hybrid key exchange in TLS 1.3, as specified by RFC~9954~\cite{rfc9954}.
+\caption{Hybrid key exchange in TLS 1.3. RFC~9954 supplies the framework and
+RFC~10024 specifies the concrete ECDHE--ML-KEM groups~\cite{rfc9954,rfc10024}.
 Both an elliptic-curve share and an ML-KEM contribution travel in the handshake.
 The wire order shown is specified for \texttt{X25519MLKEM768}; unlike the
-shared-secret order, the draft attributes this reversed share order to historical
+shared-secret order, RFC~10024 attributes this reversed share order to historical
 reasons. Certificate authentication follows \texttt{ServerHello} and remains a
 separate migration track.}
 \label{fig:tls-hybrid}
@@ -264,12 +290,21 @@ separate migration track.}
 
 \subsection{Post-quantum authentication and its size cost}
 Post-quantum certificate authentication is still a separate standardization and
-deployment track. ML-DSA-65 is one plausible illustrative choice for its balance of
-speed and size, while SLH-DSA offers a more conservative assumption at larger sizes.
-The practical obstacle is size: post-quantum public keys and signatures are far larger
-than the elliptic-curve ones they replace, and a TLS handshake may carry several
-certificates. The extra kilobytes cost round-trips and can collide with buffer and
-fragmentation limits.
+deployment track. The base encoding layer has advanced: RFC~9881 specifies ML-DSA
+in X.509 certificates and CRLs, and RFC~9909 does the same for SLH-DSA
+\cite{rfc9881,rfc9909}. Those RFCs do not by themselves complete the public WebPKI.
+Use of ML-DSA in TLS, composite certificate profiles, browser and trust-store
+support, and Certificate Transparency integration remain separate work items;
+the TLS ML-DSA and Merkle Tree Certificate specifications were still active
+Internet-Drafts at this snapshot~\cite{tlsmldsa2026,plantsmtc2026}.
+
+ML-DSA-65 is used here as a Level~3 illustration; a deployment choice depends on
+the target security category and peer support. SLH-DSA offers a more conservative
+assumption at larger sizes. The practical
+obstacle is size: post-quantum public keys and signatures are far larger than the
+elliptic-curve ones they replace, and a TLS handshake may carry several certificates.
+The extra kilobytes increase packet counts and can add round trips when they cross
+transport, buffering, or fragmentation thresholds.
 
 \begin{table}[H]
 \centering
@@ -292,26 +327,186 @@ SLH-DSA-128s (FIPS 205) & 32 & $\approx 7856$ \\
 
 It is easy to read a chapter like this one as describing a future. For key
 exchange, it does not. Hybrid post-quantum key agreement is on by default in
-mainstream browsers and in OpenSSH~\cite{opensshpq}, and the share of
-human-initiated HTTPS traffic reaching Cloudflare under a post-quantum key
-agreement passed roughly one half during 2025~\cite{cloudflarepq2025}. Major
-cloud key-management and transport services offer post-quantum KEMs as a
-supported option. Google Cloud's roadmap, published in August 2026, is
-representative and carries dates: hybrid ML-KEM already serves its public API
-endpoints and, on an opt-in basis, its load balancers; ML-KEM, ML-DSA and
-SLH-DSA are generally available in its key-management service; and the stated
-target is quantum-safe infrastructure by 2029, aligned with the 2030--2035
-deprecation timelines of CNSA 2.0 and NIST IR 8547~\cite{googlecloudpqc2026}.
-The same roadmap instantiates the asymmetry described next: its key-exchange
-items are marked complete, while its certificate-issuance and signing items
-are scheduled for 2027 and 2028. A reader who has browsed the web or opened an SSH session
-recently has, with high probability, already used ML-KEM.
+mainstream browsers and in OpenSSH~\cite{opensshpq}, and Cloudflare reported in
+April 2026 that more than $65\%$ of human traffic reaching its network used
+post-quantum encryption~\cite{cloudflareroadmap2026}. Major cloud and edge
+providers now expose concrete products rather than undated experiments.
 
-Authentication is the opposite story, and the contrast is the useful part.
-Signature migration has barely begun: post-quantum certificates remain a
-draft and experimental track, public certificate authorities are only starting
-to issue them, and the chains of trust behind code signing, firmware, and secure
-boot turn over on a timescale of years. The asymmetry has a simple cause.
+Table~\ref{tab:vendor-pqc-2026} records product surfaces, because a provider-wide
+``PQC ready'' label would hide material differences between a default rollout,
+an opt-in feature, a private-PKI capability, and a future target.
+
+The proposed service-level model below makes those differences auditable by
+recording the highest migration stage reached by a \emph{specific service and
+protocol surface}, not by a provider
+as a whole. The stages form an operational progression, but they are not a
+security ranking: a well-tested opt-in deployment may be preferable to a default
+that cannot be observed or rolled back.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  phase/.style={rounded corners=3pt,draw=pqcblue!45,fill=pqcblue!6,
+    text width=1.58cm,minimum height=1.05cm,align=center,font=\tiny,inner sep=3pt},
+  phasearrow/.style={-{Latex[length=1.7mm]},draw=pqcblue!55,line width=0.7pt}
+]
+  \node[phase] (p0) at (0,0) {\textbf{0}\\experiment};
+  \node[phase] (p1) at (2.45,0) {\textbf{1}\\library or API};
+  \node[phase,draw=pqcorange!60,fill=pqcorange!7] (p2) at (4.90,0) {\textbf{2}\\service opt-in};
+  \node[phase,draw=pqcorange!60,fill=pqcorange!7] (p3) at (7.35,0) {\textbf{3}\\default-on\\with escape hatch};
+  \node[phase,draw=pqcteal!65,fill=pqcteal!8] (p4) at (9.80,0) {\textbf{4}\\enforced for\\capable peers};
+  \node[phase,draw=pqcteal!65,fill=pqcteal!8] (p5) at (12.25,0) {\textbf{5}\\classical-only\\path retired};
+  \foreach \a/\b in {p0/p1,p1/p2,p2/p3,p3/p4,p4/p5}
+    \draw[phasearrow] (\a.east) -- (\b.west);
+\end{tikzpicture}
+\caption{A proposed service-level deployment maturity model. Stages 1--4 establish
+increasingly strong evidence that an implementation is reaching production;
+Stage~5 is separate because mandatory use with capable peers does not imply that
+classical-only peers have been retired.}
+\label{fig:pqc-deployment-maturity}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  year/.style={font=\scriptsize\bfseries,text=pqcgray},
+  lane/.style={rounded corners=5pt,minimum width=15.1cm,minimum height=1.72cm,
+    anchor=west,draw=none},
+  lanelabel/.style={align=left,text width=1.65cm,font=\tiny\bfseries,
+    text=pqcblue,anchor=west},
+  milestone/.style={rounded corners=3pt,align=left,text width=1.70cm,
+    minimum height=0.88cm,inner sep=4pt,font=\tiny,anchor=west},
+  done/.style={milestone,draw=pqcteal!70,fill=white,text=black},
+  target/.style={milestone,draw=pqcorange!70,dashed,fill=white,text=black},
+  flow/.style={-{Latex[length=2mm]},line width=0.8pt,draw=pqcblue!55}
+]
+  % Soft lane backgrounds and year grid.
+  \node[lane,fill=pqcblue!7] at (0,5.15) {};
+  \node[lane,fill=pqcorange!7] at (0,3.18) {};
+  \node[lane,fill=pqcteal!8] at (0,1.21) {};
+  \foreach \x/\yr in {3.05/2025,5.35/2026,7.65/2027,9.95/2028,13.05/2029}
+    \node[year] at (\x,7.18) {\yr};
+  \foreach \x in {4.20,6.50,8.80,11.10}
+    \draw[pqcgray!20] (\x,1.18) -- (\x,6.93);
+
+  % Lane labels.
+  \node[lanelabel] at (0.35,6.05) {Confidentiality\\\normalfont\tiny harvest-now\\protection};
+  \node[lanelabel,text=pqcorange!90!black] at (0.35,4.08) {Authentication\\\normalfont\tiny identity and signing};
+  \node[lanelabel,text=pqcteal!90!black] at (0.35,2.11) {Foundations\\\normalfont\tiny keys and platforms};
+
+  % Confidentiality milestones.
+  \node[done] (c25) at (2.20,5.58) {\textcolor{pqcteal}{\textbf{COMPLETE}}\\Quantum-confidential ALTS};
+  \node[done] (c26) at (4.50,5.58) {\textcolor{pqcteal}{\textbf{AVAILABLE}}\\Public APIs and load-balancer support};
+  \node[target,text width=2.20cm] (c27) at (6.80,5.58) {\textcolor{pqcorange}{\textbf{2026--27}}\\VPN, service mesh and data flows};
+
+  % Authentication milestones.
+  \node[target] (a26) at (4.50,3.61) {\textcolor{pqcorange}{\textbf{2026}}\\Software attestations};
+  \node[target,text width=2.20cm] (a27) at (6.80,3.61) {\textcolor{pqcorange}{\textbf{2027--28}}\\Private CA and certificate rollout};
+  \node[target] (a28) at (9.40,3.61) {\textcolor{pqcorange}{\textbf{2028}}\\IAM and Merkle Tree certificates};
+
+  % Foundation milestones.
+  \node[done] (f25) at (2.20,1.64) {\textcolor{pqcteal}{\textbf{COMPLETE}}\\PQC algorithms in Cloud KMS};
+  \node[target] (f26) at (4.50,1.64) {\textcolor{pqcorange}{\textbf{2026}}\\Quantum-safe key import};
+  \node[target,text width=2.20cm] (f28) at (9.10,1.64) {\textcolor{pqcorange}{\textbf{2028}}\\Cloud HSM and confidential computing};
+
+  % Convergence rather than three misleading independent finish lines.
+  \node[rounded corners=6pt,draw=pqcblue,fill=pqcblue,text=white,
+    align=center,text width=2.05cm,minimum height=5.22cm,font=\scriptsize\bfseries]
+    (ready) at (13.15,4.08) {FULL PQC\\READINESS\\[3pt]\normalfont\tiny roadmap target};
+  \draw[flow] (c27.east) -- ++(0.20,0) |- (ready.west);
+  \draw[flow,draw=pqcorange!75] (a28.east) -- (ready.west);
+  \draw[flow,draw=pqcteal!75] (f28.east) -- ++(0.20,0) |- (ready.west);
+
+  % Legend uses both shape and line style, not colour alone.
+  \node[done,text width=0.15cm,minimum height=0.15cm,inner sep=1.4pt] at (0.30,0.55) {};
+  \node[anchor=west,font=\tiny] at (0.52,0.55) {available / complete};
+  \node[target,text width=0.15cm,minimum height=0.15cm,inner sep=1.4pt] at (3.25,0.55) {};
+  \node[anchor=west,font=\tiny] at (3.47,0.55) {announced target};
+\end{tikzpicture}
+\caption{Google Cloud's published migration sequence, redrawn as an engineering
+roadmap from its August 2026 status report~\cite{googlecloudpqc2026}. Solid
+milestones were reported as available or complete by Google; the remaining dates
+are targets and may change. The graphic deliberately separates confidentiality,
+authentication, and enabling infrastructure rather than treating ``PQC ready''
+as a single switch.}
+\label{fig:google-cloud-pqc-roadmap}
+\end{figure}
+
+\begingroup
+\newcommand{\statusapi}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcteal!14,text=pqcteal!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){API};}
+\newcommand{\statusavailable}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcteal!14,text=pqcteal!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){AVAILABLE};}
+\newcommand{\statusdefault}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcteal!14,text=pqcteal!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){DEFAULT};}
+\newcommand{\statusopt}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcorange!14,text=pqcorange!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){OPT-IN};}
+\newcommand{\statusroad}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  draw=pqcblue!55,dashed,text=pqcblue,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){ROADMAP};}
+\begin{table}[H]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.22}
+\begin{tabular}{p{0.105\textwidth}p{0.255\textwidth}p{0.255\textwidth}p{0.285\textwidth}}
+\toprule
+Provider & Key exchange & Signing and PKI & Scope boundary \\
+\midrule
+Google Cloud & \statusapi\ Public APIs\newline \statusopt\ Application and proxy LBs
+  & \statusapi\ KMS ML-DSA and SLH-DSA\newline \statusroad\ Certificates and IAM
+& Load-balancer KEX moves from opt-in to default-on after October 2026 and
+always-on after October 2027 for capable clients; this is not retirement of
+classical-only compatibility~\cite{googlecloudloadbalancingpqc2026}. \\
+AWS & \statusopt\ Hybrid TLS for KMS, ACM, and Secrets Manager
+  & \statusavailable\ KMS ML-DSA keys and Private CA certificates
+& Evidence covers named non-FIPS endpoints, not all AWS HTTPS services
+\cite{awspqtls2025,awskmsmldsa2025,awsprivatecamldsa2025}. \\
+Microsoft & \statusapi\ ML-KEM in supported Windows and .NET
+  & \statusapi\ ML-DSA\newline \statusavailable\ Phase~1 AD~CS
+& APIs and private-PKI support do not establish universal Schannel or Azure TLS
+deployment~\cite{microsoftpqc2025,microsoftadcs2026}. \\
+Cloudflare & \statusdefault\ Edge hybrid KEX\newline \statusavailable\ Hybrid IKEv2/IPsec
+  & \statusavailable\ Selected origin authentication
+& Origin authentication is not visitor-facing public WebPKI authentication
+\cite{cloudflareroadmap2026,cloudflareoriginauth2026,cloudflareipsec2026}. \\
+Alibaba Cloud & \statusdefault\ ESA for supported TLS~1.3 and QUIC clients
+& ---
+& Evidence establishes the ESA edge deployment, not provider-wide PKI or HSM
+support~\cite{alibabaesapqc2026}. \\
+\bottomrule
+\end{tabular}
+\caption{Selected vendor deployment evidence as of August 2026. Product,
+protocol, default or opt-in state, and deployment scope remain explicit; a dash
+means that the cited source does not establish a corresponding deployment.}
+\label{tab:vendor-pqc-2026}
+\end{table}
+\endgroup
+
+A cloud migration must cover four
+distinct traffic surfaces: customer ingress, internal service-to-service paths,
+administrator and developer access, and data-movement pipelines. Evidence on one
+surface does not establish coverage of the others. The foundation lane is
+similarly architectural: Cloud KMS assigns KEM keys a distinct
+\texttt{KEY\_ENCAPSULATION} purpose and decapsulation operation, rather than
+treating ML-KEM as another encryption mode~\cite{googlecloudkmsalgorithms2026}.
+
+AWS reports a related systems
+lesson: with connection reuse, enabling hybrid ML-KEM changed the measured
+\texttt{GenerateDataKey} throughput from $216.1$ to $216.0$ transactions per
+second, about $0.05\%$; the same report found a larger effect without reuse
+\cite{awspqtls2025}. Extra handshake bytes and primitive work therefore do not
+translate directly into the same percentage loss at the application layer.
+
+Authentication is the less mature story, and the contrast is the useful part.
+Certificate encodings now have Standards Track RFCs, and private-PKI products
+have begun to ship, but public WebPKI migration and broad relying-party support
+remain incomplete. The chains of trust behind code signing, firmware, and secure
+boot also turn over on a timescale of years. The asymmetry has a simple cause.
 
 \begin{itemize}
   \item Key exchange is \textbf{ephemeral and two-party}. Both endpoints
@@ -327,7 +522,10 @@ decrypt later'' is the urgent framing for confidentiality but the wrong framing
 for signatures, and it is why the hardest case in the next chapter is a
 signature case.
 
-Implementation and deployment status changes rapidly. Before making a production decision, consult the current IETF document and the release notes of the selected browser, TLS library, or service for its supported groups, defaults, and authentication behaviour.
+Implementation and deployment status changes rapidly. Before making a production
+decision, consult the current RFC or Internet-Draft and the release notes of the
+selected browser, TLS library, or service for its supported groups, defaults, and
+authentication behaviour.
 
 \section{Network and infrastructure effects}
 
@@ -450,8 +648,8 @@ The mathematics of the previous parts defeats Shor's algorithm, but that is wher
 
 \begin{itemize}
   \item \textbf{hybrid} classical-plus-postquantum deployment, with \textbf{crypto-agility}, is the mainstream migration strategy --- where the redundant work is ephemeral, negotiated, and invisible, and not where it is permanent, consensus-fixed, and user-visible;
-  \item \textbf{TLS 1.3} hybrid key exchange is under standardization and deployment; protocol and implementation versions must be checked at the time of use;
-  \item post-quantum \textbf{key exchange has already shipped} at scale, while \textbf{signature} migration has barely started --- because key exchange is ephemeral and two-party, and signatures are long-lived and multi-party;
+  \item \textbf{TLS 1.3} hybrid ECDHE--ML-KEM key exchange is standardized in RFC~10024 and deployed at scale, while protocol and implementation support must still be checked at the time of use;
+  \item post-quantum \textbf{authentication} has standardized algorithm encodings and early private-PKI deployments, but public WebPKI migration remains less mature --- because key exchange is ephemeral and two-party, whereas signatures are long-lived and multi-party;
   \item end-to-end performance depends on packetization, loss recovery, transport state, certificate structure, and the complete delivery chain, not primitive timings alone;
   \item scheme choice is a trade-off among size, speed, and assumption strength, with side-channel controls scoped to the secrets and threat model of each operation.
 \end{itemize}
