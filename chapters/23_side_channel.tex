@@ -364,7 +364,13 @@ weaker; the two are often combined.
 \paragraph{Cost and benefit.}
 None of this is free, and none of it is always necessary. A server behind a network,
 where an attacker can only measure timing remotely, needs constant-time code but rarely
-full masking. A smart card or an embedded key store, where the attacker holds the
+full masking. One qualification has emerged: dynamic frequency scaling (Turbo Boost
+and its relatives) makes the clock frequency depend on power draw, which depends on
+the data being processed -- so power leakage can surface in \emph{remote} timings even
+when the code itself is constant-time, and network key-extraction attacks over this
+channel have been demonstrated~\cite{hertzbleed2022}. Where the threat model includes
+them, disabling frequency boosting for cryptographic workloads is the direct
+countermeasure. A smart card or an embedded key store, where the attacker holds the
 device and can wire up an oscilloscope, needs masking and fault countermeasures as
 well. The right level is a threat-model decision, not a fixed recipe -- but
 constant-time coding is the floor beneath all of it.
