@@ -143,7 +143,7 @@ At the present time, the best known classical algorithms for exact SVP are still
 
 \section{Connection with LWE}
 
-The connection to learning with errors is central. The LWE problem can be viewed as a noisy linear system over a lattice. If one could efficiently solve the relevant lattice problems, including SVP in the appropriate setting, then many LWE-based attacks would become much more powerful. Regev's reduction showed that LWE can be reduced to worst-case lattice problems, which is one of the deepest reasons that lattice-based cryptography is considered secure.
+The connection to learning with errors is central. The LWE problem can be viewed as a noisy linear system over a lattice. If one could efficiently solve the relevant lattice problems, including SVP in the appropriate setting, then many LWE-based attacks would become much more powerful. Regev's reduction runs in the other direction: worst-case lattice problems reduce to average-case LWE, so an efficient algorithm that broke LWE on random instances would solve approximate lattice problems on \emph{every} lattice. Chapter~\ref{ch:lwe} states the theorem precisely and discusses what it does and does not guarantee at deployed parameters.
 
 \section{Main takeaways}
 

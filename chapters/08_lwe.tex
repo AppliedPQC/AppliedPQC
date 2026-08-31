@@ -123,10 +123,22 @@ Let $n$ be a security parameter, $q=q(n)\le\mathrm{poly}(n)$ a modulus, and $\al
 Three points give this theorem its weight.
 
 \begin{itemize}
-  \item \textbf{Worst-case to average-case.} A scheme's keys are random (average-case) LWE instances. The reduction guarantees that breaking a random key is as hard as the worst conceivable lattice, so there are no ``weak keys'' to stumble into -- a guarantee that number-theoretic assumptions such as factoring do not provide.
+  \item \textbf{Worst-case to average-case.} A scheme's keys are random (average-case) LWE instances. The reduction guarantees that breaking a random key is as hard as the worst conceivable lattice, so there are no ``weak keys'' to stumble into. Factoring offers no comparable guarantee. The discrete-logarithm problem in a fixed group, by contrast, does have a worst-case to average-case \emph{self}-reduction (randomize the target, solve, subtract the randomizer), and a tight one; what is distinctive here is not self-reduction as such but the passage from a \emph{different} problem, a worst-case lattice problem, to the average case.
   \item \textbf{The role of quantumness.} The reduction uses a quantum algorithm as a proof device only. LWE-based schemes run on entirely classical hardware; the quantum step is in the security argument, not the cryptosystem. Peikert later gave a \emph{classical} reduction for exponential moduli~\cite{peikert2009}, and Brakerski, Langlois, Peikert, Regev, and Stehl\'{e} established classical hardness for polynomial moduli~\cite{blprs2013}, removing the quantum caveat.
   \item \textbf{The approximation factor.} The reduction yields hardness for $\widetilde{O}(n/\alpha)$-approximate lattice problems, which are believed to require time $2^{\Theta(n)}$ for the parameters used in practice. The factor $n/\alpha$ makes precise the tension of the previous section: less noise (smaller $\alpha$) yields a weaker guarantee.
 \end{itemize}
+
+\begin{remark}[What the reduction guarantees at deployed sizes]
+The theorem is asymptotic. Unwinding it at concrete parameters costs polynomial
+factors and approximation-factor inflation, and analyses that track those
+constants find that the known reductions yield no meaningful security bound at
+the dimensions standardized schemes actually use -- they begin to bind only at
+dimensions far beyond $n=1024$~\cite{gartner2023}. The reduction is therefore
+evidence about the LWE problem \emph{family}, not a security proof for any
+deployed parameter set; this is why Section~\ref{sec:lwe-cryptanalysis} sets
+concrete parameters against BKZ-based attack estimates rather than against
+Theorem~\ref{thm:regev}.
+\end{remark}
 
 \section{The dual problem: Short Integer Solution (SIS)}
 \label{sec:sis}

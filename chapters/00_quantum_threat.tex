@@ -299,6 +299,15 @@ assumption. SLH-DSA-128s and ML-KEM-512 both sit at Category 1, but one rests on
 a hash function and the other on module lattices, and no category number captures
 that difference. Choosing a scheme means choosing a category \emph{and} a family.
 
+A category assignment is a claim, and claims can be contested. The Category 1
+assignment of ML-KEM-512 in particular has been publicly disputed: the
+underlying lattice attack-cost estimates carry tens of bits of stated
+uncertainty~\cite{matzov2022}, and the calculation NIST offered in support of
+the assignment has been challenged on the grounds that it combined computation
+and memory-access costs incorrectly~\cite{bernstein2023kyber}. The dispute is
+about that one parameter set, not about the category system; deployments have
+largely standardized on ML-KEM-768 and above, which sidesteps it.
+
 \section{Summary}
 
 \begin{itemize}
