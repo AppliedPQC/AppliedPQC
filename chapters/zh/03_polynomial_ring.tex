@@ -1,0 +1,221 @@
+% source: dbf27d9a74b10942ae4d610912a5eb151b33f972
+\chapter{多项式环}
+\label{ch:polyring}
+
+\section{本章的意义}
+上一章把密码学对象表示为域上的向量和矩阵。本章更换代数结构：我们不再在向量空间 $\mathbb{F}_q^n$ 中工作，而是在一个\emph{商多项式环}中工作
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1),
+\]
+这正是 RLWE、Kyber 和 Dilithium 所处的环境。其收益在于结构。$R_q$ 的单个元素承载的信息与一个完整的、有结构的 $n\times n$ 矩阵相同，而 $R_q$ 中的乘法是一种卷积，可以借助快速变换（第~\ref{ch:ntt}~章的 NTT）来计算。为了安全地使用这个环，我们需要准确地知道它是什么：环是什么，对一个多项式取商意味着什么，以及为什么要选取特定的模 $x^n+1$。
+
+\section{学习目标}
+读完本章后，你应当能够：
+
+\begin{itemize}
+  \item 说明什么是（交换）环，并认识到 $\mathbb{F}_q[x]$ 是一个环；
+  \item 进行多项式的欧几里得除法，并解释为什么它使商环是良定义的；
+  \item 构造商环 $\mathbb{F}_q[x]/(f)$ 并计算其元素个数；
+  \item 说明商何时是一个域，以及为什么 $x^n+1$（$n$ 为 2 的幂）是自然的模；
+  \item 把 $R_q$ 中的乘法描述为负循环卷积，并将其与 NTT 联系起来。
+\end{itemize}
+
+\section{环与域}
+第~\ref{ch:linalg}~章中的域支持加法、减法、乘法\emph{以及}除法。环是一种较弱的结构，其中除法可能无法进行。
+
+\begin{definition}[交换环]
+\emph{含单位元的交换环}是一个带有运算 $+$ 与 $\cdot$ 的集合 $R$，满足：$(R,+)$ 是以 $0$ 为单位元的阿贝尔群，乘法满足结合律和交换律且有单位元 $1$，并且乘法对加法满足分配律。\emph{域}是其特殊情形，其中每个非零元素都有乘法逆元。
+\end{definition}
+
+整数 $\mathbb{Z}$ 构成一个环但不是域（$2$ 没有整数逆元）；模素数的整数 $\mathbb{F}_q$ 构成一个域。这一区别在此很重要，因为我们将用多项式构造新的环，而这些环一般不是域。
+
+\section{多项式环 $\mathbb{F}_q[x]$}
+\begin{definition}[多项式环]
+对域 $\mathbb{F}$，\emph{多项式环} $\mathbb{F}[x]$ 由所有有限表达式
+\[
+f(x) = a_0 + a_1 x + \cdots + a_d x^d,\qquad a_i\in\mathbb{F},
+\]
+组成，并配以多项式的加法和乘法。\emph{次数} $\deg f$ 是满足 $a_i\neq 0$ 的最大 $i$。它是以 $1$ 为单位元的交换环。
+\end{definition}
+
+逐个系数地看，多项式不过是一个向量：$f(x)=3x^4+2x^2+5$ 就是系数列表 $(5,0,2,0,3)$。多项式的加法就是这些系数向量的加法。新的要素是\emph{乘法}，而它并不是逐项进行的。
+
+\begin{proposition}[乘法即卷积]
+若 $f(x)=\sum_i a_i x^i$ 且 $g(x)=\sum_j b_j x^j$，则
+\[
+(fg)(x) = \sum_{k} c_k x^k, \qquad c_k = \sum_{i+j=k} a_i b_j.
+\]
+系数序列 $(c_k)$ 是 $(a_i)$ 与 $(b_j)$ 的\emph{卷积}。
+\end{proposition}
+
+例如 $(x+1)(x+2)=x^2+3x+2$，其中中间系数 $3=1\cdot 2+1\cdot 1$ 是交叉项之和。这种卷积正是 NTT 日后要加速的运算。
+
+\subsection{Sage 实验：多项式环}
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+R.<x> = PolynomialRing(F)
+f = 3*x^4 + 2*x^2 + 5
+print(f.degree())        # 4
+print(f.list())          # [5, 0, 2, 0, 3]: the coefficient vector
+print((x+1)*(x+2))       # x^2 + 3*x + 2
+\end{lstlisting}
+
+\section{欧几里得除法}
+使下文一切得以成立的唯一结构性事实是：域上的多项式可以像整数一样做带余除法。
+
+\begin{theorem}[{$\mathbb{F}[x]$ 中的除法算法}]
+对 $f,g\in\mathbb{F}[x]$ 且 $g\neq 0$，存在\emph{唯一的}多项式 $q$（商）和 $r$（余式），使得
+\[
+f = q\,g + r, \qquad \deg r < \deg g.
+\]
+\end{theorem}
+
+余式的唯一性使我们能够把每个多项式模一个固定的 $g$ 约简为次数低于 $\deg g$ 的单一规范形式。这个规范形式就是我们实际存储的系数向量。
+
+\section{商环}
+若不加限制，次数会在乘法下无限增长。我们通过宣布某个固定多项式等于零来驯服它。
+
+\begin{definition}[理想与商环]
+由 $f\in\mathbb{F}[x]$ 生成的\emph{主理想}是其所有倍式构成的集合 $(f)=\{f\cdot h : h\in\mathbb{F}[x]\}$。\emph{商环} $\mathbb{F}[x]/(f)$ 的元素是多项式模 $f$ 的剩余类；两个多项式若相差 $f$ 的一个倍式，则视为相同。运算先如在 $\mathbb{F}[x]$ 中那样进行，再模 $f$ 约简。
+\end{definition}
+
+由欧几里得除法，每个类都有唯一一个次数小于 $\deg f$ 的代表元，因此商并不是什么抽象的迷雾：它是一个具体的、由低次多项式组成的有限集合。
+
+\begin{proposition}[商的大小]
+若 $\mathbb{F}=\mathbb{F}_q$ 且 $\deg f = n$，则 $\mathbb{F}_q[x]/(f)$ 恰有 $q^n$ 个元素，与系数向量 $(c_0,\dots,c_{n-1})\in\mathbb{F}_q^n$ 一一对应。
+\end{proposition}
+
+因此作为集合，$R_q=\mathbb{Z}_q[x]/(x^n+1)$ 就是 $\mathbb{F}_q^n$；环结构在向量空间之上额外添加的是一种\emph{乘法}。
+
+\subsection{Sage 实验：构造商环}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+S.<y> = R.quotient(x^4 + 1)
+print(y^4)     # 16 == -1 mod 17: the relation x^4 = -1
+print(y^5)     # 16*y == -y
+\end{lstlisting}
+
+\section{商何时是域？}
+$\mathbb{F}[x]/(f)$ 是否为域，完全取决于 $f$ 能否分解。
+
+\begin{theorem}[不可约性与域]
+$\mathbb{F}[x]/(f)$ 是域当且仅当 $f$ 在 $\mathbb{F}$ 上不可约。若 $f$ 有非平凡分解，则商环含有零因子，只是一个环。
+\end{theorem}
+
+这是“$\mathbb{Z}/m\mathbb{Z}$ 是域当且仅当 $m$ 是素数”在多项式上的类比。它将在两处起作用。在 $\mathbb{Q}$ 上，模 $x^n+1$ 是不可约的（见下文），这使相应的数域具有整洁的结构；但在 $\mathbb{Z}_q$ 上，\emph{同一个}多项式被有意地选为可分解的，而这种分解恰恰是 NTT 所利用的。
+
+\section{模 $x^n+1$ 与分圆多项式}
+现代格密码方案把 $n$ 固定为 2 的幂，并模 $x^n+1$ 进行运算。这一选择并非装饰性的。
+
+\begin{definition}[分圆多项式]
+第 $m$ 个\emph{分圆多项式} $\Phi_m(x)$ 是 $m$ 次本原单位根在 $\mathbb{Q}$ 上的极小多项式；它的根恰好是全部 $m$ 次本原单位根。
+\end{definition}
+
+\begin{proposition}
+对 $n=2^k$，有 $x^n+1 = \Phi_{2n}(x)$，且它在 $\mathbb{Q}$ 上不可约。
+\end{proposition}
+
+于是 $\mathbb{Z}[x]/(x^n+1)$ 是分圆域 $\mathbb{Q}(\zeta_{2n})$ 的整数环——一个结构高度丰富、研究充分的对象，这也是它既能支持强安全性归约又能支持快速运算的深层原因。以 2 的幂次为模还使约简步骤的实现变得极其简单，下一节将说明这一点。
+
+\subsection{负循环回绕}
+关系 $x^n=-1$ 对系数向量有非常具体的作用。乘以 $x$ 会把每个系数向右移动一个槽位，而原本会从顶端掉出去的系数则回绕到槽位 $0$，并且符号翻转。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1, every node/.style={font=\small}]
+  \node[flownode, minimum width=14mm] (a0) at (0,0) {$c_0$};
+  \node[flownode, minimum width=14mm] (a1) at (2,0) {$c_1$};
+  \node[flownode, minimum width=14mm] (a2) at (4,0) {$c_2$};
+  \node[flownode, minimum width=14mm] (a3) at (6,0) {$c_3$};
+  \node[pqcgray, font=\scriptsize] at (0,-0.65) {slot $0$};
+  \node[pqcgray, font=\scriptsize] at (2,-0.65) {slot $1$};
+  \node[pqcgray, font=\scriptsize] at (4,-0.65) {slot $2$};
+  \node[pqcgray, font=\scriptsize] at (6,-0.65) {slot $3$};
+  \draw[flowarrow] (a0.east) -- (a1.west);
+  \draw[flowarrow] (a1.east) -- (a2.west);
+  \draw[flowarrow] (a2.east) -- (a3.west);
+  \draw[flowarrow, pqcorange, thick] (a3.north) to[out=60,in=120,looseness=1.3] node[above, midway, font=\scriptsize, pqcorange] {$\times(-1)$} (a0.north);
+\end{tikzpicture}
+\caption{在 $R_q=\mathbb{Z}_q[x]/(x^n+1)$ 中将 $c(x)=c_0+c_1x+c_2x^2+c_3x^3$ 乘以 $x$，会把每个系数向右移动一个槽位，图中所示为 $n=4$ 的情形（蓝色箭头）。从顶端掉出的系数并不是简单地重新出现：它以\emph{取负}的形式回到槽位 $0$（橙色箭头），因为该环的定义关系是 $x^n=-1$。具体地，$x\cdot c(x) = -c_3 + c_0x + c_1x^2 + c_2x^3$。这种负循环回绕（而非普通的循环移位）是基于环的格密码中最重要的单一结构性事实，它恰好就是算法~\ref{alg:polymul-negacyclic} 中实现的符号翻转。}
+\label{fig:negacyclic-wrap}
+\end{figure}
+
+把符号翻转贯彻到完整的乘积中，就得到\emph{负循环卷积}：$c(x)=a(x)b(x) \bmod (x^n+1)$ 的系数为
+\[
+c_k = \sum_{i+j=k} a_i b_j \;-\; \sum_{i+j=k+n} a_i b_j,
+\]
+即普通卷积减去越过 $n-1$ 次而回绕的部分。算法~\ref{alg:polymul-negacyclic} 是其直接的教科书式实现。
+
+\begin{algorithm}[H]
+\caption{模 $x^n+1$ 的多项式乘法}
+\label{alg:polymul-negacyclic}
+\begin{algorithmic}[1]
+\Require $a(x),b(x)\in R_q=\mathbb{Z}_q[x]/(x^n+1)$ 的系数数组 $a_0,\dots,a_{n-1}$ 与 $b_0,\dots,b_{n-1}$
+\Ensure $c(x)=a(x)b(x)\bmod(x^n+1)$ 的系数 $c_0,\dots,c_{n-1}$
+\State $c_0,\dots,c_{n-1} \gets 0,\dots,0$
+\For{$i = 0,\dots,n-1$}
+    \For{$j = 0,\dots,n-1$}
+        \State $k \gets i+j$
+        \If{$k < n$}
+            \State $c_k \gets c_k + a_i b_j$ \Comment{普通项，次数仍低于 $n$}
+        \Else
+            \State $c_{k-n} \gets c_{k-n} - a_i b_j$ \Comment{越过 $n-1$ 次而回绕：由于 $x^n=-1$，取负}
+        \EndIf
+    \EndFor
+\EndFor
+\State \Return $(c_0,\dots,c_{n-1}) \bmod q$
+\end{algorithmic}
+\end{algorithm}
+
+\section{模 $q$ 分裂：通往 NTT 之门}
+在 $\mathbb{Q}$ 上该模是不可约的，但在 $\mathbb{Z}_q$ 上未必如此，而我们\emph{希望}它能分解。
+
+\begin{proposition}[完全分裂]
+若 $2n \mid q-1$，则 $\mathbb{F}_q$ 含有 $2n$ 次本原单位根，$x^n+1$ 在 $\mathbb{F}_q$ 上分裂为 $n$ 个互不相同的一次因式，并且中国剩余定理给出环同构
+\[
+\mathbb{Z}_q[x]/(x^n+1) \;\cong\; \mathbb{F}_q \times \cdots \times \mathbb{F}_q \quad (n\text{ copies}).
+\]
+\end{proposition}
+
+在这一同构下，多项式乘法变成 $n$ 个标量的逐坐标乘法——一旦施加了该映射，这就是一个 $O(n)$ 的运算。映射本身及其逆由 NTT 以 $O(n\log n)$ 的代价计算（第~\ref{ch:ntt}~章）；这就是 NTT 存在的全部理由。
+
+\begin{remark}[Kyber 的部分分裂]
+Kyber 使用 $q=3329$ 和 $n=256$，而 $q-1 = 3328 = 2^8\cdot 13$。此时 $n=2^8$ 整除 $q-1$，但 $2n=2^9$ 不整除，因此 $\mathbb{F}_q$ 有 $256$ 次本原单位根，却没有 $512$ 次本原单位根。因而 $x^{256}+1$ 不能完全分裂；它分解为 $128$ 个不可约的\emph{二次式}，Kyber 的 NTT 把 $R_q$ 映射到 $\mathbb{F}_q[x]/(\text{quadratic})$ 的 $128$ 个副本，而不是 $256$ 个标量。原理完全相同——CRT 把一次乘法变为许多相互独立的小乘法——只是分块大小不同。
+\end{remark}
+
+\section{RLWE：有结构的 LWE}
+有了这个环，从 LWE 过渡到 RLWE 只是换了一套字母表：
+\[
+\underbrace{A\mathbf{s}+\mathbf{e}=\mathbf{b}}_{\text{LWE, over } \mathbb{F}_q^n}
+\qquad\longrightarrow\qquad
+\underbrace{a(x)\,s(x)+e(x)=b(x)}_{\text{RLWE, over } R_q}.
+\]
+随机矩阵 $A$ 被有结构的多项式乘法所取代，因为一个多项式就编码了一个完整的负循环线性映射；秘密和误差也变成了多项式。相对于无结构的矩阵，这可以大幅减少存储，但并不存在与参数无关的“$n$ 倍”尺寸定理：比较结果取决于维数、样本数、模数、安全目标和编码方式。RLWE 的精确构造是第~\ref{ch:rlwe}~章的主题。
+
+\section{实验}
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+S.<y> = R.quotient(x^4 + 1)
+
+# 1. the quotient relation and its powers
+print(y^4, y^5, y^8)          # -1, -y, 1
+
+# 2. negacyclic wrap-around by hand: multiply by y
+c = 2 + 3*y + 4*y^2 + 5*y^3
+print(y * c)                   # top coeff returns to slot 0 negated
+
+# 3. a quotient element is a length-4 coefficient vector
+print((3*y^3 + y + 2).lift().list())
+\end{lstlisting}
+
+\section{小结}
+本章从零开始构建了如下的环：
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1)
+\]
+它以多项式环 $\mathbb{F}_q[x]$ 为起点，通过商去理想 $(x^n+1)$ 使其有限化；其元素是长度为 $n$ 的系数向量，其乘法是负循环卷积。选取 $n$ 为 2 的幂使模成为一个结构优良的分圆多项式，而选取 $q$ 使该模在模 $q$ 下分裂，则打开了通往 NTT 的大门。下一章\emph{格}将从这种代数视角转向几何视角，底层问题的困难性真正就存在于那里。
+
+\printbibliography[heading=chapterrefs]

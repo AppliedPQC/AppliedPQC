@@ -5,6 +5,7 @@ Stephen Duan and Wei Li.
 
 - Repository: https://github.com/AppliedPQC/AppliedPQC
 - Read online: https://appliedpqc.io/book.html
+- 中文版在线阅读: https://appliedpqc.io/zh-book.html
 - Live PDF: https://appliedpqc.io/apqc.pdf
 - X: https://x.com/AppliedPQC
 

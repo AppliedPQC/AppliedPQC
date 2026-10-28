@@ -1,0 +1,191 @@
+% source: eebaaf5162f08f7bead66337d06f395202583aa3
+\chapter{数论变换（NTT）}
+\label{ch:ntt}
+
+\section{目的与范围}
+
+NTT 是离散傅里叶变换在有限域上的类比。它改变表示方式，使有结构的多项式乘法的代价大为降低。它是 ML-KEM 所规定的算术中不可或缺的组成部分，而不仅仅是一种可选的优化~\cite{fips203}。
+
+本章区分三种常被混为一谈的情形：
+\begin{enumerate}
+  \item 用于 $\mathbb{F}_q[x]/(x^n-1)$ 的循环 NTT；
+  \item 用于 $\mathbb{F}_q[x]/(x^n+1)$ 的完全标量负循环变换，前提是存在 $2n$ 次本原单位根；以及
+  \item ML-KEM 的部分 NTT，其输出由 128 个模二次多项式的一次剩余组成。
+\end{enumerate}
+
+\section{单位根与循环变换}
+
+若 $\omega\in\mathbb{F}_q$ 的乘法阶为 $n$，则在
+\[
+1,\omega,\omega^2,\ldots,\omega^{n-1}
+\]
+处求值，可以把模 $x^n-1$ 的乘法等同于 $n$ 个标量乘积。这要求 $n\mid(q-1)$。当 $n$ 是 2 的幂时，标准的基 2 蝶形网络以 $O(n\log n)$ 次运算实现这一映射。
+
+对于负循环商 $x^n+1$，标量求值点必须是 $x^n+1$ 的根，因此需要一个 $2n$ 次本原单位根。这一区别是结构性的，而非表面上的：一个只针对 $n$ 次单位根和循环卷积编写的算法，并不会自动成为 ML-KEM 的算法。
+
+\subsection{在玩具域中寻找单位根}
+
+$\mathbb{F}_{17}$ 的非零元素构成一个 $16$ 阶群。若 $g$ 是生成元，则 $g^2$ 的阶为 $8$，可以作为 8 点循环 NTT 的 $\omega$。SageMath 可以直接检验这一条件：
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+g = F.multiplicative_generator()
+omega = g^2
+print(omega.multiplicative_order())  # 8
+\end{lstlisting}
+
+关键的检验是乘法阶，而不仅仅是某个元素恰好满足一个孤立的幂等式。对系数向量 $(a_0,\ldots,a_{n-1})$，循环变换记录
+\[
+\widehat a_i=a(\omega^i)=\sum_{j=0}^{n-1}a_j\omega^{ij},\qquad 0\le i<n.
+\]
+逆变换使用 $\omega^{-1}$ 并乘以 $n^{-1}$，因此 NTT 是一种可逆的表示变换，而不是有损的采样操作。
+
+\section{一个完整的玩具版循环 NTT}
+
+下面的 SageMath 程序在循环环 $\mathbb{F}_{17}[x]/(x^8-1)$ 中完整地执行正变换、逐点乘积和逆变换。它有意只是一个玩具模型，而不是 ML-KEM。
+
+\begin{lstlisting}[language=Python]
+q = 17
+F = GF(q)
+n = 8
+g = F.multiplicative_generator()
+omega = g^((q - 1)//n)
+assert omega.multiplicative_order() == n
+
+def ntt(a):
+    return [sum(a[j] * omega^(i*j) for j in range(n)) for i in range(n)]
+
+def intt(A):
+    n_inv = F(n)^(-1)
+    return [n_inv * sum(A[i] * omega^(-i*j) for i in range(n))
+            for j in range(n)]
+
+a = vector(F, [1, 2, 3, 0, 0, 0, 0, 0])
+b = vector(F, [4, 5, 0, 0, 0, 0, 0, 0])
+A, B = ntt(a), ntt(b)
+c = vector(F, intt([A[i]*B[i] for i in range(n)]))
+print(c)                 # (4, 13, 5, 15, 0, 0, 0, 0)  (22 = 5 in GF(17))
+print(intt(ntt(a)) == list(a))  # True
+\end{lstlisting}
+
+这段代码在真正的本原单位根 \texttt{omega} 的各次幂处求值，使用了逆变换，并检验了重构结果。因此它演示的确实是 NTT，而不同于在毫不相关的点 $0,1,\ldots,n-1$ 处求值。
+
+\subsection{跟踪一个乘积经过变换的全过程}
+
+对输入多项式 $a(x)=1+2x+3x^2$ 与 $b(x)=4+5x$，直接相乘得到 $4+13x+22x^2+15x^3$。该程序在概念上分四步计算出同样的结果：
+\begin{enumerate}
+  \item 在 $1,\omega,\ldots,\omega^7$ 处对 $a$ 求值；
+  \item 在相同的点处对 $b$ 求值；
+  \item 将八对值分别相乘；以及
+  \item 施加逆变换，得到 $(4,13,22,15,0,0,0,0)$。
+\end{enumerate}
+由于玩具环是模 $x^8-1$ 的，且乘积的次数低于八，所以不会出现可见的回绕。更高次的项将以循环方式而非负循环方式回绕。
+
+\section{蝶形运算与复杂度}
+
+直接的代码有意写得一目了然，但它由每个输入计算每个输出，因此需要 $O(n^2)$ 次域运算。实用的基 2 NTT 使用蝶形运算来复用计算，所依据的正是 Cooley 和 Tukey 为 DFT 发表的分治递归~\cite{cooleytukey1965}。一次蝶形运算利用旋转因子 $\omega^k$ 将两个值 $u$ 与 $v$ 组合：
+\[
+(u,v)\longmapsto(u+\omega^k v,\;u-\omega^k v).
+\]
+共有 $\log_2n$ 级，每级 $O(n)$ 的工作量，总计 $O(n\log n)$ 次运算。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=1.2cm,y=0.72cm,every node/.style={font=\scriptsize}]
+  \foreach \y/\name in {0/$a_0$,1/$a_1$,2/$a_2$,3/$a_3$}
+    \node[left] at (0,-\y) {\name};
+  \foreach \y/\name in {0/$\hat a_0$,1/$\hat a_1$,2/$\hat a_2$,3/$\hat a_3$}
+    \node[right] at (4,-\y) {\name};
+  \foreach \u/\v in {0/1,2/3} {
+    \draw[pqcteal,thick] (0,-\u)--(2,-\u); \draw[pqcteal,thick] (0,-\u)--(2,-\v);
+    \draw[pqcteal,thick] (0,-\v)--(2,-\u); \draw[pqcteal,thick] (0,-\v)--(2,-\v);
+  }
+  \foreach \u/\v in {0/2,1/3} {
+    \draw[pqcblue,thick] (2,-\u)--(4,-\u); \draw[pqcblue,thick] (2,-\u)--(4,-\v);
+    \draw[pqcblue,thick] (2,-\v)--(4,-\u); \draw[pqcblue,thick] (2,-\v)--(4,-\v);
+  }
+  \node[pqcteal] at (1,0.65) {stage 1};
+  \node[pqcblue] at (3,0.65) {stage 2};
+\end{tikzpicture}
+\caption{一个概念性的四点基 2 蝶形网络。图中展示的是计算复用的模式，而不是 ML-KEM 完整的部分 NTT。}
+\label{fig:toy-ntt-butterfly}
+\end{figure}
+
+\section{为什么 ML-KEM 有所不同}
+
+ML-KEM 使用 $q=3329$ 和 $n=256$。由于
+\[
+q-1=3328=2^8\cdot13,
+\]
+$\mathbb{Z}_{3329}$ 中存在 $256$ 次本原单位根，但不存在 $512$ 次本原单位根。特别地，$x^{256}+1$ 不能分裂为 256 个一次因式。取 256 次本原单位根 $\zeta=17$，FIPS~203 给出分解式
+\[
+x^{256}+1=\prod_{i=0}^{127}\left(x^2-\zeta^{2\operatorname{BitRev}_7(i)+1}\right).
+\]
+因此，ML-KEM 的 NTT 是从
+\[
+R_q=\mathbb{Z}_{3329}[x]/(x^{256}+1)
+\]
+到 128 个二次剩余环之积的同构，而不是到 256 个标量求值的同构~\cite[Sec.~4.3]{fips203}。
+
+\subsection{三层次的思维模型}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.24\textwidth}p{0.26\textwidth}p{0.31\textwidth}}
+\toprule
+情形 & 所需的单位根 / 分解 & 变换后的乘法 \\
+\midrule
+循环 NTT，$x^n-1$ & $n$ 次本原单位根 & $n$ 个标量乘积 \\
+完全负循环 NTT，$x^n+1$ & $2n$ 次本原单位根 & 在 $x^n+1$ 的根处的 $n$ 个标量乘积 \\
+ML-KEM，$\mathbb{Z}_{3329}$ 上的 $x^{256}+1$ & 128 个二次因式 & 128 个二次基乘积 \\
+\bottomrule
+\end{tabular}
+\caption{代数目标各不相同的几种相关变换。只有第三行描述的是 ML-KEM。}
+\label{tab:ntt-three-settings}
+\end{table}
+
+\section{ML-KEM 的 NTT 域中的乘法}
+
+每个 NTT 域坐标由两个系数 $a_0+a_1X$ 表示，并模 $X^2-\gamma$ 约简。对两个这样的剩余，乘法为
+\[
+(a_0+a_1X)(b_0+b_1X)\bmod(X^2-\gamma)
+= (a_0b_0+a_1b_1\gamma)+(a_0b_1+a_1b_0)X.
+\]
+FIPS~203 的 \texttt{MultiplyNTTs} 对 128 个坐标对中的每一对施加这一基本情形乘法。因此，只有把每个“点”理解为一个二次分量时，“逐点乘法”这一说法才是准确的；它并不是 256 个相互独立的标量乘法。
+
+\begin{algorithm}[H]
+\caption{ML-KEM 的 NTT 域乘法（概念形式）}
+\label{alg:mlkem-base-multiply}
+\begin{algorithmic}[1]
+\Require NTT 表示 $\hat f,\hat g\in\mathbb{Z}_q^{256}$
+\Ensure $\hat h=\hat f\times_{T_q}\hat g$
+\For{$i=0$ to $127$}
+  \State $\gamma\gets\zeta^{2\operatorname{BitRev}_7(i)+1}$
+  \State $\hat h_{2i}\gets \hat f_{2i}\hat g_{2i}+\gamma\hat f_{2i+1}\hat g_{2i+1}\pmod q$
+  \State $\hat h_{2i+1}\gets \hat f_{2i}\hat g_{2i+1}+\hat f_{2i+1}\hat g_{2i}\pmod q$
+\EndFor
+\State \Return $\hat h$
+\end{algorithmic}
+\end{algorithm}
+
+正变换与逆变换本身使用蝶形网络和预先计算的旋转因子，具体由 FIPS~203 规定。这里有意不从通用的基 2 例程出发去重建它们的实现细节：符合标准的实现必须遵循标准中的算法、界和测试向量。
+
+\section{实用实现检查清单}
+
+在把一个 NTT 实现当作 ML-KEM 实现之前，请逐一核实以下各项。
+\begin{itemize}
+  \item 系数环是 $\mathbb{Z}_{3329}[x]/(x^{256}+1)$，而不是某个循环的替代品。
+  \item 正变换与逆变换遵循规定的顺序和旋转因子。
+  \item NTT 域乘法以相应的二次模作用于 128 个系数对。
+  \item 除变换本身之外，模约简、序列化、采样和界也都遵循 FIPS~203。
+  \item 实现已经过官方已知答案测试的检验，并针对其所要求的侧信道模型进行了工程设计。
+\end{itemize}
+
+这份清单说明了为什么一个简短的课堂版变换对建立直觉很有价值，但绝不能被描述为 ML-KEM 的完整实现。
+
+\section{小结}
+
+NTT 并不只是“在若干个整数处对多项式求值”。它是在单位根处进行的有结构的变换，并附带其逆变换。循环变换使用 $x^n-1$；完全标量负循环变换需要一个 $2n$ 次本原单位根。ML-KEM 并不直接采用这两种简化图景中的任何一种：它的部分 NTT 把 $R_q$ 映射为 128 个二次分量，并用基本情形的二次乘积将它们相乘。
+
+\printbibliography[heading=chapterrefs]

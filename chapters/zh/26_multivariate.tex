@@ -1,0 +1,247 @@
+% source: 14391e5cff98089d30e68f60cc7a21372a5f6348
+\chapter{多变量密码}
+\chaptermark{多变量密码}
+\label{ch:multivariate}
+
+\section{学习目标}
+
+至此，本书已经考察了格、哈希函数和码。本章开启第四个同样相互独立的困难问题家族。多变量密码（multivariate cryptography）舍弃了向量、哈希和码字，转而采用一种截然不同的对象：非线性方程组。它的安全性建立在一个早于密码学本身的事实之上——在有限域上求解\emph{多变量二次}方程组，一般而言在计算上是不可行的，并且尚无已知的量子算法能改变这一点。这个想法由来已久（可追溯到 20 世纪 80 年代末和 90 年代~\cite{ding2006}），其历史也跌宕起伏：许多具体方案已被攻破，有时是在人们认为它们安全多年之后。这段历史本身就值得研究，因为它比任何其他家族都更尖锐地揭示了一个结构化的陷门是如何被逆向破解的。
+
+学完本章后，你应当能够：
+
+\begin{enumerate}
+  \item 陈述\emph{多变量二次}（MQ）问题——在 $\mathbb{F}_q$ 上求解二次方程组——并解释为什么它的 NP 困难性（除 Grover 之外没有已知的量子捷径）是这一家族的安全基础；
+  \item 在一个小域上演算一个极小的二次方程组，并理解为什么穷举搜索的代价是 $q^n$；
+  \item 描述共同的陷门思想：一个看似随机的公开方程组 $P = S \circ F \circ T$，它由一个易于求逆的\emph{中心映射} $F$ 构成，并隐藏在两个秘密线性映射 $S$ 与 $T$ 之间；
+  \item 解释为什么多变量方案几乎总是\emph{签名}——签名极小、公钥极大——而不是 KEM；
+  \item 描述\emph{油醋}（oil-and-vinegar）构造及其非平衡变体 UOV，理解为什么分层变体 Rainbow 曾是 NIST 的决赛方案，并知道 Rainbow 已于 2022 年被攻破；
+  \item 将多变量密码定位为五个后量子家族之一，并如实指出——与格家族和哈希家族不同——截至本书写作时，它尚无任何 FIPS 标准。
+\end{enumerate}
+
+\paragraph{本章为何重要。}
+后量子安全是一个由相互独立的押注构成的投资组合，而多变量密码是其中颇具特色的一项持仓。格家族和码家族既提供加密也提供签名，而多变量家族几乎完全是一种\emph{签名}技术，而且是一种专门化的技术：它的签名属于所有后量子方案中最小之列，代价是以千字节乃至兆字节计的公钥。它也是旗舰候选方案被攻破得最为公开的家族，这使它成为陷门设计中核心张力的一个案例研究——让合法签名者得以对方程组求逆的那个结构，恰恰也是攻击者试图探测的结构。同时理解其前景与脆弱性，才能完整地把握后量子密码的全貌~\cite{bernstein2009}。
+
+\section{困难问题：多变量二次方程}
+
+对攻击者而言，本章中的每个方案都归结为同一个底层任务：给定一个二次方程组，求出一个公共解。
+
+\begin{definition}[多变量二次（MQ）问题]
+设 $\mathbb{F}_q$ 为有限域。给定 $m$ 个二次多项式 $p_1,\dots,p_m \in \mathbb{F}_q[x_1,\dots,x_n]$ 和一个目标向量 $y = (y_1,\dots,y_m) \in \mathbb{F}_q^m$，若存在，求一个向量 $x = (x_1,\dots,x_n) \in \mathbb{F}_q^n$，使得
+\[
+p_k(x) = y_k \qquad \text{for all } k = 1,\dots,m .
+\]
+每个多项式的形式为
+\[
+p_k(x) = \sum_{1 \le i \le j \le n} a^{(k)}_{ij}\, x_i x_j \;+\; \sum_{i=1}^{n} b^{(k)}_i\, x_i \;+\; c^{(k)} ,
+\]
+其中所有系数都属于 $\mathbb{F}_q$。
+\end{definition}
+
+单个二次方程是容易的；而由大量共享变量的二次方程构成的方程组则不然。判定这样的方程组是否有解是 \textbf{NP 完全}的，即使在最小的域 $\mathbb{F}_2$ 上也是如此~\cite{ding2006}。直观上，二次项将变量紧密地耦合在一起，以至于固定其中一部分并不能直接简化其余部分，也不存在类似于高斯消元的线性代数捷径。
+
+最好的经典攻击是计算方程组的 \textbf{Gr\"obner 基}（借助 $F_4$/$F_5$ 等算法），或者运行与之密切相关的 \textbf{XL} 线性化方法；一旦 $m$ 与 $n$ 相当，对于看似随机的实例，二者的运行时间都是 $n$ 的指数级。量子计算机并不能推翻这一点。与本书这一部分中的每个家族一样，最强的量子方法是应用 Grover 式搜索，至多带来平方根级别的加速，即“量子威胁”一章中所描述的同样温和的削弱。不存在 Shor 式的崩塌：MQ 没有已知的高效量子算法，将参数加倍即可恢复量子搜索可能削弱的任何安全余量。
+
+\begin{example}[$\mathbb{F}_2$ 上的一个极小方程组]
+取 $\mathbb{F}_2 = \{0,1\}$，其中加法是 XOR，乘法是 AND，并注意在该域中 $x_i^2 = x_i$，因此真正的二次单项式只有 $i \neq j$ 的乘积 $x_i x_j$。考虑三个变量上的两个二次多项式
+\[
+p_1(x) = x_1 x_2 + x_1 x_3 + x_2 , \qquad
+p_2(x) = x_2 x_3 + x_1 + x_3 ,
+\]
+以及目标 $y = (1,0)$。我们要寻找 $x \in \mathbb{F}_2^3$，使得 $p_1(x) = 1$ 且 $p_2(x) = 0$。由于只有 $2^3 = 8$ 个候选，我们可以直接枚举；这样做会得到三个解，其中之一是 $x = (0,1,0)$：
+\[
+p_1(0,1,0) = 0 + 0 + 1 = 1 , \qquad p_2(0,1,0) = 0 + 0 + 0 = 0 .
+\]
+穷举搜索在这里之所以奏效，只是因为域和维数都极小。一般情况下，攻击者面对的是 $q^n$ 个候选向量，而实际方案选择的 $q$ 和 $n$ 会使 $q^n$——更准确地说，是 Gr\"obner/XL 攻击的代价，它远低于 $q^n$ 但仍是指数级的——大到天文数字。
+\end{example}
+
+这就是安全基础。如果我们能交给攻击者一个看似随机的二次方程组，那么在没有陷门的情况下伪造就意味着要求解一个 MQ 实例。
+
+\section{陷门：伪装起来的可解方程组}
+
+困难之处是我们所熟悉的：如果公开方程组真的是随机的，那么\emph{任何人}——即便是合法的密钥持有者——都无法求解它，也就无从签名。多变量密码解决这一问题的方式与基于码的密码完全相同：将一个容易的问题隐藏在一个看似困难的问题之中。
+
+\paragraph{中心映射。}
+秘密始于一个\textbf{中心映射} $F = (f_1,\dots,f_m) : \mathbb{F}_q^n \to \mathbb{F}_q^m$，它是一个经过特殊结构设计、能够被\emph{高效求逆}的二次方程组：给定目标 $a \in \mathbb{F}_q^m$，密钥持有者能迅速找到某个满足 $F(b) = a$ 的 $b$。使 $F$ 可逆的特定结构，正是区分各个多变量方案的设计选择；下一节的油醋结构是其中最经久的例子。
+
+\paragraph{伪装。}
+如果 $F$ 公开放置，其结构将一目了然，攻击者同样可以对它求逆。因此，它被隐藏在两个秘密的可逆\emph{仿射}（就我们的目的而言，即线性）映射之间：一个作用于输入的 $n \times n$ 映射 $T$，以及一个作用于输出的 $m \times m$ 映射 $S$。公钥是复合映射
+\[
+P = S \circ F \circ T ,
+\]
+展开后以 $n$ 个变量上 $m$ 个显式二次多项式的形式发布。与线性映射 $S$ 和 $T$ 复合使 $P$ 仍保持为二次的，但它将系数搅拌得如此彻底，以至于 $F$ 的特殊形状消失了：对于不掌握 $S$、$F$ 和 $T$ 的任何人而言，公开方程组 $P$ 看起来像一个随机的二次方程组，而求解它看起来就是 MQ 问题。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm, every node/.style={font=\small}]
+  \node[keynode, text width=2.1cm] (T) {secret $T$\\[1pt]\scriptsize $n\times n$ linear};
+  \node[keynode, text width=2.7cm, right=of T] (F) {central map $F$\\[1pt]\scriptsize easy to invert};
+  \node[keynode, text width=2.1cm, right=of F] (S) {secret $S$\\[1pt]\scriptsize $m\times m$ linear};
+  \node[flownode, text width=3.0cm, right=13mm of S] (P) {public map\\[1pt] $P = S\circ F\circ T$\\[1pt]\scriptsize looks random};
+  \draw[flowarrow] (T) -- (F);
+  \draw[flowarrow] (F) -- (S);
+  \draw[flowarrow] (S) -- (P);
+  \node[font=\scriptsize, pqcteal, below=6mm of F, align=center]
+    {structured:\\ invert with the trapdoor};
+  \node[font=\scriptsize, pqcorange, below=6mm of P, align=center]
+    {random-looking:\\ solving is MQ};
+\end{tikzpicture}
+\caption{作为伪装的陷门。密钥持有者能够高效求逆的结构化中心映射 $F$，被夹在两个秘密线性映射 $T$ 与 $S$ 之间。所发布的复合映射 $P = S \circ F \circ T$ 是一个显式的二次多项式方程组，对于不掌握秘密因子的任何人而言，它与随机方程组不可区分。任何人都能\emph{计算} $P$ 的值；只有陷门持有者能对它\emph{求逆}。}
+\label{fig:mv-disguise}
+\end{figure}
+
+\paragraph{用于签名，而非加密。}
+请注意哪个方向是容易的。在某一点上\emph{计算} $P$ 的值很廉价，且无需任何秘密——只是把数字代入多项式而已。对 $P$ \emph{求逆}，即找到满足 $P(x) = y$ 的 $x$，在没有陷门的情况下是困难的。这种不对称性与加密方案恰好相反：在加密方案中，任何人都必须能够加密（计算正向），而只有密钥持有者才能解密。但它与\textbf{签名}方案完美契合：要对消息 $M$ 签名，先将其哈希为目标 $y = \mathcal{H}(M) \in \mathbb{F}_q^m$，再利用陷门求逆，得到满足 $P(x) = y$ 的签名 $x$；要验证签名，任何人都可以计算 $P(x)$ 并检查它是否等于 $\mathcal{H}(M)$。正因如此，多变量方案几乎总是签名方案。加密变体虽然存在，但表现不佳，而这一家族的优势——极小的签名和快速的验证——真正体现在签名上。
+
+\section{油醋方案}
+
+至今仍屹立不倒的最古老的中心映射结构是\textbf{油醋}结构，由 Patarin 提出，并由 Kipnis、Patarin 和 Goubin 于 1999 年以其非平衡形式加以分析~\cite{kpg1999}。它的求逆技巧堪称线性代数的一个小奇迹。
+
+\begin{definition}[油醋中心映射]
+将 $n$ 个变量划分为 $v$ 个\emph{醋}变量 $x_1,\dots,x_v$ 和 $o$ 个\emph{油}变量 $x_{v+1},\dots,x_{v+o}$，其中 $n = v + o$。若一个二次多项式 $f_k$ 的每个二次项都至少包含一个醋变量——等价地说，没有任何两个油变量相乘——则称它是\emph{油醋}型的：
+\[
+f_k(x) = \sum_{i=1}^{v}\sum_{j=1}^{n} \alpha^{(k)}_{ij}\, x_i x_j
+       \;+\; \sum_{i=1}^{n} \beta^{(k)}_i\, x_i \;+\; \gamma^{(k)} .
+\]
+中心映射为 $F = (f_1,\dots,f_o)$，每个油变量对应一个多项式。
+\end{definition}
+
+油变量之所以得名，是因为它们就像水中的油一样，彼此之间从不混合——只与醋混合。正是这唯一的限制使 $F$ 可逆。
+
+\begin{proposition}[通过线性化求逆]
+将醋变量固定为任意的域元素 $x_1 = r_1,\dots,x_v = r_v$。那么，每个 $f_k$ 若仅视为其余油变量的函数，便是\emph{线性}的：每个保留下来的二次项都含有一个醋因子，而它现在是常数。因此，求解 $F = a$ 归结为关于 $o$ 个油未知数的 $o$ 个线性方程构成的方程组，可以用高斯消元求解。
+\end{proposition}
+
+因此，要在目标 $a$ 上对 $F$ 求逆：为醋变量选取随机值，代入后求解所得的关于油变量的线性方程组。如果该线性方程组恰好是奇异的，就重新随机化醋变量的值并再次尝试。这一过程很快，它正是签名中所用的陷门步骤 $F^{-1}$。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm and 9mm, every node/.style={font=\small}]
+  % signing lane (right-to-left inversion), drawn left-to-right for reading
+  \node[keynode, text width=2.0cm] (y) {digest\\ $y=\mathcal{H}(M)$};
+  \node[keynode, text width=1.5cm, right=of y] (Si) {$S^{-1}$};
+  \node[keynode, text width=2.1cm, right=of Si] (Fi) {$F^{-1}$\\[1pt]\scriptsize trapdoor};
+  \node[keynode, text width=1.5cm, right=of Fi] (Ti) {$T^{-1}$};
+  \node[keynode, text width=1.9cm, right=of Ti] (x) {signature $x$};
+  \draw[flowarrow] (y) -- (Si);
+  \draw[flowarrow] (Si) -- (Fi);
+  \draw[flowarrow] (Fi) -- (Ti);
+  \draw[flowarrow] (Ti) -- (x);
+  \node[font=\scriptsize, pqcorange, left=3mm of y, align=right] {\textbf{Sign}\\ (secret)};
+  % verifying lane
+  \node[flownode, text width=1.9cm, below=14mm of y] (x2) {signature $x$};
+  \node[flownode, text width=3.2cm, right=16mm of x2] (ev) {evaluate public $P$\\[1pt]\scriptsize $P = S\circ F\circ T$};
+  \node[flownode, text width=2.6cm, right=16mm of ev] (chk) {$P(x)\stackrel{?}{=}\mathcal{H}(M)$};
+  \draw[flowarrow] (x2) -- (ev);
+  \draw[flowarrow] (ev) -- (chk);
+  \node[font=\scriptsize, pqcteal, left=3mm of x2, align=right] {\textbf{Verify}\\ (public)};
+\end{tikzpicture}
+\caption{利用多变量陷门进行签名与验证。\emph{签名}时，摘要 $y = \mathcal{H}(M)$ 被反向推过伪装——撤销 $S$，用陷门对结构化中心映射 $F$ 求逆，撤销 $T$——得到满足 $P(x) = y$ 的签名 $x$。\emph{验证}时，任何人都可在 $x$ 处计算公开映射 $P$ 的值，并将结果与摘要比对。只有中间步骤 $F^{-1}$ 需要秘密；验证通道上的一切都是公开且廉价的。}
+\label{fig:mv-signverify}
+\end{figure}
+
+\begin{remark}
+在纯粹的单层 UOV 中，外层映射 $S$ 可以省略（单层的输出可以重新混合进中心映射而不削弱它），因此许多文献将公钥写作 $P = F \circ T$。我们保留显式的 $S$，以与一般的 $P = S \circ F \circ T$ 模板保持一致，而这一模板对于下文的分层方案才是正确的图景。
+\end{remark}
+
+\paragraph{平衡与非平衡。}
+Patarin 最初的方案取 $v = o$。Kipnis 和 Shamir 攻破了这一平衡版本，而由 Kipnis、Patarin 和 Goubin 给出的修补办法是让方案\emph{非平衡}——取远多于油变量的醋变量，即 $v \gg o$~\cite{kpg1999}。这就是\textbf{非平衡油醋（UOV）}方案。额外的醋变量扩大了攻击者必须找到的隐藏子空间，从而挫败了针对平衡版本的攻击。采用保守参数的 UOV 已经抵御攻击二十余年，是整个家族中稳定的核心。
+
+\begin{algorithm}[H]
+\caption{UOV 密钥生成（教学形式）}
+\label{alg:uov-keygen}
+\begin{algorithmic}[1]
+\Require 域 $\mathbb{F}_q$；参数 $v$（醋）、$o$（油）、$n = v+o$、$m = o$
+\Ensure 公钥 $P$；秘密钥 $(F, S, T)$
+\State 选取一个油醋中心映射 $F = (f_1,\dots,f_o)$ \Comment{可通过线性化求逆}
+\State $T \gets$ $\mathbb{F}_q$ 上随机的可逆 $n\times n$ 线性映射 \Comment{隐藏输入的划分}
+\State $S \gets$ $\mathbb{F}_q$ 上随机的可逆 $m\times m$ 线性映射 \Comment{混合输出}
+\State $P \gets S \circ F \circ T$，展开为 $m$ 个显式二次多项式 \Comment{看似随机}
+\State \Return $\big(\,P,\ (F, S, T)\,\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{UOV 签名（教学形式）}
+\label{alg:uov-sign}
+\begin{algorithmic}[1]
+\Require 消息 $M$；秘密钥 $(F, S, T)$
+\Ensure 签名 $x \in \mathbb{F}_q^n$
+\State $y \gets \mathcal{H}(M) \in \mathbb{F}_q^m$ \Comment{将消息哈希为目标}
+\State $a \gets S^{-1}(y)$ \Comment{撤销输出混合}
+\State 为醋变量选取随机值；求解所得的关于油变量的线性方程组，得到满足 $F(b) = a$ 的 $b$ \Comment{陷门步骤；若奇异则重试}
+\State $x \gets T^{-1}(b)$ \Comment{撤销输入映射}
+\State \Return $x$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{UOV 验证（教学形式）}
+\label{alg:uov-verify}
+\begin{algorithmic}[1]
+\Require 消息 $M$；签名 $x$；公钥 $P$
+\Ensure 接受或拒绝
+\State \textbf{if} $P(x) = \mathcal{H}(M)$ \textbf{then} \Return accept \textbf{else} \Return reject \Comment{只需计算公开二次多项式的值}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Rainbow：分层，以及陨落。}
+\textbf{Rainbow} 将若干个油醋映射分层堆叠，每一层的变量充当下一层的醋变量。与普通 UOV 相比，分层缩小了密钥和签名，凭借这一优势，Rainbow 作为三个签名决赛方案之一进入了 NIST 后量子项目的\emph{第三轮}。随后，在 2022 年，Beullens 找到了一种密钥恢复攻击，它利用了分层引入的额外代数结构，在单台笔记本电脑上用大约一个周末的时间，恢复出了所声称的最低安全级别下的 Rainbow 私钥~\cite{beullens2022}。这次攻破并未触及 MQ 问题本身，也未触及普通 UOV；它利用的是 Rainbow \emph{特有的}分层结构，而事实证明这一结构泄露的信息比其设计者所意识到的更多。Rainbow 随后退出了标准化进程。
+
+\paragraph{这一家族的现状。}
+密码学界从中得出的教训是退回到更保守、结构更少的 UOV。截至本书写作时，若干多变量签名——\textbf{UOV} 本身、\textbf{MAYO}（一种密钥更小的 UOV 变体，使用一种“鞭打”（whipping）技术来复用一个紧凑映射）以及 \textbf{QR-UOV}（一种压缩密钥的商环变体）——都是 NIST 附加签名“入场通道”（on-ramp）流程中的候选方案，这一轮次专门为将签名组合扩展到格标准和哈希标准之外而开设。它们都不是 FIPS 标准，而且该流程仍在进行中；它们的地位可能会发生变化。
+
+\section{权衡与现状}
+
+多变量签名占据了设计空间中一个非常特殊的角落，表~\ref{tab:mv-tradeoffs} 列出了这笔交易的面貌。其签名异常小——通常为几十到一两百字节，与前量子时代的 ECDSA 相当甚至更小——而验证只是一批多项式求值，因而很快。代价在于公钥，它存储了 $n$ 个变量上 $m$ 个二次多项式的系数。这大约是 $m \cdot n^2 / 2$ 个域元素，随维数呈二次增长，因此公钥从几十千字节到超过一兆字节不等，并且没有可以重新生成它们的种子，原因与基于码的情形相同：可压缩的公钥会携带攻击者可以利用的结构。密钥生成的代价以及 KEM 的缺失，补全了这一概貌。
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+性质 & 多变量签名（UOV 家族） \\
+\midrule
+原语          & 仅限签名（无实用的 KEM） \\
+签名大小     & 非常小（几十到几百字节） \\
+公钥大小    & 非常大（几十 KB 到 $>1$\,MB） \\
+验证       & 快（计算公开二次多项式的值） \\
+签名            & 中等（对中心映射求逆） \\
+困难性假设 & MQ：求解随机多变量二次方程组 \\
+\bottomrule
+\end{tabular}
+\caption{多变量签名的交易。极小的签名和快速的验证是以一个非常大且不可压缩的公钥换来的，而且这一家族只提供签名，不提供实用的密钥封装机制。这几乎是第~\ref{ch:slhdsa}~章中基于哈希的签名的镜像：后者的公钥极小，而签名很大。}
+\label{tab:mv-tradeoffs}
+\end{table}
+
+\paragraph{现状。}
+FIPS 标准（ML-KEM、ML-DSA、SLH-DSA、FN-DSA）中没有任何多变量方案；这些标准取自格家族和哈希家族。这一家族最突出的标准化候选方案 Rainbow 已于 2022 年被攻破并退出。截至本书写作时，保守的核心方案 UOV 以及更紧凑的变体 MAYO 和 QR-UOV，正在 NIST 的附加签名轮次中接受评估，结果尚未确定。如果这些方案获得标准化，其实际吸引力在于一个小众但真实的领域：签名被持续传输或存储、而公钥很少分发的场合，在这些场合中，小签名远比大密钥更为重要。
+
+\section{常见陷阱}
+
+\paragraph{陷阱 1：因为 MQ 是困难的，就认定结构化的陷门是安全的。}
+这是这一家族的标志性隐患，而 Rainbow 就是它的警示故事。公钥\emph{并不是}一个随机的 MQ 实例——它是 $S \circ F \circ T$，而 $F$ 的隐藏结构可能透过线性伪装泄露出来。诸如针对平衡油醋方案的 Kipnis--Shamir 攻击和针对 Rainbow 的 Beullens 攻击~\cite{beullens2022}，都从未在一般意义上求解 MQ；它们探测到并剥离了中心映射的特定结构。一个变体为缩小密钥而添加的结构越多，攻击者能抓住的把柄就越多。安全性依赖于伪装后的方程组与随机方程组不可区分，而这必须针对每种构造分别论证，而不能从 MQ 的 NP 困难性中继承而来。
+
+\paragraph{陷阱 2：忘记公钥既大又不可压缩。}
+格标准的公开矩阵可以从 32 字节的种子扩展得到，与之不同，多变量公钥是一份稠密的二次系数列表，没有更短的描述。把它当作只有几千字节来做预算，或者打算在每次握手中都传输它，都是行不通的。这一家族适合密钥一次安装、反复使用的场景，而不适合每个会话都重新协商的场景。
+
+\paragraph{陷阱 3：使用平衡的或参数不足的油醋划分。}
+普通的平衡油醋方案（$v = o$）已被攻破。安全性要求采用醋变量远多于油变量的\emph{非平衡}划分，而确切的比例和域的大小是承载安全性的关键参数，并非可以随意选择。将它们取得过小，会重新打开非平衡设计本来要关闭的那些攻击之门。
+
+\paragraph{陷阱 4：期待一个 KEM。}
+陷门易于计算而难于求逆，这一形态适合签名，却不适合公钥加密。多变量加密方案的安全记录很差；如果你需要后量子密钥建立，应当选用基于格或基于码的 KEM，而不是这一家族。
+
+\section{小结}
+
+多变量密码是本书所考察的后量子家族中的第四个，它建立在 \textbf{MQ 问题}之上：在有限域上求解多变量二次方程组，这是一个 NP 困难的任务，除 Grover 温和的平方根削弱之外，没有已知的量子捷径~\cite{ding2006}。它通过如今已为人熟知的陷门手法被转化为签名方案：
+
+\begin{itemize}
+  \item 从一个具有特殊结构、可通过线性化求逆的\textbf{中心映射} $F$ 出发——经典的形式是\textbf{油醋}形式；
+  \item 将其\textbf{伪装}在两个秘密线性映射之间，并发布 $P = S \circ F \circ T$，这是一个看似随机的显式二次方程组；
+  \item 任何人都能通过计算 $P$ 的值来\textbf{验证}，但只有陷门持有者才能通过对它求逆来\textbf{签名}；
+  \item 接受一个\textbf{非常大的公钥}，以换取异常\textbf{小的签名}和快速的验证——并且没有 KEM。
+\end{itemize}
+
+这一家族的历史是关于结构化陷门之脆弱性的一课：平衡油醋方案已经倒下，而分层的 Rainbow 作为 NIST 第三轮决赛方案，于 2022 年被 Beullens 攻破~\cite{beullens2022}，两者都是被利用结构的攻击所攻破，而非源于针对 MQ 本身的任何进展。对此的回应是退回到保守的核心 UOV 及其紧凑的近亲 MAYO 和 QR-UOV，截至本书写作时，它们正在 NIST 的附加签名轮次中接受评估。
+
+在五个后量子家族——格、码、哈希、多变量方程组和同源——之中，多变量密码是其中的专才：只做签名，签名大小同类最小，密钥大小同类最大，并且在几次公开失败之后赢得了来之不易的审慎之名。至关重要的是，与提供当今 FIPS 标准的格家族和哈希家族不同，它\emph{尚无}任何标准化方案。它仍然是一项活跃而有价值的对冲——一个作为储备的独立困难问题——但它仍需逐个候选方案地证明，其陷门能够经受住曾击垮其前辈的那种审视。
+
+\printbibliography[heading=chapterrefs]

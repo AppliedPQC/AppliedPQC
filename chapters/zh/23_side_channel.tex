@@ -1,0 +1,257 @@
+% source: 40ed6fbd7a8f4c9709765082b6695320ffe05eb0
+\chapter{侧信道安全}
+\label{ch:sidechannel}
+\chaptermark{侧信道安全}
+
+\section{学习目标}
+
+本书此前的每一章都是在\emph{纸面上}论证安全性：某个格问题是困难的，伪造可以归约到 Module-SIS，区分器将攻破 LWE。这种安全性是必要的，但并不充分。方案并不在纸面上运行；它运行在一台物理设备上，这台设备要耗费时间、汲取电流、向外辐射，还可能被激光照射。只要这些可测量的物理量中有任何一个依赖于秘密钥，攻击者就能直接从机器上读出密钥，而根本无须触及其中的数学。本章的警告直截了当：
+\emph{数学可以完美无缺，而部署仍然是破碎的。}本章开启了本书讨论实践的最后一部分：正确且能抵御侧信道的实现，是将这些方案引入真实系统的若干要求之一，与之并列的还有协议集成与迁移，这些将在其后各章中讨论。
+
+学完本章后，你应当能够：
+
+\begin{enumerate}
+  \item 解释为什么可证明的数学安全性是必要但不充分的，并准确说明什么是\emph{侧信道}（side channel）；
+  \item 列举实现攻击的主要类别——计时、缓存、功耗、电磁和故障——并说明每一类实际观测的是什么；
+  \item 陈述\emph{常数时间}（constant-time）编程的规则，并写出常数时间的条件选择与常数时间的比较；
+  \item 将这些思想与本书已经遇到的具体 PQC 设计选择联系起来：用 CBD 代替高斯采样（第~\ref{ch:cbd}~章）、
+        Falcon 的浮点采样器（第~\ref{ch:fndsa}~章）、ML-DSA 的确定性中止循环（第~\ref{ch:mldsa}~章），
+        以及 ML-KEM 解封装中内置的隐式拒绝（第~\ref{ch:fips203}~章）；
+  \item 描述高阶防护措施——掩码与盲化——并权衡其相对于常数时间编码的代价。
+\end{enumerate}
+
+\paragraph{本章为何重要。}
+Shor 算法是促成整本书的威胁，它攻击的是问题的\emph{结构}：它分解整数，它计算离散对数。我们构建的方案之所以能抵御它，是因为对于其底层的格问题与码问题，尚无已知的高效量子算法。侧信道攻击做的是完全不同的事情。它不理会问题结构，而是测量执行过程：一次解密花了多长时间，它触及了哪些缓存行，芯片在每个时钟周期汲取了多少功率。这些攻击往往比数学攻击\emph{廉价}得多——用示波器花几分钟，而不是在量子计算机上耗费亿万年——这正是它们之所以重要的原因。对 PQC 而言，这种担忧并非假想：本书中的若干方案有着精细的实现要求，而这些要求塑造了标准。这正是 ML-KEM 用 CBD 而非高斯分布来采样噪声的原因（第~\ref{ch:cbd}~章），也是 FN-DSA
+（基于 Falcon；FIPS~206 仍在制定中）在安全部署方面格外棘手的原因（第~\ref{ch:fndsa}~章）。
+
+\section{攻击类别}
+
+侧信道是计算过程中除预期结果之外的任何可观测输出。下面是 PQC 实现者必须牢记的几类攻击。每一类用一段话概述；它们的共同点在于，都将一次物理测量转化为关于秘密的信息。
+
+\paragraph{计时攻击。}
+一次计算所花费的总时间取决于它所处理的数据~\cite{kocher1996}。如果这些数据包含秘密，运行时间就会泄露它。教科书式的例子是一个在找到第一个不同字节时立即返回的比较：能够改变输入并对响应计时的攻击者，便可以逐字节地获知秘密。计时泄露是最危险的一类，因为它们无需专门设备，并且往往可以通过网络\emph{远程}测量。
+
+\paragraph{缓存攻击。}
+现代 CPU 会缓存最近使用过的内存。如果程序在依赖秘密的位置上索引一张表——许多高斯采样器和密码 S 盒正是如此——那么哪些表项进入缓存就取决于秘密。与之共享同一台机器的攻击者（例如共驻的云租户）看不到这些值，但可以对其\emph{自身}的内存访问计时，从而得知哪些缓存行被触及，所用技术如 Flush+Reload 或 Prime+Probe。因此，依赖秘密的内存地址与依赖秘密的计时同样会造成泄露。
+
+\paragraph{功耗分析。}
+芯片的瞬时功耗与它执行的操作以及它搬运的比特相关。\emph{简单功耗分析}（SPA）读取单条迹线来识别操作序列——例如在模幂运算中区分乘法与平方，从而逐位拼出指数。\emph{差分功耗分析}（DPA）~\cite{kjj1999}更为强大：它收集大量迹线，并逐个采样点地将其与关于少数几个密钥比特的假设进行相关分析，即使秘密远低于测量噪声，也能将其提取出来。
+
+\paragraph{电磁分析。}
+开关中的晶体管会产生辐射。功耗分析从电源线上读取的同样信息，也可以从芯片附近的电磁辐射中读取，往往只需一个小探头而无需电气接触。电磁分析还可以在空间上定位到芯片裸片的某个局部区域，这有时能够击败那些只平衡\emph{全局}功耗的防护措施。
+
+\paragraph{故障注入。}
+上述攻击是被动的：它们只做观测。故障注入则是主动的。通过对电源电压或时钟施加毛刺，或向裸片发射激光或电磁脉冲，攻击者可以诱发受控的错误——跳过一条指令、翻转一个比特、破坏一个值——并利用由此产生的错误输出。签名方案在这方面尤其脆弱：借助差分故障分析，一个错误的签名就可能暴露签名密钥，而跳过一次边界检查则可能在 ML-DSA 这样的方案中泄露掩码。
+
+\section{常数时间编程}
+
+抵御依赖秘密的\emph{计时与缓存}泄露的核心软件防线是\textbf{常数时间编程}。对于物理功耗或电磁攻击，它是必要的，但并不充分。这个名称略有误导性：其目标并不是让代码始终耗费相同的挂钟时间，而是让其计时、内存访问模式和操作序列\emph{不依赖于秘密数据}。仅依赖于公开数据的变化（消息的长度、循环的公开迭代次数）是无妨的。
+
+这一准则可以归结为三条规则：
+
+\begin{itemize}
+  \item \textbf{不使用依赖秘密的分支。}条件涉及秘密的 \texttt{if} 会走这条或那条路径，
+        而两条路径的开销几乎从不相同。应以直线式的算术运算取代分支。
+  \item \textbf{不使用依赖秘密的内存索引。}绝不要将秘密用作数组下标或跳转目标。
+        在秘密地址上的查表即使代码中完全没有分支，也会通过缓存泄露信息。
+  \item \textbf{避免在秘密数据上使用可变时间的指令。}除法与取模，以及在某些处理器上甚至乘法，
+        所需的周期数都依赖于数据。诸如 \texttt{memcmp} 这样会提前退出的库例程是同一隐患的变体。
+        应使用固定开销的操作，或用 Montgomery/Barrett 算术代替硬件除法进行约简。
+\end{itemize}
+
+图~\ref{fig:ct-branch} 对比了这一隐患及其修正。左侧，一个秘密比特在短路径与长路径之间做出选择；二者持续时间的差异就是泄露。右侧，同样的选择借助掩码来计算，使得每个输入都执行完全相同的操作序列。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  % ---- Left: leaky secret-dependent branch ----
+  \node[font=\small\bfseries] at (3.1,4.9) {Secret-dependent branch (leaks)};
+  \node[flownode] (inA) at (0,3.3) {input};
+  \node[diamond, draw=pqcorange, thick, fill=white, align=center,
+        inner sep=1pt] (d) at (1.9,3.3) {secret\\bit?};
+  \node[flownode] (t1) at (4.1,4.2) {op};
+  \node[flownode] (b1) at (3.3,2.3) {op};
+  \node[flownode] (b2) at (4.5,2.3) {op};
+  \node[flownode] (b3) at (5.7,2.3) {op};
+  \node[keynode]  (outA) at (7.2,3.3) {result};
+  \node[font=\tiny, pqcteal] at (2.7,4.15) {bit $=1$};
+  \node[font=\tiny, pqcorange] at (2.55,2.62) {bit $=0$};
+  \draw[flowarrow] (inA) -- (d);
+  \draw[flowarrow] (d) |- (t1);
+  \draw[flowarrow] (t1) -| (outA);
+  \draw[flowarrow] (d) |- (b1);
+  \draw[flowarrow] (b1) -- (b2);
+  \draw[flowarrow] (b2) -- (b3);
+  \draw[flowarrow] (b3) -| (outA);
+  \node[font=\tiny, pqcorange, align=center] at (3.5,1.4)
+       {one path is short, the other long:\\ duration reveals the secret bit};
+
+  % ---- Divider ----
+  \draw[pqcgray!40, dashed] (-0.9,0.7) -- (8.3,0.7);
+
+  % ---- Bottom: constant-time straight line ----
+  \node[font=\small\bfseries] at (3.1,0.1) {Constant-time (timing/cache-safe)};
+  \node[flownode] (c0) at (0,-1.1) {input};
+  \node[flownode] (c1) at (1.9,-1.1) {op};
+  \node[flownode] (c2) at (3.4,-1.1) {op};
+  \node[flownode] (c3) at (4.9,-1.1) {op};
+  \node[flownode] (c4) at (6.2,-1.1) {mask};
+  \node[keynode]  (c5) at (7.7,-1.1) {result};
+  \draw[flowarrow] (c0) -- (c1);
+  \draw[flowarrow] (c1) -- (c2);
+  \draw[flowarrow] (c2) -- (c3);
+  \draw[flowarrow] (c3) -- (c4);
+  \draw[flowarrow] (c4) -- (c5);
+  \node[font=\tiny, pqcteal, align=center] at (3.7,-2.0)
+       {every input runs the same operations:\\ duration is independent of the secret};
+\end{tikzpicture}
+\caption{上：在秘密比特上的分支会走一条短路径或长路径，因此运行时间和缓存痕迹都可能携带秘密。下：同样的条件被计算为一个固定的操作序列，并以带掩码的选择结束。这消除了依赖秘密的控制流和内存行为，但中间值仍可能与物理功耗或电磁泄露相关。}
+\label{fig:ct-branch}
+\end{figure}
+
+消除秘密分支的主力工具是\emph{常数时间选择}。它将选择比特变成全 1 或全 0 的\emph{掩码}，并用该掩码通过按位运算混合两个候选值，这样两个候选值总是都被计算，也不会执行任何分支。
+
+\begin{algorithm}[H]
+\caption{\textsc{CTSelect}——常数时间条件选择}
+\label{alg:ctselect}
+\begin{algorithmic}[1]
+\Require 选择比特 $s \in \{0,1\}$；机器字 $a$ 与 $b$
+\Ensure 若 $s=1$ 则为 $a$，否则为 $b$——不含依赖数据的分支
+\State $mask \gets -\,s$
+       \Comment{二进制补码：若 $s=1$ 则为全 1 字，若 $s=0$ 则为全 0 字}
+\State \Return $(a \mathbin{\&} mask) \mathbin{|} (b \mathbin{\&} \overline{mask})$
+       \Comment{$\overline{mask}$ 是 $mask$ 的按位取反}
+\end{algorithmic}
+\end{algorithm}
+
+技巧在于掩码 $-s$：在二进制补码中对比特 $1$ 取负得到全 1 字，对 $0$ 取负得到全 0 字。当 $s=1$ 时，第一项让 $a$ 通过而第二项被清零；当 $s=0$ 时，两者角色互换。这里没有分支，也没有依赖秘密的地址。同样的掩码思想给出了常数时间的\emph{相等性}测试 \textsc{ct\_eq}，它绝不能提前返回：它要在\emph{所有}字节上累积差异，然后才将结果压缩为单个比特。
+
+代码清单~\ref{lst:ct-c} 用 C 语言展示了这两种模式：有泄露的分支、取代它的掩码写法，以及不提前退出的比较。
+
+\begin{lstlisting}[language=C,label=lst:ct-c,caption={Leaky versus constant-time patterns in C.}]
+#include <stdint.h>
+#include <stddef.h>
+
+/* LEAKY: the branch condition is a secret; the two paths differ */
+uint32_t leaky_select(int secret_bit, uint32_t a, uint32_t b) {
+    if (secret_bit)      /* timing/cache/power all reveal which way */
+        return a;
+    else
+        return b;
+}
+
+/* CONSTANT-TIME: no branch, no secret-dependent memory access */
+uint32_t ct_select(uint32_t secret_bit, uint32_t a, uint32_t b) {
+    uint32_t mask = -secret_bit;   /* 0xFFFFFFFF if 1, 0x00000000 if 0 */
+    return (a & mask) | (b & ~mask);
+}
+
+/* CONSTANT-TIME equality: 1 if equal, else 0, never exits early */
+uint32_t ct_eq(const uint8_t *x, const uint8_t *y, size_t n) {
+    uint8_t diff = 0;
+    for (size_t i = 0; i < n; i++)
+        diff |= x[i] ^ y[i];       /* fold every byte, no break */
+    /* top bit of (diff | -diff) is 1 iff diff != 0 */
+    uint32_t nz = ((uint32_t)diff | (0u - (uint32_t)diff)) >> 31;
+    return nz ^ 1u;                /* invert: equal -> 1 */
+}
+\end{lstlisting}
+
+\section{PQC 特有的问题}
+
+常数时间准则是通用的，但后量子方案将风险集中在少数几个特定位置。下面每一项都可追溯到前面某一章所做的设计选择。
+
+\paragraph{采样：CBD 存在的理由。}
+格方案中的噪声在每次生成密钥或密文时都必须重新采样。离散\emph{高斯}采样器是自然的数学选择，但它是侧信道的雷区：它通常需要拒绝循环（迭代次数依赖秘密）、查表（内存地址依赖秘密）以及浮点运算（在大多数硬件上为可变时间）。ML-KEM 从第~\ref{ch:cbd}~章的\emph{中心二项分布}中采样其小噪声多项式。
+ML-DSA 对秘密和掩码使用其自身的有界均匀采样与拒绝采样过程；它并不是 ML-KEM 的 CBD 采样器的一个实例。两个标准都避免了通用的离散高斯采样器，但它们的采样接口和侧信道评审必须分别考虑。
+FN-DSA（第~\ref{ch:fndsa}~章）则是反面的警示。它的陷门采样器确实需要实数上的高精度高斯分布，并通过浮点 FFT 计算，而使\emph{这一点}做到常数时间是所有标准中最困难的实现问题——如果采样器的计时或舍入发生泄露，秘密基就可能被重构出来。这一困难在第~\ref{ch:fndsa}~章末尾已作预告，它正是本章的内容：这是 Falcon 成为三个签名标准中安全部署要求最高者的最有力的单一原因。
+
+\paragraph{ML-DSA 中的拒绝采样。}
+ML-DSA 签名（第~\ref{ch:mldsa}~章）同样包含循环：它抽取一个掩码，构造 $\mathbf{z}=\mathbf{y}+c\,\mathbf{s}_1$，并施加涉及依赖秘密之量的拒绝条件，包括与 $\mathbf{s}_2$ 和 $\mathbf{t}_0$ 相关的检查。因此，重试次数和签名时间不能仅凭对分布的直觉就被宣布为无害。实现必须遵循 FIPS~204 的采样与侧信道设计，保护中间值，并在目标平台上评估所生成的机器码。FIPS~204 支持对冲签名（hedged signing），其随机性由秘密 $K$、消息代表 $\mu$ 和输入 $rnd$ 导出；确定性模式固定了 $rnd$，但并不会消除 $K$ 或与秘密相关的拒绝条件。
+
+\paragraph{解封装与 Fujisaki--Okamoto 变换。}
+最隐蔽的 PQC 侧信道存在于 KEM 解封装之中。原始的格解密可能\emph{失败}，而是否失败取决于秘密钥和（可能由攻击者选择的）密文。如果解封装在成功与失败时有任何不同的表现——返回一个错误、耗时更长或汲取不同的功率——攻击者就会获得一个\emph{解密失败}预言机或\emph{明文检查}预言机，通过查询畸形密文并利用是/否的回答来逐步剥离秘密。在第~\ref{sec:fo}~节中阐述的 Fujisaki--Okamoto（FO）变换~\cite{fo1999}以\textbf{隐式拒绝}关上了这扇门。解封装对恢复出的消息重新加密，并以常数时间将结果与收到的密文进行比较。若匹配，则返回真实的共享密钥；若不匹配，则返回一个由秘密种子和密文导出的\emph{伪随机}密钥——而不是一个可区分的密文有效性错误。这一点适用于基本的输入检查和解封装密钥检查之后；API 仍可能拒绝类型、长度畸形或不可用的密钥材料。两种密码学结果产生的密钥形式完全相同，最终的选择是一次常数时间选择，因此调用者无法分辨成功与失败。图~\ref{fig:fo-implicit} 展示了这一流程。
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node[flownode] (ct)   at (2,6.1) {ciphertext $ct$};
+  \node[flownode] (dec)  at (2,4.9) {$m' = \textsc{Decrypt}(sk, ct)$};
+  \node[flownode, align=center] (re) at (2,3.5)
+       {$(K',r) = G(m'\,\|\,h)$\\ $ct' = \textsc{Encrypt}(pk, m'; r)$};
+  \node[diamond, draw=pqcorange, thick, fill=white, align=center, inner sep=1pt]
+       (cmp) at (2,1.7) {$ct' = ct$\\ ?};
+  \node[flownode] (kreal) at (6.2,3.5) {real key $K'$};
+  \node[flownode, align=center] (kfake) at (6.2,0.4)
+       {$\bar K = J(z, ct)$\\ (pseudorandom)};
+  \node[flownode, align=center] (sel) at (6.2,1.9)
+       {\textsc{CTSelect}\\ $(\text{match},K',\bar K)$};
+  \node[keynode] (out) at (9.4,1.9) {shared key $K$};
+  \draw[flowarrow] (ct)  -- (dec);
+  \draw[flowarrow] (dec) -- (re);
+  \draw[flowarrow] (re)  -- (cmp);
+  \draw[flowarrow] (re.east) -- (kreal.west);
+  \draw[flowarrow] (kreal) -- (sel);
+  \draw[flowarrow] (kfake) -- (sel);
+  \draw[flowarrow] (cmp) -- node[above,font=\tiny,pqcgray]{match bit} (sel);
+  \draw[flowarrow] (sel) -- (out);
+  \node[font=\tiny, pqcgray, align=center] (zseed) at (3.7,0.4)
+       {$z$: secret\\ reject seed};
+  \draw[flowarrow, dashed] (zseed) -- (kfake.west);
+\end{tikzpicture}
+\caption{带隐式拒绝的 FO 解封装。恢复出的消息被重新加密，并以常数时间与收到的密文进行比较。匹配时得到真实密钥 $K'$；不匹配时得到由秘密种子 $z$ 导出的伪随机密钥 $\bar K = J(z,ct)$。由于两种输出形式相同，且选择是一次常数时间选择，成功与失败对调用者而言不可区分——不存在解密失败预言机。}
+\label{fig:fo-implicit}
+\end{figure}
+
+\paragraph{NTT 与多项式运算。}
+数论变换以及围绕它的模多项式运算，在每一次操作中都作用于秘密数据。它们同样必须是常数时间的：每次蝶形运算之后的模约简应使用固定开销的 Montgomery 约简或 Barrett 约简，而不是硬件除法，并且整个变换中任何地方都不得有依赖秘密的分支。这通常很容易做到——NTT 天然就是直线式的——但也很容易被一处粗心的条件减法所破坏，即只在“系数过大时”才执行的减法。
+
+\section{常数时间之外的防护措施}
+
+常数时间编码主要针对计时、缓存以及依赖秘密的控制流泄露。差分功耗分析和电磁分析更为强大，因为它们对大量迹线求平均，即使控制流完全一致，也能提取出影响功耗的秘密。要击败这些攻击，需要再加一层防护。
+
+\paragraph{掩码。}
+主要工具是\textbf{掩码}（masking）：将每个秘密值拆分成若干个随机的\emph{份额}，使其组合（对布尔掩码而言为 XOR，对算术掩码而言为模 $q$ 加法）等于该秘密，并在份额上进行计算，使整个计算中没有任何单个中间值等于秘密或与秘密相关。一阶掩码使用两个份额，迫使攻击者同时组合两个位置的测量；
+$d$ 阶掩码使用 $d+1$ 个份额。安全性随 $d$ 增长，代价也随之增长——份额数线性增长，而安全操作的数量及其消耗的新鲜随机性增长得更快，因此掩码的开销往往是数倍，有时达到一个数量级。对格方案而言，特有的困难在于它们混合了\emph{布尔}运算（哈希、FO 检查中的比较）与\emph{算术}运算（NTT），而在布尔掩码与算术掩码之间安全地转换，正是代价高昂且精细微妙的部分。
+
+\paragraph{盲化。}
+一个较轻量的近亲是\textbf{盲化}（blinding）：在不改变结果的前提下随机化计算的\emph{表示}，使得不同运行的迹线无法对齐。可以在运算前给某个值加上模数的随机倍数，在椭圆曲线运算步骤中随机化射影坐标，或者打乱处理各个独立系数的顺序，使攻击者无法知道迹线中的哪个采样点对应于哪个秘密元素。盲化比完整的掩码廉价，但也更弱；二者常常结合使用。
+
+\paragraph{代价与收益。}
+这些措施都不是免费的，也都不是总有必要的。位于网络之后、攻击者只能远程测量计时的服务器，需要常数时间代码，但很少需要完整的掩码。这里出现了一个限定条件：动态频率调节（Turbo Boost 及其同类技术）使时钟频率依赖于功耗，而功耗又依赖于被处理的数据——因此即便代码本身是常数时间的，功耗泄露也可能在\emph{远程}
+计时中显现，并且已有通过这一信道进行网络密钥提取攻击的演示~\cite{hertzbleed2022}。在威胁模型包含此类攻击的场合，为密码学工作负载禁用频率提升是直接的防护措施。而对于智能卡或嵌入式密钥存储，攻击者持有设备并能接上示波器，就还需要掩码和故障防护措施。恰当的防护级别是一个威胁模型层面的决策，而非固定的配方——但常数时间编码是这一切之下的底线。
+
+\section{常见陷阱}
+
+\paragraph{陷阱 1：假定编译器会保留你的常数时间代码。}
+优化编译器只要认为更快，就可以自由地将 $(a \mathbin{\&} mask)\mathbin{|}(b
+\mathbin{\&}\overline{mask})$ 改写回分支或条件传送，或者让带掩码的比较短路求值。常数时间行为是所生成机器码的性质，而非源代码的性质。它必须经过检查——阅读汇编、使用验证工具，或使用阻止优化器的屏障——而不能想当然。
+
+\paragraph{陷阱 2：将常数时间与恒定挂钟时间混为一谈。}
+常数时间并不意味着代码总是运行相同的纳秒数。它意味着不存在依赖\emph{秘密}的变化。仅依赖公开数据的变化——例如消息的长度——是完全可以接受的。追求字面意义上的恒定时长既无必要，在现代乱序执行的 CPU 上也不可能做到。
+
+\paragraph{陷阱 3：报告解封装失败。}
+在格解密失败时返回错误、记录日志或走一条快速路径，恰恰将 FO 变换旨在杜绝的明文检查预言机拱手交给了攻击者。解封装必须始终运行完毕并始终返回一个密钥；应使用隐式拒绝，绝不使用错误分支。
+
+\paragraph{陷阱 4：用 \texttt{memcmp} 比较秘密。}
+标准库的比较函数在找到一个不同字节时立即返回，因此其计时会暴露有多少个前导字节匹配——这对 MAC 标签或 FO 密文检查是致命的。务必使用不提前退出的比较，例如 \textsc{ct\_eq}。
+
+\paragraph{陷阱 5：仍然泄露的掩码。}
+在纸面上正确的两个份额，如果硬件或编译器将它们重新组合，仍然会泄露——例如，连续的指令将两个份额写入同一个寄存器或总线，或者在应用掩码时没有为每次运行提供新鲜、独立的随机性。掩码的好坏，仅取决于其份额在实际硅片中的独立程度。
+
+\section{小结}
+
+前几章的后量子数学是真实可靠的：它能抵御 Shor 算法，并且针对其底层格问题与码问题，尚无已知的高效量子攻击。但这些数学只保护抽象的方案。一个粗心的实现可能把同一个秘密拱手交给一名手持示波器、共享缓存或激光的攻击者——这种攻击的代价是几分钟和几美元，而不是一台量子计算机。
+
+防御是一种准则，而不是一件小工具：
+
+\begin{itemize}
+  \item 编写\textbf{常数时间}代码——不使用依赖秘密的分支，不使用依赖秘密的内存地址，不在秘密上使用可变时间的指令；
+  \item 在威胁模型包含物理接触的场合，再加上\textbf{掩码}和\textbf{故障}防护措施；
+  \item 在所生成的机器码中验证这一性质，因为编译器并不承诺会保留它。
+\end{itemize}
+
+正是在这里，前面各部分的理论与实践形成了闭环。这些标准并没有把实现安全当作事后的补充；它们在工程上为之做了设计。
+ML-KEM 的 CBD 采样器避免了通用的离散高斯分布（第~\ref{ch:cbd}~章）；ML-DSA 和 FN-DSA 要求审慎处理依赖秘密的采样与拒绝条件（第~\ref{ch:mldsa}~章、第~\ref{ch:fndsa}~章）；ML-KEM 解封装建立在隐式拒绝之上，使成功与失败不可区分（第~\ref{ch:fips203}~章）；而 Falcon 的浮点采样器则是一个长久的提醒：当一个方案难以安全实现时，这种困难本身就是一种安全代价（第~\ref{ch:fndsa}~章）。后量子安全不只是一个有待证明的定理。它是运行中系统的一种性质——而将它一路保持到机器码层面，并不是可有可无的。
+
+\printbibliography[heading=chapterrefs]

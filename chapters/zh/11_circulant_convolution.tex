@@ -1,0 +1,190 @@
+% source: 70a8ca121731e3f9d26b5ce5f1de0ac1823e48d7
+\chapter{从卷积到负循环环运算}
+\label{ch:convolution}
+
+\section{本章的意义}
+
+多项式乘法是 RLWE 与 ML-KEM 背后的线性运算。重要的区别在于模：模 $x^n-1$ 约简给出\emph{循环}卷积和普通的循环矩阵，而模 $x^n+1$ 约简给出\emph{负循环}卷积。ML-KEM 使用的是后者。
+
+\section{两种回绕}
+
+设 $a(x)=\sum_{i=0}^{n-1}a_i x^i$，$s(x)=\sum_{j=0}^{n-1}s_j x^j$。在约简之前，$x^k$ 的系数为
+\[
+  \sum_{i+j=k} a_i s_j.
+\]
+例如，
+\[
+(1+2x+3x^2)(4+5x)=4+13x+22x^2+15x^3,
+\]
+其中 $22=2\cdot5+3\cdot4$。这一下标条件 $i+j=k$ 就是普通的卷积规则。
+
+现在选取一个商模。
+\begin{itemize}
+  \item 在 $\mathbb{F}_q[x]/(x^n-1)$ 中，$x^n=1$。越过 $n-1$ 次而回绕的项以\emph{相同}的符号返回。这是循环卷积。
+  \item 在 $\mathbb{F}_q[x]/(x^n+1)$ 中，$x^n=-1$。回绕的项以\emph{相反}的符号返回。这是负循环卷积。
+\end{itemize}
+
+因此这两种结构相互关联，但不可互换。ML-KEM 所用的商环是
+\[
+ R_q=\mathbb{Z}_{3329}[x]/(x^{256}+1),
+\]
+所以它的多项式乘积是负循环的。
+
+\subsection{一个四系数的手算例子}
+
+取 $n=4$，把 $a(x)=1+2x+3x^2+4x^3$ 与 $s(x)=5+6x+7x^2+8x^3$ 相乘。约简之前，乘积的次数为六。低次系数在两个商环中是相同的：
+\[
+\begin{aligned}
+[x^0](as)&=1\cdot5=5, & [x^1](as)&=1\cdot6+2\cdot5=16,\\
+[x^2](as)&=1\cdot7+2\cdot6+3\cdot5=34, & [x^3](as)&=1\cdot8+2\cdot7+3\cdot6+4\cdot5=60.
+\end{aligned}
+\]
+其余各项为 $53x^4+52x^5+32x^6$。模 $x^4-1$ 时，它们以 $+53,+52x,+32x^2$ 的形式返回；模 $x^4+1$ 时，它们以 $-53,-52x,-32x^2$ 的形式返回。因此
+\[
+\begin{array}{rcl}
+as\bmod(x^4-1)&=&58+68x+66x^2+60x^3,\\
+as\bmod(x^4+1)&=&-48-36x+2x^2+60x^3.
+\end{array}
+\]
+输入完全相同。唯一的变化是回绕的符号，但它改变了环运算。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=7mm and 12mm, every node/.style={font=\small}]
+  \node[flownode] (prod) {terms of degree $\geq 4$};
+  \node[flownode, below left=of prod] (cyc) {$x^4=1$\\cyclic: same sign};
+  \node[keynode, below right=of prod] (neg) {$x^4=-1$\\negacyclic: flip sign};
+  \node[below=of cyc, align=center] {$53x^4\mapsto +53$};
+  \node[below=of neg, align=center] {$53x^4\mapsto -53$};
+  \draw[flowarrow] (prod) -- (cyc);
+  \draw[flowarrow] (prod) -- (neg);
+\end{tikzpicture}
+\caption{同一个回绕项在两种商关系下的情形。ML-KEM 遵循负循环这一分支。}
+\label{fig:cyclic-vs-negacyclic}
+\end{figure}
+
+\section{矩阵表示}
+
+乘以 $a(x)=a_0+a_1x+\cdots+a_{n-1}x^{n-1}$ 是系数向量上的一个线性映射。在循环情形下，它由循环矩阵表示
+\[
+C(a)_{i,j}=a_{(i-j)\bmod n}.
+\]
+在负循环情形下，同样的回绕系数带上一个负号：
+\[
+N(a)_{i,j}=\begin{cases}
+ a_{i-j},&i\ge j,\\
+ -a_{n+i-j},&i<j.
+\end{cases}
+\]
+对 $n=4$，模 $x^4+1$ 乘以 $a_0+a_1x+a_2x^2+a_3x^3$ 的矩阵为
+\[
+N(a)=
+\begin{bmatrix}
+a_0&-a_3&-a_2&-a_1\\
+a_1&a_0&-a_3&-a_2\\
+a_2&a_1&a_0&-a_3\\
+a_3&a_2&a_1&a_0
+\end{bmatrix}.
+\]
+因此，把 ML-KEM 的乘法称为普通的循环矩阵乘法是不准确的。一个多项式仍然紧凑地表示了一个有结构的线性映射，这正是它与线性代数之间有用的联系。
+
+\subsection{解读负循环矩阵}
+
+$N(a)$ 的第一列是 $a(x)$ 的系数向量。每向右移动一列，各元素向下平移一位，但越过顶部边界的系数被取负。这恰好就是用矩阵写出的 $x^4=-1$。普通的循环矩阵在右上角没有负号，它表示模 $x^4-1$ 的乘法。
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+商环 & 回绕规则 & 矩阵结构 \\
+\midrule
+$\mathbb{F}_q[x]/(x^n-1)$ & $x^n=1$ & 循环矩阵 \\
+$\mathbb{F}_q[x]/(x^n+1)$ & $x^n=-1$ & 负循环矩阵 / 带符号的循环矩阵 \\
+\bottomrule
+\end{tabular}
+\caption{商关系同时决定了卷积和矩阵结构。}
+\end{table}
+
+\section{一个可复现的 Sage 实验}
+
+下面的实验在比较的两侧使用同一个域、同一个输入向量和同一个负循环矩阵。
+
+\begin{lstlisting}[language=Python]
+q = 17
+F = GF(q)
+a = vector(F, [1, 2, 3, 4])
+s = vector(F, [5, 6, 7, 8])
+
+# Matrix for multiplication by a(x) modulo x^4 + 1.
+N = Matrix(F, [[a[(i-j) % 4] if i >= j else -a[(i-j) % 4]
+                for j in range(4)] for i in range(4)])
+
+R.<x> = PolynomialRing(F)
+Rq = R.quotient(x^4 + 1, 'y')
+y = Rq.gen()
+ap = sum(a[i]*y^i for i in range(4))
+sp = sum(s[i]*y^i for i in range(4))
+
+matrix_product = N * s
+ring_product = vector(F, (ap*sp).lift().list() + [0]*4)[:4]
+print(matrix_product)
+print(ring_product)
+print(matrix_product == ring_product)  # True
+\end{lstlisting}
+
+$N$ 右上部分的符号就是这个实验与循环情形实验之间的全部区别。把 $x^4+1$ 换成 $x^4-1$ 并去掉这些符号，就得到循环版本。
+
+\subsection{循环情形的对照}
+
+看一看常规的循环矩阵情形也是有益的，只要标注正确即可。这个版本把矩阵和商模都改为 $x^4-1$：
+
+\begin{lstlisting}[language=Python]
+C = Matrix(F, [[a[(i-j) % 4] for j in range(4)] for i in range(4)])
+Rc = R.quotient(x^4 - 1, 'z')
+z = Rc.gen()
+ac = sum(a[i]*z^i for i in range(4))
+sc = sum(s[i]*z^i for i in range(4))
+cyclic_ring_product = vector(F, (ac*sc).lift().list() + [0]*4)[:4]
+print(C * s == cyclic_ring_product)  # True
+\end{lstlisting}
+
+这两个实验是有意平行设计的。若改变域、输入向量或商模，就不再是在检验一个数学上的等价关系了。
+
+\section{NTT 加速的是什么}
+
+变换可以把卷积转化为另一种表示下的乘法，但这种表示取决于商环以及可用的单位根。当存在 $n$ 次单位根时，完全的循环 NTT 能把模 $x^n-1$ 的乘法对角化。在 $n$ 个标量点处求值的完全负循环 NTT 则需要一个 $2n$ 次本原单位根。对于 $n=256$ 和 $q=3329$，ML-KEM 没有这样的单位根；它的部分 NTT 转而产生 128 个二次分量。第~\ref{ch:ntt}~章将展开这一构造。
+
+\section{从单个多项式到模}
+
+RLWE 使用环元素，而模 LWE 使用其元素属于 $R_q$ 的向量和矩阵。对一个 $k\times k$ 的多项式矩阵 $A$ 和一个多项式向量 $\mathbf{s}$，
+\[
+(A\mathbf{s})_i=\sum_{j=1}^{k}A_{i,j}(x)s_j(x)\quad\text{in }R_q.
+\]
+每个看似标量的乘积仍然是负循环多项式乘法。模结构只是增加了一个小的矩阵层；它并不会把环运算变回普通的循环卷积。
+
+\section{继续之前的检查}
+
+\begin{enumerate}
+  \item 哪一种商关系会使系数带着负号回绕？
+  \item 为什么负循环乘法矩阵的右上角带有符号？
+  \item 为什么把一个循环整数矩阵乘积与 $\mathbb{F}_{17}[x]/(x^4+1)$ 中的乘积进行比较是无效的？
+  \item 要用标量求值来表示负循环乘积，需要什么样的单位根条件？
+\end{enumerate}
+
+\section{小结}
+
+\begin{center}
+\begin{tikzpicture}[node distance=7mm and 7mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {$R_q=\mathbb{Z}_q[x]/(x^n+1)$};
+  \node[flownode, right=of a] (b) {negacyclic\\[-2pt]linear map};
+  \node[flownode, right=of b] (c) {partial NTT / CRT};
+  \node[keynode, right=of c] (d) {quadratic\\[-2pt]base products};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+\end{tikzpicture}
+\end{center}
+
+普通的循环矩阵 / 循环卷积图景是有用的背景知识，但 ML-KEM 遵循的是上图所示的负循环路径。
+
+\printbibliography[heading=chapterrefs]

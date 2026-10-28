@@ -1,0 +1,389 @@
+% source: 3548aac53be2cf180bb950614085a17522f389cf
+\chapter{Kyber（ML-KEM）入门}
+\chaptermark{Kyber（ML-KEM）入门}
+\label{ch:toymlkem}
+
+\section{什么是 Kyber？}
+
+\textbf{Kyber}——由 NIST 在 FIPS 203 中标准化为 \textbf{ML-KEM}~\cite{fips203,kyber2018}——是当今保护互联网大部分通信的密钥交换的后量子替代方案。它是一种\emph{密钥封装机制}（KEM）：双方借此在公开信道上建立共享秘密的协议，扮演的正是 Diffie--Hellman 和 RSA 密钥传输在前量子时代所扮演的角色。其困难性建立在模 LWE（第~\ref{ch:mlwe}~章）之上，即前几章所展开的 LWE 家族中的中间成员。
+
+一个 KEM 由三个算法定义：
+
+\begin{itemize}
+  \item \textsc{KeyGen}\,$\to (ek, dk)$——生成一个公开的\emph{封装密钥} $ek$ 和一个秘密的\emph{解封装密钥} $dk$；
+  \item \textsc{Encaps}$(ek)\,\to (K, c)$——生成一个新的共享秘密 $K$，以及承载它的密文 $c$；
+  \item \textsc{Decaps}$(dk, c)\,\to K$——从密文中恢复出同一个共享秘密 $K$。
+\end{itemize}
+
+关键在于，KEM 传输的是一个\emph{随机}秘密，而不是一条选定的消息。正是这一个设计选择，使得后续的 Fujisaki–Okamoto 变换能够把 Kyber 提升到抵抗主动的选择密文攻击者的安全性。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\scriptsize]
+  \node[seqparty] at (1.4,3.0) {Alice};
+  \node[seqparty] at (8.6,3.0) {Bob};
+  \draw[seqlife] (1.4,2.7) -- (1.4,-0.2);
+  \draw[seqlife] (8.6,2.7) -- (8.6,-0.2);
+  \node[seqnote, right] at (1.55,2.3) {KeyGen $\to (ek,dk)$};
+  \draw[seqmsg] (1.4,1.8) -- node[above]{encapsulation key $ek$} (8.6,1.8);
+  \node[seqnote, left] at (8.45,1.3) {Encaps$(ek)\to(K,c)$};
+  \draw[seqmsg] (8.6,0.8) -- node[above]{ciphertext $c$} (1.4,0.8);
+  \node[seqresult] at (5,0.0) {Decaps$(dk,c)\to K$: both sides now share $K$};
+\end{tikzpicture}
+\caption{作为密钥封装机制的 Kyber。Alice 公布一个封装密钥；Bob 在该密钥下封装一个新的随机秘密 $K$，并只发送密文 $c$；Alice 用她的秘密钥对 $c$ 解封装，恢复出同一个 $K$。共享秘密 $K$ 本身从不在线路上传输。}
+\label{fig:kyber-kem}
+\end{figure}
+
+\section{各个组件，以及本书在何处构建它们}
+
+Kyber 并不是一个新的原语。它是对本书各处所展开的组件的精心组装，而本章是这些组件首次汇聚之处——以缩微的形式。有些组件已经在手（模 LWE 关系、环、NTT）；下面的玩具版仍对其余组件走了捷径，所引用的章节会完整地提供它们。
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+组成部分 & 在 Kyber 中的作用 & 构建于 \\
+\midrule
+模 LWE 关系 $\mathbf{t}=A\mathbf{s}+\mathbf{e}$ & 底层困难问题 & 第~\ref{ch:mlwe}~章 \\
+环 $R_q=\mathbb{Z}_q[x]/(x^n+1)$ 与 NTT & 快速多项式运算 & 第~\ref{ch:rlwe}、\ref{ch:ntt}~章 \\
+中心二项噪声（CBD） & 采样小的秘密/误差 & 第~\ref{ch:cbd}~章 \\
+Fujisaki–Okamoto 变换 & 将 CPA 安全性提升为 CCA 安全性 & 第~\ref{ch:fips203}~章 \\
+完整的 FIPS 203 流程 & KeyGen / Encaps / Decaps $+$ FO & 第~\ref{ch:fips203}~章 \\
+\bottomrule
+\end{tabular}
+\caption{Kyber 是由本书各处展开的组件组装而成的；本入门章展示其骨架，所引用的章节提供每个真实组件。}
+\label{tab:kyber-pieces}
+\end{table}
+
+三个标准化参数集 ML-KEM-512、ML-KEM-768 和 ML-KEM-1024 共用同一个环，但使用不同的参数元组：分别为 $k=2,3,4$，$\eta_1=3,2,2$，以及 $(d_u,d_v)=(10,4),(10,4),(11,5)$~\cite{fips203}。NIST 推荐 ML-KEM-768 作为默认参数集~\cite{nistir8547}；本章只保留一个精简的代数骨架。
+
+\section{构建一个玩具版 Kyber}
+
+为了在接触具体机制之前先看清骨架，我们现在用大约一百行 SageMath 构建一个\emph{玩具版} Kyber——它小到可以手工检查每个对象。仅使用已经介绍过的数学，它就能生成公钥、加密一条消息并将其解密：
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=16mm and 16mm]
+  \node[flownode] (kg) {KeyGen};
+  \node[flownode, right=of kg] (enc) {Encrypt};
+  \node[flownode, right=of enc] (dec) {Decrypt};
+  \node[keynode, right=of dec] (out) {Recovered\\[-2pt]\scriptsize message};
+  \draw[flowarrow] (kg) -- (enc) node[midway, above, font=\scriptsize] {$(A,t),\,s$};
+  \draw[flowarrow] (enc) -- (dec) node[midway, above, font=\scriptsize] {$(u,v)$};
+  \draw[flowarrow] (dec) -- (out);
+\end{tikzpicture}
+\caption{本章构建的玩具版流程：密钥生成产生公钥 $(A,t)$ 和秘密钥 $s$；加密把一个消息比特转换为密文 $(u,v)$；解密利用 $s$ 恢复该比特。这是公钥加密的\emph{核心}；图~\ref{fig:kyber-kem} 中的完整 KEM 正是在第~\ref{ch:fips203}~章中用 Fujisaki–Okamoto 变换把这一核心包装起来。}
+\label{fig:toy-mlkem-pipeline}
+\end{figure}
+
+这里的目标不是重现完整的 FIPS 203 标准，而是清晰地揭示其数学骨架。所有内容都在 SageMath 中用大约一百行代码运行，从而使结构保持清晰可见。
+
+\section{玩具版中采用的简化}
+
+真实的 ML-KEM 标准使用了许多精巧的机制。在玩具版中，我们只保留核心思想：
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+真实 ML-KEM & 玩具版 Kyber \\
+\hline
+$q=3329$ & $q=17$ \\
+\hline
+$n=256$ & $n=8$ \\
+\hline
+CBD 噪声 & $\text{randint}(-1,1)$ \\
+\hline
+SHAKE/XOF & 简单的随机生成 \\
+\hline
+压缩 & 省略 \\
+\hline
+NTT & 普通多项式乘法 \\
+\hline
+FO 变换 & 省略 \\
+\hline
+字节编码 & 省略 \\
+\hline
+\end{tabular}
+\end{table}
+
+尽管这些简化幅度很大，数学骨架依然相同。对于模维数，我们也把 $k$ 从 $2,3,4$ 缩减为 $k=2$，以便手工检查各个对象。
+
+\begin{lstlisting}[language=Python]
+from random import randint
+
+q = 17
+n = 8
+k = 2
+\end{lstlisting}
+
+\section{建立环}
+
+我们定义一个模 $x^8+1$ 的多项式环。此后构建的每个对象都位于这个商环 $R_q$ 中。
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^n + 1)
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python]
+a = Rq.random_element()
+b = Rq.random_element()
+print(a)
+print(b)
+print(a*b)
+\end{lstlisting}
+
+由于商关系，最高次数应始终低于 $8$。
+
+\section{构建模：多项式的向量与矩阵}
+
+对于 Kyber512，模维数为 $k=2$。这意味着秘密不是一个多项式，而是由 $k$ 个多项式组成的向量，公开矩阵 $A$ 是一个由多项式组成的 $k \times k$ 矩阵。
+
+\begin{lstlisting}[language=Python]
+def rand_poly():
+    return Rq.random_element()
+
+def rand_vector():
+    return vector(Rq, [rand_poly() for _ in range(k)])
+
+def rand_matrix():
+    return Matrix(Rq, k, k, [rand_poly() for _ in range(k*k)])
+\end{lstlisting}
+
+多项式向量已经是迈向模观点的第一步，而矩阵则是出现在类 Kyber 构造中的对象。
+
+\section{生成小噪声}
+
+在真实的 Kyber 中，噪声从中心二项分布（CBD）中采样，这是后面某一章的主题。对于玩具版，我们只使用取值于 $\{-1,0,1\}$ 的小系数。
+
+\begin{lstlisting}[language=Python]
+def small_poly():
+    coeffs = []
+    for _ in range(n):
+        c = randint(-1, 1)
+        coeffs.append(c % q)
+    return Rq(coeffs)
+
+def small_vector():
+    return vector(Rq, [small_poly() for _ in range(k)])
+\end{lstlisting}
+
+因此多项式的系数是诸如 $0$、$1$ 或 $16$（它在 $\mathbb{F}_{17}$ 中表示 $-1$）这样的小值。这会产生小的误差，适合教学使用。
+
+\section{密钥生成}
+
+模 LWE 形式与标准 LWE 形式非常接近：
+\[
+\mathbf{t}=A\mathbf{s}+\mathbf{e}.
+\]
+
+我们按如下方式实现它。
+
+\begin{lstlisting}[language=Python]
+def keygen():
+    A = rand_matrix()
+    s = small_vector()
+    e = small_vector()
+    t = A * s + e
+    return (A, t), s
+\end{lstlisting}
+
+公钥是 $(A,t)$，秘密钥是 $s$。
+
+\begin{algorithm}[H]
+\caption{玩具版 KeyGen}
+\label{alg:toy-keygen}
+\begin{algorithmic}[1]
+\Require 公开参数 $q,n,k,R_q$
+\Ensure 公钥 $(A,t)$，秘密钥 $s$
+\State $A \gets$ $R_q$ 上均匀随机的 $k\times k$ 矩阵
+\State $s \gets$ small\_vector() \Comment{系数取值于 $\{-1,0,1\}$}
+\State $e \gets$ small\_vector()
+\State $t \gets A s + e$
+\State \Return $\big((A,t),\, s\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{验证密钥生成过程}
+
+我们可以打印矩阵及所得的公开值，以检查其形状和类型是否符合预期。
+
+\begin{lstlisting}[language=Python]
+(pk, sk) = keygen()
+A, t = pk
+print("A =")
+print(A)
+print("\nSecret:")
+print(sk)
+print("\nPublic:")
+print(t)
+\end{lstlisting}
+
+这看起来已经与 Kyber 中使用的数学对象非常接近了。
+
+\section{编码一个消息比特}
+
+在玩具版中，消息被简化为单个比特。在真实方案中，消息编码要微妙得多；这里我们只是把一个比特映射为零，或映射为模数范围中间附近的一个值。
+
+\begin{lstlisting}[language=Python]
+def encode_bit(bit):
+    if bit == 0:
+        return Rq(0)
+    else:
+        return Rq(q // 2)
+\end{lstlisting}
+
+这足以演示把一个比特隐藏在带噪声线性方程中的基本思想。
+
+\section{加密}
+
+为了加密一个消息比特，我们采样一个随机向量 $r$ 和两个噪声项 $e_1,e_2$。核心方程为
+\[
+u = A^T r + e_1,
+\]
+\[
+v = t^T r + e_2 + m.
+\]
+
+\begin{lstlisting}[language=Python]
+def encrypt(pk, bit):
+    A, t = pk
+    r = small_vector()
+    e1 = small_vector()
+    e2 = small_poly()
+    u = A.transpose() * r + e1
+    m = encode_bit(bit)
+    v = t.dot_product(r) + e2 + m
+    return (u, v)
+\end{lstlisting}
+
+密文是二元组 $(u,v)$。
+
+\begin{algorithm}[H]
+\caption{玩具版加密}
+\label{alg:toy-encrypt}
+\begin{algorithmic}[1]
+\Require 公钥 $(A,t)$；消息比特 $m\in\{0,1\}$
+\Ensure 密文 $(u,v)$
+\State $r \gets$ small\_vector(), \quad $e_1 \gets$ small\_vector(), \quad $e_2 \gets$ small\_poly()
+\State $u \gets A^{T} r + e_1$
+\State $v \gets t^{T} r + e_2 + \textsc{Encode}(m)$ \Comment{$\textsc{Encode}(0)=0,\ \textsc{Encode}(1)=\lfloor q/2\rfloor$}
+\State \Return $(u,v)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{解密}
+
+解密步骤使用秘密钥 $s$。其主要思想是：在代数展开过程中，涉及 $A$ 和 $s$ 的项相互抵消，只留下少量噪声和编码后的消息。
+
+\begin{lstlisting}[language=Python]
+def decrypt(sk, cipher):
+    u, v = cipher
+    value = v - sk.dot_product(u)
+    return value
+\end{lstlisting}
+
+我们通过比较到两个编码中心 $0$ 和 $\lfloor q/2\rfloor$ 的循环距离来恢复比特。特别地，域元素 $16$ 表示 $-1$，必须被识别为接近编码后的零，而不是消息为一的值。
+
+\begin{lstlisting}[language=Python]
+def recover_bit(value):
+    c = value.list()[0]
+    d0 = min(c, q - c)
+    d1 = min((c - q//2) % q, (q//2 - c) % q)
+    return 0 if d0 < d1 else 1
+\end{lstlisting}
+
+\begin{algorithm}[H]
+\caption{玩具版解密}
+\label{alg:toy-decrypt}
+\begin{algorithmic}[1]
+\Require 秘密钥 $s$；密文 $(u,v)$
+\Ensure 恢复出的比特 $m' \in \{0,1\}$
+\State $w \gets v - s^{T} u$ \Comment{$A,s$ 项相互抵消，只留下噪声 $+$ 消息}
+\State $c \gets$ $w$ 在 $\{0,\ldots,q-1\}$ 中的常数项系数
+\State $d_0 \gets \min(c,q-c)$; \quad $d_1 \gets \min((c-\lfloor q/2\rfloor)\bmod q,(\lfloor q/2\rfloor-c)\bmod q)$
+\State \Return 若 $d_0<d_1$ 则返回 $0$，否则返回 $1$
+\end{algorithmic}
+\end{algorithm}
+
+\section{整合所有部分}
+
+一次完整的玩具版运行如下所示。
+
+\begin{lstlisting}[language=Python]
+# Key generation
+(pk, sk) = keygen()
+
+# Encryption
+bit = 1
+cipher = encrypt(pk, bit)
+
+# Decryption
+value = decrypt(sk, cipher)
+print("decrypted value =", value)
+print("recovered bit =", recover_bit(value))
+\end{lstlisting}
+
+由于噪声被刻意保持得很小，在许多次运行中它都会返回正确的比特。
+
+\section{为什么抵消能够成立}
+
+重要的代数思想是，公钥满足
+\[
+\mathbf{t} = A\mathbf{s}+\mathbf{e},
+\]
+因此在解密时计算
+\[
+\mathbf{v} - \mathbf{s}^T\mathbf{u}.
+\]
+展开之后，涉及 $A$ 和 $s$ 的项相互抵消，只留下一个小的误差项和消息。这就是类 Kyber 构造的核心。
+
+\section{为什么该方案有时会失败}
+
+这个玩具版构造仍然可能频繁失败，因为 $q=17$ 非常小，而且累积误差并不像 ML-KEM 中那样受到约束。它演示的是抵消与循环译码，而不是一个可靠的加密方案。在真实的 ML-KEM 中，参数经过调校，使解密失败概率极小。
+
+一个简单的实验是把噪声生成器从
+
+\begin{lstlisting}[language=Python]
+randint(-1, 1)
+\end{lstlisting}
+
+改为更大的范围，例如
+
+\begin{lstlisting}[language=Python]
+randint(-2, 2)
+\end{lstlisting}
+
+甚至
+
+\begin{lstlisting}[language=Python]
+randint(-5, 5)
+\end{lstlisting}
+
+并观察到解密错误变得频繁得多。这直接说明了噪声参数的作用，也预示了为什么真实的 ML-KEM 要如此仔细地控制其噪声分布。
+
+\section{与真实 Kyber 相比还缺少什么？}
+
+这个玩具版实现已经抓住了 ML-KEM 的数学骨架。然而，它离完整的标准仍相去甚远。以下组件尚未出现：
+
+\begin{itemize}
+    \item CBD 采样，
+    \item SHAKE128 / SHAKE256 以及基于 XOF 的扩展，
+    \item 基于 NTT 的多项式乘法，
+    \item 压缩与编码，
+    \item Fujisaki–Okamoto 变换，
+    \item CCA 安全性行为，
+    \item 常数时间实现细节。
+\end{itemize}
+
+这些内容将在后续章节中逐步引入。
+
+\section{小结}
+
+这个玩具版实现以紧凑的形式抓住了 Kyber 的核心思想。从模 LWE 关系出发，密钥生成构造 $\mathbf{t}=A\mathbf{s}+\mathbf{e}$；加密构造 $\mathbf{u}=A^{T}\mathbf{r}+\mathbf{e}_1$ 和 $v=\mathbf{t}^{T}\mathbf{r}+e_2+m$；解密计算 $v-\mathbf{s}^{T}\mathbf{u}$，并从所得的小的带噪声值中恢复消息。
+
+最重要的教训是，Kyber 并不是一个全新的原语。它是我们在全书中一直研究的同一带噪声线性结构经过精心工程化的版本。接下来的几章将替换剩余的捷径：真实的 CBD 噪声采样（第~\ref{ch:cbd}~章），然后是完整的 FIPS 203 实现——密钥生成、封装、解封装以及 Fujisaki–Okamoto 变换——见第~\ref{ch:fips203}~章。
+
+\printbibliography[heading=chapterrefs]

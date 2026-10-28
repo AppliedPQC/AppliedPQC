@@ -1,0 +1,280 @@
+% source: cb9768e917290c1b76f5165fdc1e7edb7a4173a9
+\chapter{环 LWE（RLWE）}
+\label{ch:rlwe}
+
+\section{LWE 家族的路线图}
+
+本章是一个三阶段演进的中间一步，在深入细节之前先看清整条脉络会有所帮助。基于格（lattice）的密钥交换并非一蹴而就；它是通过一系列假设逐步成长起来的，每一个假设都弥补了前一个的不足。
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 8mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (lwe) {LWE\\[-2pt]\scriptsize 2005};
+  \node[flownode, right=of lwe] (rlwe) {RLWE\\[-2pt]\scriptsize 2010};
+  \node[flownode, right=of rlwe] (mlwe) {Module-LWE\\[-2pt]\scriptsize 2015};
+  \node[keynode, right=of mlwe] (mlkem) {ML-KEM\\[-2pt]\scriptsize 2024};
+  \draw[flowarrow] (lwe) -- (rlwe);
+  \draw[flowarrow] (rlwe) -- (mlwe);
+  \draw[flowarrow] (mlwe) -- (mlkem);
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{LWE}（Regev，2005~\cite{regev2009}）可证明与最坏情形下的格问题一样困难，但其公钥是一个完整的 $n\times n$ 矩阵——数百 KB——难以实际部署（第~\ref{ch:lwe}~章）。
+  \item \textbf{环 LWE}（Lyubashevsky、Peikert 与 Regev，2010~\cite{lpr2010}）用环 $R_q=\mathbb{Z}_q[x]/(x^n+1)$ 中的单个多项式取代该矩阵，把密钥从整个矩阵缩减为一行的系数量，并使近线性时间的乘法成为可能。代价是额外的代数结构，这是一个潜在的攻击面。\textbf{本章构建 RLWE。}
+  \item \textbf{模 LWE}（Langlois 与 Stehl\'e，2015~\cite{langlois2015}）是一种有意为之的折中：用一个由环元素组成的短\emph{向量}代替单个环元素。它保留了 RLWE 的大部分效率，同时稀释了环结构，以防范未来任何利用完整环结构的攻击。下一章将构建它。
+  \item \textbf{ML-KEM}（Kyber~\cite{kyber2018}，2024 年标准化为 FIPS 203~\cite{fips203}）是基于模格的密钥封装机制（KEM），下一部分将完整地组装它——它是整个演进过程的终点。
+\end{itemize}
+
+有一个权衡贯穿整个故事：\emph{更多的代数结构换来更小的密钥和更快的运算，但也扩大了攻击面}。LWE 位于一个极端（无结构，密钥最大）；RLWE 位于另一个极端（完整的环结构，密钥最小）；模 LWE 则是可调节的中间方案，也是标准最终选择的方案。注意这条脉络并不是单调的——该领域先推进到了 RLWE 的完整结构，随后又作为一种对冲而有意\emph{退回}到模 LWE。有了这张路线图，我们现在来构建环这一步。
+
+\section{LWE 的致命问题}
+
+LWE 在理论上很优雅，但其朴素形式并不实用。回顾基本方程
+\[
+b = A s + e.
+\]
+若维数为 $n=1024$，则矩阵 $A$ 大约有 $1024\times 1024$ 个元素，即超过一百万个系数。若每个系数用几个字节存储，公钥就已经变得很大。在实践中，直接构造的 LWE 公钥对于实际部署而言代价过高。
+
+这就是为什么 LWE 在理论上很漂亮，但在工程上缺乏吸引力。其代数很简单，但表示很笨重。
+
+\section{观察负循环矩阵结构}
+
+RLWE 使用的商是 $x^n+1$，而不是 $x^n-1$。对于 $a(x)=a_0+a_1x+a_2x^2$，模 $x^3+1$ 的乘法可表示为
+\[
+N(a)=\begin{bmatrix}
+a_0&-a_2&-a_1\\
+a_1&a_0&-a_2\\
+a_2&a_1&a_0
+\end{bmatrix}.
+\]
+这些移位是有结构的，但由于 $x^3=-1$，越过边界的系数会改变符号。这是一个\emph{负循环}（带符号循环）矩阵，而不是普通的循环矩阵。一个多项式仍然决定了整个线性映射，因此存储上的优势依然存在。
+
+\section{为什么会出现负循环结构}
+
+对于 $a(x)=1+2x+3x^2$ 和 $s(x)=4+5x+6x^2$，普通乘法会产生直到四次的项。模 $x^3+1$ 约简把 $x^3$ 映射为 $-1$，把 $x^4$ 映射为 $-x$。这种带符号翻转的回绕是 RLWE 背后的关键结构；第~\ref{ch:convolution}~章将并列展开循环与负循环两种情形。
+
+\section{工作环 $R_q$}
+
+RLWE 并不位于普通的多项式环中，而是位于如下商环中：
+\[
+R_q = \mathbb{Z}_q[x]/(x^n+1),
+\]
+其构造——商环、约简规则 $x^n\equiv-1$ 以及分圆模数 $x^n+1$——已在第~\ref{ch:polyring}~章中展开。这里只回顾本章其余部分所需的内容。两个多项式相乘可能使次数达到 $n$ 或更高，但定义关系 $x^n\equiv-1$（从而 $x^{n+1}\equiv-x$、$x^{n+2}\equiv-x^2$，依此类推）会把每个乘积折回到次数低于 $n$，因此表示始终紧凑且有结构。Kyber 将其实例化为 $R_q=\mathbb{Z}_{3329}[x]/(x^{256}+1)$。
+
+\section{Sage 实验}
+
+我们可以在 Sage 中定义一个简单的商环。
+
+\begin{lstlisting}[language=Python]
+q = 17
+from random import choice
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+
+a = S(x^3 + 2*x + 1)
+b = S(x^2 + 3)
+print(a*b)
+\end{lstlisting}
+
+乘法会自动模 $x^8+1$ 约简。
+
+\section{从 LWE 到 RLWE}
+
+在标准 LWE 中，秘密是一个向量
+\[
+s=(s_1,\dots,s_n).
+\]
+在 RLWE 中，秘密变成一个多项式
+\[
+s(x)=s_0+s_1x+\cdots+s_{255}x^{255}.
+\]
+同样，公开值 $a$ 也变成一个多项式。带噪声的方程变为
+\[
+b(x)=a(x)s(x)+e(x).
+\]
+
+数学本质上并无不同，但表示方式改变了。我们不再存储和相乘大型随机矩阵，而是处理有结构的多项式。下图把这种压缩具体地呈现出来。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.75]
+  % Left: a small grid schematically representing the many independent
+  % entries of a general LWE matrix A (a real matrix would be n x n,
+  % e.g. 1024 x 1024, not 5 x 5 -- this is a schematic, not to scale)
+  \foreach \i in {0,...,4} {
+    \foreach \j in {0,...,4} {
+      \draw[pqcgray, fill=pqclight] (\i*0.8,\j*0.8) rectangle ++(0.7,0.7);
+    }
+  }
+  \node[pqcgray, font=\small] at (1.95,-0.7) {matrix $A$};
+  \node[pqcgray, font=\scriptsize] at (1.95,-1.15) {many independent entries};
+
+  \draw[flowarrow] (4.3,1.95) -- (6.1,1.95);
+  \node[pqcgray, font=\scriptsize, align=center] at (5.2,2.45) {same storage as\\one row};
+
+  \node[flownode, minimum width=1.6cm, minimum height=1.6cm, font=\normalsize] (poly) at (7.3,1.95) {$a(x)$};
+  \node[pqcgray, font=\small] at (7.3,-0.7) {$a(x)\in R_q$};
+  \node[pqcgray, font=\scriptsize] at (7.3,-1.15) {one polynomial, $n$ coefficients};
+\end{tikzpicture}
+\caption{一图看懂 RLWE 的存储节省。一般的 LWE 矩阵 $A\in\mathbb{Z}_q^{n\times n}$ 被单个多项式 $a(x)\in R_q$ 取代。其系数决定了一个有结构的负循环线性映射，因此一个多项式就取代了一整个无结构的矩阵。具体能节省多少空间取决于参数选择和编码方式。}
+\label{fig:rlwe-compression}
+\end{figure}
+
+\section{为什么 RLWE 更快}
+
+在普通 LWE 中，乘法是矩阵乘法，大约需要 $O(n^2)$ 次运算。对于 $256$ 左右的维数，这意味着数万次运算。
+
+在 RLWE 中，乘法是多项式乘法。借助类 FFT 方法，其代价大约为 $O(n\log n)$。加速效果相当可观。在实践中，环结构使系统能够运行得快得多。
+
+这是 RLWE 在实际部署中变得有吸引力的核心原因之一。
+
+\section{借助 NTT 的快速乘法}
+
+第~\ref{ch:ntt}~章的数论变换（NTT）提供了快速表示。常规的循环 NTT 能将循环卷积对角化；而 $x^n+1$ 环则需要负循环的处理方式。对于 ML-KEM，部分 NTT 映射到 128 个二次分量，而不是不受限制的标量坐标。正是这种规定好的变换结构使多项式乘积在实践中高效。
+
+\section{Sage 实验：多项式乘法}
+
+无需编写完整的 NTT 实现，我们就能看到基本思想。
+
+\begin{lstlisting}[language=Python]
+R.<x> = PolynomialRing(GF(17))
+f = 1 + 2*x + x^2
+g = 3 + x
+print(f*g)
+\end{lstlisting}
+
+在完整的实现中，NTT（第~\ref{ch:ntt}~章）正是用来比朴素的教科书式乘法快得多地计算这一乘法的技术。
+
+\section{RLWE 安全吗？}
+
+乍看之下，额外的代数结构可能显得危险。也许它会让攻击者更容易求解问题。安全性的论证更为微妙。RLWE 基于理想格上的困难性，而不仅仅是一般格~\cite{lpr2010}。这使安全性分析更为复杂，但人们仍然相信它足够强，可供实际使用。
+
+\section{Sage 实验：一个玩具版 RLWE 式构造}
+
+我们可以构造一个小环，并形成 LWE 样本的类比物。
+
+\begin{lstlisting}[language=Python]
+q = 17
+from random import choice
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+
+a = S.random_element()  # uniform public ring element
+
+def small_poly():
+    return S([choice([-1, 0, 1]) for _ in range(8)])
+
+s = small_poly()
+e = small_poly()
+
+b = a*s + e
+print("a =", a)
+print("s =", s)
+print("e =", e)
+print("b =", b)
+\end{lstlisting}
+
+这是一个玩具版的 RLWE 式样本：$a$ 是均匀分布的，而 $s$ 和 $e$ 的系数明显很小。不依赖于任何特定计算机代数系统来写，同样的构造即为算法~\ref{alg:rlwe-sample}。
+
+\begin{algorithm}[H]
+\caption{生成一个 RLWE 样本}
+\label{alg:rlwe-sample}
+\begin{algorithmic}[1]
+\Require 环 $R_q = \mathbb{Z}_q[x]/(x^n+1)$
+\Ensure RLWE 样本 $(a,b)$；秘密 $s$
+\State $a(x) \gets$ $R_q$ 中均匀随机的元素
+\State $s(x) \gets$ $R_q$ 中的小（噪声量级）元素 \Comment{秘密}
+\State $e(x) \gets$ $R_q$ 中的小（噪声量级）元素 \Comment{误差}
+\State $b(x) \gets a(x)\,s(x) + e(x) \pmod{x^n+1}$
+\State \Return 以 $(a,b)$ 作为样本，$s$ 作为秘密
+\end{algorithmic}
+\end{algorithm}
+
+\section{比较：LWE 与 RLWE}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+性质 & LWE & RLWE \\
+\hline
+数据结构 & 向量和矩阵 & 多项式 \\
+\hline
+空间 & $O(n^2)$ & $O(n)$ \\
+\hline
+计算 & 矩阵乘法 & 多项式乘法 \\
+\hline
+加速 & 有限 & 适合 NTT \\
+\hline
+安全基础 & 一般格 & 理想格 \\
+\hline
+实际部署 & 少见 & 广泛 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{为什么 Kyber 不是纯 RLWE}
+
+一个经典的面试问题是：为什么 Kyber 不是纯 RLWE？答案是 Kyber 使用的是多项式向量，而不是单个多项式。换言之，秘密不只是一个环元素，而是环上的一个模元素。这就是模 LWE 的由来，我们接下来将研究它。
+
+\section{一个姊妹假设：NTRU}
+\label{sec:ntru}
+
+RLWE 并不是在环 $R_q$ 中构建困难问题的唯一方式。一个更早的构造 \textbf{NTRU}~\cite{ntru1998}（始于 1996 年，早于 LWE）位于同一个环中，但以不同的方式隐藏其秘密。NTRU 不使用加性噪声方程 $b = a s + e$，而是选取\emph{两个}短的秘密多项式 $f, g \in R_q$（其中 $f$ 可逆），并公布单个商：
+\[
+h = g \cdot f^{-1} \pmod q.
+\]
+\textbf{NTRU 假设}是：$h$ 看起来像一个均匀随机的环元素，并且从 $h$ 恢复短的二元组 $(f,g)$ 是困难的。
+
+\begin{lstlisting}[language=Python]
+q = 17
+from random import choice
+R.<x> = PolynomialRing(GF(q))
+S = R.quotient(x^8 + 1)
+def small_unit():
+    f = S([choice([-1,0,1]) for _ in range(8)])
+    while not f.is_unit():
+        f = S([choice([-1,0,1]) for _ in range(8)])
+    return f
+
+f = small_unit()              # short and invertible
+g = S([0,1,-1,0,1,0,0,-1])   # short
+h = g * f^(-1)                # public key
+print(h)
+\end{lstlisting}
+
+它有一个等价的格图景，恰好就是第~\ref{part:lattices}~部分中好基/坏基的故事。\emph{NTRU 格}
+\[
+\Lambda = \{ (u,v) \in R_q^2 : u + v\,h \equiv 0 \pmod q \}
+\]
+包含短向量 $(g, -f)$，因为 $g - f\,h = g - f\,(g/f) = 0$。仅凭 $h$，只能写出 $\Lambda$ 的一组\emph{坏}（长）基；短的二元组 $(f,g)$ 才是一组\emph{好}基。恢复它是 $\Lambda$ 中的一个最短向量问题（SVP）。
+
+因此 RLWE 与 NTRU 是同一个环中的两个姊妹：RLWE 把秘密隐藏在加性噪声中，NTRU 把两个短多项式隐藏在一个商之中，二者都归结为在一个有结构的格中寻找短向量。我们在这里单独介绍 NTRU，是因为 FN-DSA 签名（Falcon；FIPS~206，仍在制定中，第~\ref{ch:fndsa}~章）完全建立在它之上。
+
+\section{小结}
+
+核心思想很简单：
+
+\begin{quote}
+RLWE 用有结构的多项式取代大型随机矩阵，在保留 LWE 核心的带噪声线性结构的同时，大幅改善了存储和速度。
+\end{quote}
+
+其演进过程为：
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 6mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {linear algebra};
+  \node[flownode, right=of a] (b) {LWE};
+  \node[flownode, right=of b] (c) {RLWE};
+  \node[flownode, right=of c] (d) {NTT\\[-2pt]acceleration};
+  \node[keynode, right=of d] (e) {practical PQC};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+  \draw[flowarrow] (d) -- (e);
+\end{tikzpicture}
+\end{center}
+
+\noindent 其中 RLWE 这一步正是转向具有负循环结构的多项式环。
+
+\printbibliography[heading=chapterrefs]
