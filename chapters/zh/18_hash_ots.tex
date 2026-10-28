@@ -1,0 +1,125 @@
+% source: 4997b5ca77af63fd756cdebecede2411cd3cb726
+\chapter{基于哈希的签名：一次性签名与少次签名}
+\label{ch:hashots}
+
+\section{本章为何重要}
+上一部分把签名建立在格问题之上。本部分则把签名建立在一个完全不同的基础上——仅仅依靠一个密码学哈希函数。这里没有数论，没有格，也没有任何可供攻击者利用的代数结构：只要哈希函数是安全的，签名就是安全的。这使得基于哈希的签名成为最保守的后量子选择，这也正是 NIST 标准化了其中一种（SLH-DSA，FIPS 205），用以防范将来格出现结构性破解的原因。
+
+由于这一基础如此不同，我们将以引入格时的方式来引入它：从零开始。本章构建最基本的组件——一次性签名与少次签名——下一章则借助 Merkle 树把它们组装成一个可多次使用的无状态方案。只有到那时，即第~\ref{ch:slhdsa}~章，我们才转向 FIPS 205 标准本身。
+
+\section{学习目标}
+读完本章后，你应当能够：
+
+\begin{itemize}
+  \item 陈述哈希函数必须提供的三种安全性质，并说明为何 Grover 算法只会轻微削弱它们；
+  \item 构造并验证 Lamport 一次性签名，并解释为何它严格只能使用一次；
+  \item 解释 Winternitz（WOTS\textsuperscript{+}）如何以哈希计算时间换取短得多的签名；
+  \item 描述少次签名 FORS，以及其安全界如何随签名次数而变化。
+\end{itemize}
+
+\section{安全哈希函数能保证什么}
+前面的章节只把 SHAKE 之类的哈希函数用作\emph{扩展器}——把一个短种子确定性地拉伸为矩阵或噪声的手段（第~\ref{ch:cbd}--\ref{ch:fips203}~章）。在这里，哈希函数是\emph{唯一的安全来源}，因此我们要准确陈述对 $H:\{0,1\}^*\to\{0,1\}^n$ 所作的假设。
+
+\begin{definition}[哈希函数的安全性]
+一个密码学哈希函数 $H$ 被假定为
+\begin{itemize}
+  \item \emph{抗原像}（单向）：给定 $y$，难以找到任何满足 $H(x)=y$ 的 $x$；
+  \item \emph{抗第二原像}：给定 $x$，难以找到满足 $H(x')=H(x)$ 的 $x'\neq x$；
+  \item \emph{抗碰撞}：难以找到任何满足 $H(x)=H(x')$ 的一对 $x\neq x'$。
+\end{itemize}
+\end{definition}
+
+这就是全部假设。由于不存在隐藏的代数结构，也就不存在 Shor 式的破解；量子计算唯一能提供的帮助是 Grover 搜索（第~\ref{ch:quantum}~章），它把抗原像性从 $n$ 比特降低到大约 $n/2$ 比特。基于哈希的方案只需使用更大的输出长度 $n$（16、24 或 32 字节），即可保持充裕的安全余量。足以击溃 RSA 的威胁，对哈希而言只不过意味着需要更大的参数。
+
+\section{Lamport 一次性签名}
+最简单的基于哈希的签名由 Lamport~\cite{lamport1979} 提出，它已经包含了核心思想：\emph{以揭示哈希原像作为证明}。
+
+为了对一条 $m$ 比特的消息签名，签名者为每个比特位置准备\emph{两个}秘密随机值——一个在该比特为 $0$ 时揭示，另一个在该比特为 $1$ 时揭示——并公布它们的哈希值。对消息签名时，每个位置恰好揭示一个秘密值：即与该比特相对应的那一个。验证者对每个被揭示的秘密值求哈希，并与正确的公开值进行比对。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node (lbl0) at (0,1.4) {position $i$:};
+  \node[flownode] (s0) at (2.7,1.4) {$sk_{i,0}$};
+  \node[flownode] (s1) at (6.8,1.4) {$sk_{i,1}$};
+  \node[keynode] (p0) at (2.7,0) {$pk_{i,0}=H(sk_{i,0})$};
+  \node[keynode] (p1) at (6.8,0) {$pk_{i,1}=H(sk_{i,1})$};
+  \draw[flowarrow] (s0) -- (p0);
+  \draw[flowarrow] (s1) -- (p1);
+  \node[pqcorange, align=center] at (4.75,-1.0)
+    {if the message bit is $0$, reveal $sk_{i,0}$;\quad if it is $1$, reveal $sk_{i,1}$};
+\end{tikzpicture}
+\caption{Lamport 密钥的一个位置。$m$ 个消息比特位置中的每一个都有两个秘密值，其哈希值是公开的。一个签名在每个位置恰好揭示一个秘密值——与消息比特相对应的那一个——验证者确认它的哈希值等于已公布的值。未被揭示的秘密值则由抗原像性保护而保持隐藏。}
+\label{fig:lamport}
+\end{figure}
+
+\begin{algorithm}[H]
+\caption{Lamport 一次性签名}
+\label{alg:lamport}
+\begin{algorithmic}[1]
+\Statex \textbf{KeyGen：}
+\State 对 $i=0,\dots,m-1$ 及 $b\in\{0,1\}$，采样 $sk_{i,b}\gets\{0,1\}^n$ 并令 $pk_{i,b}\gets H(sk_{i,b})$
+\State \Return 秘密钥 $(sk_{i,b})$，公钥 $(pk_{i,b})$
+\Statex \textbf{Sign}：对消息 $M=(M_0,\dots,M_{m-1})\in\{0,1\}^m$ 签名：
+\State \Return $\sigma=(sk_{0,M_0},\ sk_{1,M_1},\ \dots,\ sk_{m-1,M_{m-1}})$
+\Statex \textbf{Verify} $(M,\sigma=(\sigma_0,\dots,\sigma_{m-1}))$：
+\State \Return \emph{接受}，当且仅当对每个 $i$ 都有 $H(\sigma_i)=pk_{i,M_i}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{remark}[为何它严格只能使用一次]
+一个签名在每个位置揭示一个秘密值——即与 $M$ 相对应的那些。要伪造一条\emph{不同的}消息 $M'$，攻击者需要在每个满足 $M'_i\neq M_i$ 的位置上得到 $sk_{i,M'_i}$，而这些秘密值仍受抗原像性保护。然而，对不同消息的两个签名合在一起，会在每个不同的位置上暴露\emph{两个}秘密值，此后任何消息都可被伪造。因此，一个 Lamport 密钥恰好只能安全地签署一次。
+\end{remark}
+
+Lamport 的密钥和签名都很大（分别为 $2m$ 个和 $m$ 个哈希值）。下一个构造保持一次性安全性，但大幅缩小了签名。
+
+\section{Winternitz：以时间换尺寸（WOTS\textsuperscript{+}）}
+Winternitz 不再为每个比特使用两个独立的秘密值，而是为消息的每个 $w$ 进制数位使用一条\emph{哈希链}。从秘密值 $sk$ 出发，反复求哈希得到一条链，公开值就是链的末端：
+\[
+sk \;\xrightarrow{H}\; H(sk) \;\xrightarrow{H}\; \cdots \;\xrightarrow{H}\; H^{w-1}(sk)=pk.
+\]
+为了对数位 $m$ 签名，签名者揭示中间点 $H^{m}(sk)$；验证者对其再求哈希剩余的 $w-1-m$ 次，并检查结果是否到达 $pk$。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (sk) {$sk$};
+  \node[flownode, right=of sk] (h1) {$H(sk)$};
+  \node[flownode, right=of h1] (h2) {$H^2(sk)$};
+  \node[right=6mm of h2] (dots) {$\cdots$};
+  \node[keynode, right=6mm of dots] (pk) {$pk=H^{w-1}(sk)$};
+  \draw[flowarrow] (sk) -- (h1);
+  \draw[flowarrow] (h1) -- (h2);
+  \draw[flowarrow] (h2) -- (dots);
+  \draw[flowarrow] (dots) -- (pk);
+  \draw[decorate,decoration={brace,amplitude=4pt},pqcorange]
+        (h2.north west) -- node[above=3pt]{signature $=H^{m}(sk)$} (h2.north east);
+\end{tikzpicture}
+\caption{一条长度为 $w$ 的 WOTS\textsuperscript{+} 哈希链。秘密值是起点，公开值是终点，签名揭示一个中间点。验证者向前求哈希，检查其是否到达公开的终点。完整的消息摘要被拆分为若干 $w$ 进制数位，每个数位由各自的链签名。}
+\label{fig:wots-chain}
+\end{figure}
+
+这里有一个必须用校验和来弥补的漏洞。揭示 $H^m(sk)$ 使任何人都能\emph{向前}求哈希得到任意 $m'>m$ 的 $H^{m'}(sk)$，因此攻击者可以毫无代价地把一个数位“推进”到更大的值。WOTS\textsuperscript{+} 在数位之后附加一个简短的\emph{校验和}，校验和本身由额外的链签名，其安排使得增大任何一个消息数位都必然\emph{减小}某个校验和数位——而这需要把一条链\emph{向后}移动，即求 $H$ 的逆。参数 $w$ 调节一种权衡：较大的 $w$ 意味着更少、更长的链（签名更短，哈希计算更多），较小的 $w$ 则相反。与 Lamport 一样，一个 WOTS\textsuperscript{+} 密钥恰好只能安全地签署一次。
+
+\section{FORS：一种少次签名}
+一次性密钥毫不宽容：哪怕只重用一次也是灾难性的。后续章节中的无状态方案在一个非常大的地址空间中使用 \textbf{FORS}（Forest Of Random Subsets，随机子集森林），这是一种\emph{少次}签名。这并不意味着允许重用密钥；它只是使得在发生意外地址碰撞这种极小概率事件时，安全性分析的退化更加平缓。
+
+\begin{definition}[FORS]
+FORS 由 $k$ 棵相互独立的 Merkle 树组成，每棵树的高度为 $a$（因此每棵树有 $2^a$ 个叶子，每个叶子隐藏一个秘密值）。消息摘要被拆分为 $k$ 个索引，每棵树一个；对于每棵树，签名揭示所选叶子处的秘密值，以及它通往该树根的认证路径。这 $k$ 个根被一起求哈希，得到单个 FORS 公钥。
+\end{definition}
+
+由于每棵树只揭示其索引所选中的\emph{那一个}叶子，安全界会随签名次数以及任何地址碰撞而退化。SLH-DSA 使用消息随机化和巨大的地址空间，使这类碰撞极不可能发生。实现绝不能有意重用 FORS 或 WOTS 地址；WOTS 叶子的重用仍然是一个严重事件。（FORS 所使用的 Merkle 树是下一章的主题。）
+
+\section{小结}
+本章构建了基于哈希的签名的基本组件：
+
+\begin{itemize}
+  \item 安全性仅依赖于哈希函数的抗原像性/抗碰撞性，Grover 算法只能将其削弱到 $n/2$ 比特；
+  \item \textbf{Lamport} 通过为每个消息比特揭示一个原像来签名一次——简单但尺寸大；
+  \item \textbf{WOTS\textsuperscript{+}} 用哈希链加校验和取代比特对，以一小部分尺寸保持一次性安全性；
+  \item \textbf{FORS} 是一种\emph{少次}签名，其安全界随签名次数而退化；地址重用绝不是一种实现策略。
+\end{itemize}
+
+这些密钥中的每一个仍然只能使用一次（或少数几次）。下一章将消除这一限制：一棵 Merkle 树把许多一次性密钥绑定在单个公开根之下，而由这类树构成的超树（hypertree），通过对消息求哈希来寻址，便得到一个可多次使用的无状态签名。
+
+\printbibliography[heading=chapterrefs]

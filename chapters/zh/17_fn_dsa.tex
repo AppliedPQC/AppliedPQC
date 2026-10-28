@@ -1,0 +1,476 @@
+% source: 7f5aed6e83049c045ccf95d9a311278bd566bac8
+\chapter{FN-DSA（Falcon）：面向草案的讲解}
+\chaptermark{FN-DSA（Falcon）}
+\label{ch:fndsa}
+
+\section{学习目标}
+
+本章是对 FN-DSA 的面向草案的讲解；FN-DSA 是 NIST 计划中对 Falcon 的标准化~\cite{fips206,falcon2020}。本章并不声称符合某个最终版 FIPS：读者必须查阅具体实现所采用的确切草案版本及其日期。与 ML-KEM、ML-DSA 和 SLH-DSA 不同，在本书的标准快照时点，FIPS 206 仍处于标准化过程中。ML-DSA 采用带中止的 Fiat--Shamir，而 Falcon 在同样的格基础上走了另一条路：在 NTRU 格上进行\emph{哈希后签名}（hash-and-sign），并使用高斯陷门采样器。其结果是三个签名标准中最紧凑的签名和密钥，代价则是最为精细的实现。
+
+学完本章后，你应当能够：
+
+\begin{enumerate}
+  \item 将哈希后签名与 ML-DSA 的 Fiat--Shamir 方法进行对比，并陈述 GPV 框架及其安全要求；
+  \item 描述 NTRU 格，以及为什么一个短的秘密基就是陷门；
+  \item 说明签名为何是一个借助高斯采样器求解的最近格点问题；
+  \item 把采样器与第~\ref{part:lattices}~部分中的离散高斯分布、好基与坏基以及 CVP 联系起来；
+  \item 理解为什么 Falcon 的浮点运算使常数时间实现变得困难。
+\end{enumerate}
+
+\section{从格到签名的两条路线}
+\label{sec:hash-and-sign-vs-fs}
+
+一个签名方案需要：一个任何人都可以据以检验的公钥，一个只有签名者持有的秘密，以及一种把二者与消息绑定的方法。在格上有两种标准的构造方式，而两个格签名标准恰好各采用其一。ML-DSA（第~\ref{ch:mldsa}~章）由一个经哈希压缩的身份识别协议构建而成：签名者作出承诺，把承诺与消息一起哈希得到挑战，再以一个响应回答挑战，而该响应的分布必须借助拒绝采样做到与秘密无关。Falcon 走的是另一条路——\emph{哈希后签名}；在本章详细跟随 Falcon 的路线之前，本节先将两者并列对比。
+
+\subsection{哈希后签名}
+
+哈希后签名是更古老的范式，其形态与教科书式 RSA 签名相同。公开函数 $f_{\mathrm{pk}}$ 易于计算但难以求逆；签名者持有一个使求逆变得容易的陷门。签名时，签名者把消息哈希到 $f_{\mathrm{pk}}$ 值域中的一个点，然后用陷门求出一个原像：
+\begin{enumerate}
+  \item 把消息哈希为目标点 $c = H(M)$；
+  \item 使用秘密陷门找到满足 $f_{\mathrm{pk}}(s) = c$ 的原像 $s$；
+  \item 验证者重新计算 $c$，并检查 $f_{\mathrm{pk}}(s) = c$。
+\end{enumerate}
+签名就是原像 $s$ 本身，连同哈希中使用的盐值（如果有的话）。整个过程不涉及交互，也不抽取挑战：消息决定目标，陷门给出回答。
+
+在格上，公开函数是一个短整数解映射。给定公开矩阵 $\mathbf{A}$，函数 $f_{\mathbf{A}}(\mathbf{s}) = \mathbf{A}\mathbf{s} \bmod q$ 限制在\emph{短}输入上时易于计算，而对其求逆（找到满足 $\mathbf{A}\mathbf{s} = c$ 的短向量 $\mathbf{s}$）是一个非齐次 SIS 实例，在没有额外信息的情况下是困难的（第~\ref{sec:sis}~节）。陷门是格 $\Lambda^{\perp}_q(\mathbf{A}) = \{\mathbf{z} : \mathbf{A}\mathbf{z} = \mathbf{0} \bmod q\}$ 的一组短基：给定 $\mathbf{A}\mathbf{s}_0 = c$ 的任意一个解 $\mathbf{s}_0$，好基使签名者能够找到一个靠近 $\mathbf{s}_0$ 的格点，而二者之差就是一个短解。用格的语言来说，签名就是一个最近向量问题，而陷门恰恰就是第~\ref{ch:lattice}--\ref{ch:svp}~章所指出的、使 CVP 变得可解的那组好基。
+
+\subsection{Fiat--Shamir}
+
+Fiat--Shamir 从另一端出发。这里没有需要求逆的陷门函数；秘密被用来以一种不掌握秘密的一方无法做到的方式回答随机挑战。第~\ref{sec:fiat-shamir}~节给出了三轮身份识别协议（承诺 $w$、挑战 $c$、响应 $z$），以及去掉验证者的变换 $c = H(w \,\|\, M)$。在 ML-DSA 中，承诺是 $\mathbf{w} = \mathbf{A}\mathbf{y}$，其中 $\mathbf{y}$ 是新鲜的掩码向量，响应是 $\mathbf{z} = \mathbf{y} + c\,\mathbf{s}_1$。正确性来自线性。安全性要求 $\mathbf{z}$ 不泄露关于 $\mathbf{s}_1$ 的任何信息；由于 $\mathbf{y}$ 是有界的而非高斯的，和 $\mathbf{y} + c\,\mathbf{s}_1$ 并不会自动与 $\mathbf{s}_1$ 无关；第~\ref{sec:fiat-shamir}~节的中止循环会丢弃那些可能泄露信息的响应。
+
+\subsection{对比}
+
+两条路线最终归结为同一个要求，即发布给验证者的对象的分布必须与秘密无关，但它们满足这一要求的方式不同，而这一差异决定了本章随后的全部内容。
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.20\textwidth}p{0.36\textwidth}p{0.36\textwidth}}
+\toprule
+ & 带中止的 Fiat--Shamir（ML-DSA） & 哈希后签名（Falcon） \\
+\midrule
+公钥 & $(\mathbf{A}, \mathbf{t} = \mathbf{A}\mathbf{s}_1 + \mathbf{s}_2)$；一个 LWE 型实例 & $h = g f^{-1}$；NTRU 格的坏基 \\
+秘密 & 短的 $(\mathbf{s}_1, \mathbf{s}_2)$ & 同一个格的一组短基 \\
+签名 & 承诺，哈希得到挑战，响应，若响应会泄露信息则重试 & 哈希到目标点，用陷门采样一个短原像 \\
+隐藏秘密的机制 & 对响应进行拒绝采样 & 采样器的输出分布 \\
+签名中的随机性 & 每次尝试使用新鲜掩码 $\mathbf{y}$ & 哈希中的盐值与高斯采样器 \\
+实现出错时的失效方式 & 发布的响应与 $\mathbf{s}_1$ 相关 & 发布的原像泄露基 \\
+算术 & 整数运算，天然常数时间 & 浮点高斯采样 \\
+最小参数集的签名大小 & 2420 字节（ML-DSA-44，级别 2） & 约 666 字节（Falcon-512，级别 1） \\
+\bottomrule
+\end{tabular}
+\caption{两条格签名路线的并列对比。两者都必须保证所发布的对象与秘密无关；Fiat--Shamir 通过拒绝来强制这一点，哈希后签名则通过原像分布的选择来实现。}
+\label{tab:hash-and-sign-vs-fs}
+\end{table}
+
+最后一行的大小差距正是 Falcon 作为第二个标准而存在的理由，而算术一行则是它的代价。Fiat--Shamir 的响应是一个均匀有界的掩码与秘密的一个小倍数之和，因此它在字节上要付出掩码的全部宽度；哈希后签名的原像则可以短到陷门所允许的程度，对于条件良好的基，这只是前者的一部分。然而，要在不泄露基的前提下采样这样的原像，需要一个宽度受控的离散高斯分布，浮点运算正是由此进入的。
+
+\subsection{GPV 框架}
+\label{sec:gpv}
+
+哈希后签名的格版本在被做到安全之前就已经提出了。Goldreich、Goldwasser 和 Halevi~\cite{ggh1997}，以及后来的 NTRUSign~\cite{ntrusign2003}，都是用秘密好基把目标 $c$ 舍入到附近的格点来签名，这恰好就是第~\ref{ch:lll}~章的 Babai 算法。于是每个签名都是由秘密基张成、并平移到 $c$ 的平行多面体中的一个点，而一批签名就会勾勒出这个平行多面体。Nguyen 和 Regev~\cite{nguyenregev2006}通过拟合平行多面体的形状，仅凭几百个签名就恢复了这两个方案的秘密基。其教训与第~\ref{sec:fiat-shamir}~节为 ML-DSA 得出的教训相同：秘密的一个确定性函数，若被反复发布，就是来自某个依赖于秘密的分布的样本。
+
+Gentry、Peikert 和 Vaikuntanathan~\cite{gpv2008}给出了修复这一问题的框架，以作者姓氏命名为 \textbf{GPV}，本章此后也沿用这一名称。它用采样步骤取代舍入步骤。签名者不再取最近格点，而是从以目标为中心的离散高斯分布中抽取一个格点，并输出这一短差值。该框架包含三个组成部分。
+
+\begin{enumerate}
+  \item \textbf{陷门生成。}输出一个公开矩阵 $\mathbf{A}$（对 Falcon 而言是一个公开多项式 $h$），以及相应格的一组短基 $\mathbf{B}$，使得单独的 $\mathbf{A}$ 与随机矩阵不可区分。
+  \item \textbf{原像采样。}给定目标 $c$ 和短基 $\mathbf{B}$，输出满足 $\mathbf{A}\mathbf{s} = c$ 的 $\mathbf{s}$，且 $\mathbf{s}$ 在解陪集上服从参数为 $\sigma$ 的离散高斯分布，其中 $\sigma$ 是 $\mathbf{B}$ 最大 Gram--Schmidt 长度的一个小倍数。
+  \item \textbf{验证。}若 $\mathbf{A}\mathbf{s} = H(M)$ 且 $\|\mathbf{s}\| \le \beta$，则接受，其中 $\beta$ 是 $\sigma\sqrt{m}$ 的一个固定倍数。
+\end{enumerate}
+
+采样器的两个性质支撑着安全性论证，而二者都是离散高斯分布本身的性质，而非任何特定陷门的性质。
+
+\begin{proposition}[原像与陷门无关]
+若 $\sigma$ 超过格的平滑参数，则所采样原像 $\mathbf{s}$ 的分布只依赖于 $\mathbf{A}$、$c$ 和 $\sigma$，而不依赖于采样时所用的是哪一组短基 $\mathbf{B}$。特别地，看到任意多个签名的敌手，所能获得的关于 $\mathbf{B}$ 的信息，都不超过它仅凭 $\mathbf{A}$ 就能模拟出来的信息。
+\end{proposition}
+
+这正是舍入类方案所欠缺的。Babai 舍入产生的分布形如秘密平行多面体；足够宽的高斯分布产生的分布则形如格本身，而格是公开的。所需宽度正是 $\mathbf{B}$ 的 Gram--Schmidt 长度发挥作用之处：更好的基允许更窄的高斯分布，从而在不违反条件的情况下得到更短的签名。这就是 Falcon 的密钥生成要尽可能使秘密基正交的原因（第~\ref{sec:falcon-keygen}~节）。
+
+\begin{proposition}[基于 SIS 的安全性]
+在随机预言机模型中，针对 GPV 签名的伪造者可以转化为在 $\mathbf{A}$ 上、范数界为 $2\beta$ 的 SIS 求解器。
+\end{proposition}
+
+论证过程如下。归约在回答每个哈希查询 $H(M_i)$ 时，先从高斯分布中采样一个短向量 $\mathbf{s}_i$，再\emph{定义} $H(M_i) := \mathbf{A}\mathbf{s}_i$；由于对足够宽的高斯分布，$\mathbf{A}\mathbf{s}_i$ 近乎均匀，伪造者无法区分这些编程得到的值与随机值，归约因而无需任何陷门就能回答签名查询。当伪造者输出一个有效的 $(M^{*}, \mathbf{s}^{*})$，满足 $\mathbf{A}\mathbf{s}^{*} = H(M^{*})$ 时，归约已经持有同一目标的自己的短原像 $\mathbf{s}$，并且以较大概率有 $\mathbf{s} \neq \mathbf{s}^{*}$，因为参数高于平滑参数的高斯分布具有最小熵：伪造者无法猜出归约抽取的是哪个原像。于是 $\mathbf{s} - \mathbf{s}^{*}$ 是 $\Lambda^{\perp}_q(\mathbf{A})$ 中一个范数至多为 $2\beta$ 的非零向量，即一个 SIS 解。
+
+这一证明分离出了支配 Falcon 实现的要求；之所以在此陈述，是因为它会在第~\ref{sec:falcon-determinism}~节的实现情境中再次出现：\emph{签名者绝不能针对同一目标发布两个不同的短原像}。倘若如此，二者之差恰好就是归约所提取的 SIS 解，等于白白奉送。在该框架中，这一点由两方面保证：盐值使每个目标都是新鲜的；采样器本身是随机化的，因而即使目标重复，也不会产生相关的一对原像。任何破坏其中一项保证的实现细节——重用的盐值，或者在相同输入上输出因平台而异的采样器——都会在不涉及任何侧信道的情况下攻破该方案。
+
+Falcon 就是在 NTRU 格上实例化的 GPV 框架：陷门是短的 NTRU 基，原像采样器是基于该基的快速傅里叶采样器，哈希则是带盐值的 \textsc{HashToPoint}。本章其余部分将依次讨论这三个组成部分。
+
+\section{NTRU 格及其陷门}
+
+Falcon 建立在第~\ref{sec:ntru}~节引入的 NTRU 假设之上。它工作在我们已十分熟悉的环 $R_q = \mathbb{Z}_q[x]/(x^n+1)$ 中，其中 $n \in \{512, 1024\}$，$q = 12289$。密钥生成选取两个\emph{短的}秘密多项式 $f, g \in R_q$，并公开
+\[
+h = g \cdot f^{-1} \pmod q.
+\]
+公钥只是单个多项式 $h$。它定义了 \textbf{NTRU 格}
+\[
+\Lambda = \{ (u, v) \in R_q^2 : u + v\,h = 0 \pmod q \},
+\]
+这是一个 $2n$ 维格，恰好属于第~\ref{part:lattices}~部分所研究的那一类。仅凭 $h$ 就可以写出 $\Lambda$ 的一组基，但它是一组\emph{坏}基——长且歪斜——因此在其中寻找短向量是困难的。
+
+秘密是同一个格的一组\emph{好}基。密钥生成通过求解 \textbf{NTRU 方程}
+\[
+f\,G - g\,F = q
+\]
+得到另外两个短多项式 $F, G$，从而把 $(f,g)$ 补全为一组完整的短基。两行 $(g, -f)$ 与 $(G, -F)$ 构成 $\Lambda$ 的一组短且近乎正交的基——这正是第~\ref{ch:lattice}--\ref{ch:svp}~章告诉我们的、求解格问题的关键所在的“好基”。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.5]
+  \draw[pqcgray!40, thin] (-6.5,0) -- (6.5,0);
+  \draw[pqcgray!40, thin] (0,-5.5) -- (0,5.5);
+  \foreach \i in {-2,...,2} {
+    \foreach \j in {-2,...,2} {
+      \pgfmathsetmacro{\x}{2*\i+1*\j}
+      \pgfmathsetmacro{\y}{1*\i+3*\j}
+      \node[latticept] at (\x,\y) {};
+    }
+  }
+  \node[latticeptbold] at (0,0) {};
+  % target point c (off-lattice)
+  \node[circle, fill=pqcorange, inner sep=0pt, minimum size=5pt,
+        label={[font=\scriptsize,pqcorange]above right:{$c$ (hashed message)}}] (c) at (3.2,1.6) {};
+  % nearest lattice point
+  \node[latticeptbold, fill=pqcteal] (near) at (3,1) {};
+  \draw[shortvec] (near) -- (c);
+  \node[pqcteal, font=\scriptsize, below=1pt of near] {closest lattice point};
+\end{tikzpicture}
+\caption{作为最近向量问题的签名。对消息进行哈希得到目标点 $c$（橙色）。签名者利用 NTRU 格的秘密\emph{好}基找到一个非常靠近 $c$ 的格点；短的差向量就是签名。若只有公开的\emph{坏}基（来自 $h$），则无法找到这个最近点——这一差距就是陷门。}
+\label{fig:falcon-cvp}
+\end{figure}
+
+\section{阶段 1：密钥生成}
+\label{sec:falcon-keygen}
+
+\begin{algorithm}[H]
+\caption{FN-DSA.KeyGen（教学形式）}
+\label{alg:fndsa-keygen}
+\begin{algorithmic}[1]
+\Require 环 $R_q$，$q=12289$，维数 $n$
+\Ensure 公钥 $h$；秘密钥（短基）$(f,g,F,G)$
+\Repeat
+  \State 采样短的 $f, g \in R_q$（系数为小高斯值）
+\Until{$f$ 模 $q$ 可逆 \textbf{且} $(f,g)$ 足够短}
+\State 求解 NTRU 方程 $fG - gF = q$，得到短的 $F, G$
+\State $h \gets g \cdot f^{-1} \bmod q$
+\State \Return 公开的 $h$，秘密的 $(f,g,F,G)$
+\end{algorithmic}
+\end{algorithm}
+
+秘密基与公开的 $h$ 描述的是\emph{同一个}格；它们只在质量上不同。这就是陷门的全部。
+
+\section{阶段 2：把消息哈希为一个点}
+
+签名首先把消息映射为环中一个看起来随机的目标。前面加上一个新鲜的盐值 $r$，使得对同一消息签名两次会得到相互独立的目标：
+\[
+c = \textsc{HashToPoint}(r \,\|\, M) \in R_q.
+\]
+
+\section{阶段 3：采样一个短解（陷门采样器）}
+\label{sec:falcon-tree-note}
+
+签名者必须找到一对短的 $(s_1, s_2)$，满足
+\[
+s_1 + s_2\,h = c \pmod q,
+\]
+这等同于找到 $\Lambda$ 中一个靠近 $(c, 0)$ 的格点。利用好基，签名者运行\textbf{快速傅里叶采样}（fast Fourier sampling）：这是格陪集上的离散高斯采样器，在基的 FFT 表示上高效实现（组织为一棵“LDL 树”）。有两个性质至关重要：
+
+\begin{itemize}
+  \item 结果是\emph{短的}，因为好基使附近的格点可以到达；
+  \item 其分布是以目标为中心的\emph{离散高斯分布}，而且——关键在于——与产生它的是\emph{哪一组}好基无关。正是这一点阻止了每个签名泄露秘密。
+\end{itemize}
+
+全书的内容在此汇聚：第~\ref{ch:prob}~章的离散高斯分布、第~\ref{ch:lattice}--\ref{ch:lll}~章中好基与坏基的几何，以及 LWE 一章的最近向量视角同时出现，共同服务于一个签名。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=6mm and 10mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (m) {message $M$};
+  \node[flownode, right=of m] (hash) {$c=\textsc{HashToPoint}(r\|M)$};
+  \node[flownode, right=of hash] (samp) {Gaussian sampler\\[-2pt](uses secret basis)};
+  \node[flownode, below=of samp] (s) {short $(s_1,s_2)$\\[-2pt]$s_1+s_2 h = c$};
+  \node[flownode, left=of s] (comp) {compress $s_2$};
+  \node[keynode, left=of comp] (sig) {signature\\[-2pt]$\sigma=(r, s_2)$};
+  \draw[flowarrow] (m) -- (hash);
+  \draw[flowarrow] (hash) -- (samp);
+  \draw[flowarrow] (samp) -- (s);
+  \draw[flowarrow] (s) -- (comp);
+  \draw[flowarrow] (comp) -- (sig);
+\end{tikzpicture}
+\caption{Falcon 签名流程。消息被哈希为目标 $c$；秘密基驱动高斯采样器，返回 $s_1+s_2h=c$ 的一个短解；只输出盐值 $r$ 和压缩后的第二分量 $s_2$，因为验证者可以恢复 $s_1$。}
+\label{fig:falcon-sign}
+\end{figure}
+
+\section{阶段 4：压缩并输出}
+
+只需发送 $s_2$：验证者可以恢复 $s_1 = c - s_2 h \bmod q$。由于 $s_2$ 的系数是小的高斯值，它压缩效果很好，这赋予了 Falcon 在签名大小上的优势。签名为 $\sigma = (r, \text{compress}(s_2))$。
+
+\begin{algorithm}[H]
+\caption{FN-DSA.Sign / Verify（教学形式）}
+\label{alg:fndsa-signverify}
+\begin{algorithmic}[1]
+\Statex \textbf{Sign}$(sk=(f,g,F,G),\ M)$:
+\State 采样盐值 $r$;\quad $c \gets \textsc{HashToPoint}(r\|M)$
+\State $(s_1,s_2) \gets \textsc{FFSampling}$：利用秘密基求出 $s_1+s_2h=c$ 的一个短解
+\State \Return $\sigma=(r,\ \textsc{Compress}(s_2))$
+\Statex
+\Statex \textbf{Verify}$(pk=h,\ M,\ \sigma=(r,\hat s_2))$:
+\State $s_2 \gets \textsc{Decompress}(\hat s_2)$;\quad $c \gets \textsc{HashToPoint}(r\|M)$
+\State $s_1 \gets c - s_2\,h \bmod q$ \Comment{恢复第一分量}
+\State \Return 若 $\|(s_1,s_2)\|^2 \le \beta^2$ 则\emph{接受}，否则\emph{拒绝} \Comment{必须是短的}
+\end{algorithmic}
+\end{algorithm}
+
+验证代价很低：一次乘法恢复 $s_1$，然后做一次范数检查。没有好基的伪造者将不得不仅凭 $h$ 求解 NTRU 格中的最近向量问题——这正是第~\ref{part:lattices}~部分所确立的困难性。
+
+\subsection{签名字节的构成}
+\label{sec:falcon-sizes}
+
+参数表（第~\ref{sec:falcon-params}~节）中的大小并非取整后的估计值，而是若干固定字段之和，且每个字段都可由前文已有的内容推出。一个 Falcon 签名为
+\[
+\underbrace{1}_{\text{header}} \;+\; \underbrace{40}_{\text{salt }r} \;+\; \underbrace{\ell_n}_{\textsc{Compress}(s_2)} \quad\text{bytes},
+\qquad \ell_{512}=625,\quad \ell_{1024}=1239,
+\]
+即 $666$ 和 $1280$ 字节。头部字节记录编码方式和 $\log_2 n$；盐值是与消息一起被哈希的 320 位值。所有随安全级别变化的部分都在 $\ell_n$ 中，而 $\ell_n$ 由两个事实决定：采样器的高斯分布有多宽，以及系数如何编码。
+
+\paragraph{宽度。}快速傅里叶采样器输出的 $(s_1,s_2)$ 的每个系数都服从标准差为
+\[
+\sigma \;=\; 1.17\,\sqrt{q}\;\eta_\varepsilon(\mathbb{Z}^{2n}),
+\]
+的离散高斯分布，其中 $\eta_\varepsilon$ 是第~\ref{sec:gpv}~节中的平滑参数，取规范所固定的 $\varepsilon$；规范列表给出 $n=512$ 时 $\eta_\varepsilon \approx 1.278$，$n=1024$ 时为 $1.298$，因此 $\sigma \approx 165.7$ 和 $168.4$。因子 $1.17\sqrt{q}$ 是密钥生成为秘密基所保证的 Gram--Schmidt 质量（第~\ref{sec:falcon-keygen}~节）；因此，$s_2$ 的一个系数是一个典型量级为一两百的整数，而取值范围为 $q=12289$。
+
+\paragraph{编码。}若以原始剩余的形式存储，一个系数要花费 $\lceil\log_2 q\rceil = 14$ 位，这会使 $n=512$ 时仅 $s_2$ 就达到 $896$ 字节。\textsc{Compress} 则把每个系数 $c$ 写成一个符号位、原样写出的 $|c|$ 的低七位，以及以一元码表示的其余高位部分 $\lfloor |c|/128\rfloor$（$k$ 个零位后跟一个一）。当 $\sigma\approx166$ 时，约 $56\%$ 的系数满足 $|c|<128$，约 $88\%$ 满足 $|c|<256$，因此一元部分平均约为 $0.6$ 位，期望代价为
+\[
+1 + 7 + (0.6 + 1) \;\approx\; 9.6\ \text{bits per coefficient},
+\]
+对 $n=512$ 约为 $613$ 字节。对于这一宽度的高斯分布，信息论下界为 $\log_2\bigl(\sigma\sqrt{2\pi e}\bigr)\approx 9.4$ 位，这表明该编码距最优仅差几个百分点。
+
+\paragraph{固定长度。}变长签名会泄露 $s_2$ 的大小，并使下游的每个解析器都更加复杂，因此规范把 $\ell_n$ 固定为略高于均值：$n=512$ 时的 $625$ 字节相当于每个系数 $9.77$ 位，$n=1024$ 时的 $1239$ 字节相当于 $9.68$ 位。编码长度不足时用零位填充；在罕见情况下，若某次抽样的编码会超过 $\ell_n$，则将其丢弃，签名者重新采样。正是这种重新采样，使表中的数字可以是精确值而非典型值。
+
+公钥则没有这种可供利用的结构。其单个多项式 $h$ 的系数在模 $q$ 下均匀分布，因此要花费完整的 $14n/8$ 字节再加一个头部字节：$n=512$ 时为 $897$，$n=1024$ 时为 $1793$。这种不对称一句话道尽了整个设计：密钥是一个看起来随机的环元素，必须按此存储；而签名是一个短的高斯向量，也按此存储。
+
+
+\section{为什么 Falcon 最难实现}
+\label{sec:falcon-hard}
+
+高斯采样器需要高精度的\emph{浮点}运算（实数上的 FFT），才能使输出分布完全正确。浮点运算出了名地具有可变耗时且依赖平台，这使得\emph{常数时间}实现——即不通过计时泄露任何信息的实现——确实十分困难。如果采样器的耗时或舍入依赖于秘密基，攻击者就能逐步重构出秘密基。这直接引出了最后关于侧信道安全的一章，也是 Falcon 尽管优雅而紧凑，却是三个标准中安全部署要求最高者的主要原因。
+
+\subsection{非确定性是另一个独立的问题}
+\label{sec:falcon-determinism}
+
+计时是人们熟悉的隐患，但并非唯一的隐患。同一个浮点运算在不同的处理器、编译器或优化级别下可能给出略有不同的结果，仅此一点就可能攻破该方案——完全不涉及侧信道。
+
+对 Falcon 浮点敏感性的分析使这一实现边界变得具体：编译器、指令和舍入方面的差异可能以与秘密钥安全相关的方式扰动所采样的分布~\cite{sleepingfalcon2025}。
+
+原因在于第~\ref{sec:gpv}~节所陈述的安全要求：签名者绝不能发布\emph{同一摘要的两个不同短原像}。两个满足 $As = As' = c$ 的短向量 $s, s'$ 给出它们的差 $s - s'$，即格 $\Lambda^{\perp}_q(A)$ 中的一个短非零向量——而这正是陷门本应保持困难的那个问题的一个解。普通的 Falcon
+通过为每个签名抽取新鲜的 320 位盐值来避免这一点，因此任何两个签名都不会指向同一摘要。
+
+危险出现在签名被\emph{去随机化}时：如果盐值由消息和密钥伪随机地派生（这是可复现签名所希望的做法），那么对同一消息签名两次就必须逐位产生相同的签名。精度不同的两个实现——或者同一个实现编译两次——将为同一个摘要产生两个有效签名，并把一个短格向量交给旁观者。
+
+解决办法是消除平台依赖，而不是设法管理它：用\emph{整数仿真}取代硬件浮点，使每个实现执行完全相同的运算并产生完全相同的输出。其代价是不对称的，而这种不对称恰好适合区块链（第~\ref{sec:bitcoin-scheme-choice}~节）：
+
+\begin{itemize}
+  \item 密钥生成大约慢 $2\times$；
+  \item 签名大约慢 $15\times$；
+  \item \textbf{验证不受影响}，因为 Falcon 验证完全不使用
+        浮点运算——它是带 NTT 的模 $q$ 整数运算，
+        并且是三个标准中最快的验证。
+\end{itemize}
+
+一个输出在被花费时由其所有者签名一次；此后该签名将由每个验证节点永久地反复验证。在只发生一次的操作上付出 $15\times$ 的代价，换取在所有地方都会发生的操作既廉价又跨平台一致，这是该权衡中正确的一方。即使采用仿真，
+Falcon 签名仍比采用小签名参数的 SLH-DSA 快一到两个数量级。
+
+\subsection{签名者也需要内存}
+
+还有一个实际约束，由于它既不体现在密钥大小上、也不体现在签名大小上，因而容易被忽视。采样器由第~\ref{sec:falcon-tree-note}~节的树驱动，而这棵树存放在哪里决定了签名者的内存占用。把它与紧凑的基一同保存，可以使签名成为简单的遍历，但在 $n=512$ 时约占 $40$ kB，在
+$n=1024$ 时约占 $90$ kB。只重建当前需要的分支可将其降至约 $8$ 和
+$16$ kB，代价是签名开销大约翻倍。
+
+这一点之所以重要，是因为运行签名者最自然的场所是硬件钱包，而硬件钱包是 RAM 预算紧张的微控制器。另请注意，这一开销会与上述仿真开销叠加，并且只要一个密钥只签名一次，它就是\emph{每次签名}都要付出的开销——而这恰恰是 Bitcoin 地址的推荐做法。
+
+\section{紧凑性与加速方面的研究方向}
+\label{sec:fndsa-acceleration}
+
+第~\ref{sec:gpv}~节和第~\ref{sec:falcon-sizes}~节解释了 Falcon 的采样器和编码如何产生紧凑的签名。近期的分析在更弱的平滑条件下收紧了 GPV 原像采样，并使用 R\'enyi 散度更精确地度量
+Falcon 实际采样器与理想采样器之间的差距
+\cite{gpvweak2025,falconcloser2024}。另一些工作结合概率编码、采样几何和模数选择来缩短哈希后签名类格签名
+\cite{shorterhashsign2022}。这些结果可以减少证明中的松弛或传输大小，但每一项节省都必须连同其安全余量和采样器要求一并报告。
+
+MITAKA 探索了一个不同的工程取舍点：它保留 NTRU 哈希后签名的方向，同时用混合采样器和质量更高的陷门取代 Falcon 的快速傅里叶采样器，得到一种意在更易于并行化和掩码防护的结构~\cite{mitaka2022}。这一比较之所以有用，恰恰因为
+MITAKA 是一个研究性构造而非 FN-DSA：简化实现可能需要改变原语本身，而不仅仅是优化 Falcon 代码。
+
+加速同样取决于具体工作负载。FPGA 和 ASIC 设计会暴露出被软件基准测试所掩盖的面积、存储端口、功耗和能耗开销
+\cite{beckwithhw2022,beckwithhw2024}。GPU 实现可以获得非常高的
+Falcon 批处理吞吐量；例如，GOLF 报告了在 RTX~4090 上利用消息级并行、FFT 内核和缓存局部性优化所得的结果
+\cite{golf2025}。这类数字并不能预测单个交互式签名的延迟：批大小、传输开销、占用率、尾延迟和租户隔离必须单独测量。
+
+\section{SageMath 实验：公开的 NTRU 关系}
+
+Sage 可以验证 NTRU 格背后的公钥方程。本示例有意止步于高斯陷门采样器之前：找到一个分布正确的短签名是 FN-DSA 中困难且对规范敏感的部分，这个玩具计算并不复现它。
+
+\begin{lstlisting}[language=Python]
+from random import Random
+from sage.all import GF, PolynomialRing
+
+q = 17
+n = 8
+rng = Random("fndsa-ntru-relation")
+R.<x> = PolynomialRing(GF(q))
+Rq = R.quotient(x^n + 1)
+
+def small_poly():
+    return Rq([rng.choice([-1, 0, 1]) for _ in range(n)])
+
+def small_unit():
+    f = small_poly()
+    while not f.is_unit():
+        f = small_poly()
+    return f
+
+f = small_unit()
+g = small_poly()
+h = g * f^(-1)                 # public NTRU value
+assert f * h == g               # f h = g in Rq
+
+c = Rq([rng.randrange(q) for _ in range(n)])
+s2 = small_poly()
+s1 = c - s2*h                  # verifier's reconstruction rule
+assert s1 + s2*h == c
+print("NTRU public relation and verification equation hold")
+\end{lstlisting}
+
+最后一个等式只是一项代数检查。在真实的签名中，\textsc{FFSampling}
+必须以所要求的短高斯分布来选取 $(s_1,s_2)$；像上面那样任意选取一个小的 $s_2$，并不是 FN-DSA 的签名算法。
+
+\section{完整的 SageMath 实现}
+\label{sec:fips206-impl}
+
+上面的实验恰好止步于困难开始之处。配套文件 \sagefile{fips206\_fndsa.sage} 走完了剩下的路：
+Falcon 规范中全部十八个编号算法，覆盖 $n=512$ 和
+$n=1024$——复数塔上的 FFT、带塔式递归 NTRU 求解器的 \textsc{NTRUGen}、
+LDL\textsuperscript{$\star$} 分解与 Falcon 树、使用等时离散高斯采样器的快速傅里叶采样、签名、验证，以及压缩的签名和密钥编码。
+
+\playground{采样器与 FFT 检查，以及基于已存储密钥的签名与验证；只有 \textsc{NTRUGen} 太慢，无法在沙箱中运行}
+
+\paragraph{代码遵循哪一份规范。}
+这一点在这里比在其他三章中更为重要。在本书的标准快照时点，NIST 将 FIPS~206 列为\emph{开发中}：尚未发布初始公开草案，因而也不存在 ACVP 测试向量。因此，FN-DSA 的权威规范仍然是第三轮
+Falcon 提交文档，而该文件实现的正是它，并沿用 Falcon 的算法编号。草案发布时最有可能被重新规定的地方——密钥与签名编码，以及被哈希消息的域分离——在源代码中均有标注。其下的格机制预计不会改变。
+
+\paragraph{求解 NTRU 方程。}
+密钥生成中唯一真正困难的步骤，就是算法~\ref{alg:fndsa-keygen} 中用一句话带过的那一行：\emph{求解
+$fG - gF = q$，得到短的 $F,G$}。方法是塔式递归。域范数 $N$ 把 $\mathbb{Z}[x]/(x^n+1)$ 映射到
+$\mathbb{Z}[x]/(x^{n/2}+1)$；反复应用它便可到达 $\mathbb{Z}$，在那里该方程就是一个扩展 gcd 问题；然后利用范数的乘法性把解逐层提升回来。
+
+\begin{lstlisting}[language=Python]
+def NTRUSolve(f, g):
+    """Algorithm 6. Find F, G with f*G - g*F = q in Z[x]/(x^n + 1)."""
+    n = len(f)
+    if n == 1:
+        d, u, v = xgcd(ZZ(int(f[0])), ZZ(int(g[0])))
+        if d != 1:
+            return None, None
+        return [int(-FALCON_q*v)], [int(FALCON_q*u)]
+    fp, gp = field_norm(f), field_norm(g)
+    Fp, Gp = NTRUSolve(fp, gp)              # recurse in the smaller ring
+    if Fp is None:
+        return None, None
+    F = _cyclo_mul(lift(Fp), galois_conjugate(g), n)
+    G = _cyclo_mul(lift(Gp), galois_conjugate(f), n)
+    return Reduce(f, g, F, G)               # shorten F, G against f, g
+\end{lstlisting}
+
+这里 \texttt{field\_norm} 是以 $x^2$ 表示的 $N(a) = a(x)a(-x)$，
+\texttt{lift} 是 $a(x)\mapsto a(x^2)$，\texttt{galois\_conjugate} 是
+$a(x)\mapsto a(-x)$。提升得到的 $F,G$ 系数极大，这正是 \textsc{Reduce} 的用途：它反复减去最接近 $(F,G)$ 的
+$(f,g)$ 的倍数，并在每一轮重新缩放到 53 位有效数字，使舍入保持足够精确以便收敛。
+
+\paragraph{三种算术，三个 Sage 环。}
+Falcon 的不寻常之处在于需要精确算术与非精确算术并存，而该实现把它们放在相互分离、明确命名的 Sage 域中：
+
+\begin{itemize}
+  \item NTRU 求解器运行在 \texttt{ZZ['x']} 上，因此陷门方程
+        $fG-gF=q$ 是\emph{精确地}成立的，而非在浮点误差范围内成立
+        ——\sagefile{fips206\_fndsa.sage} 末尾的 \texttt{verify\_ntru\_equation()}
+        将其作为 $\mathbb{Z}[x]/(x^n+1)$ 中的恒等式
+        进行检查；
+  \item 公钥和验证关系
+        $s_1 = c - s_2 h$ 在
+        $\mathbb{F}_{12289}[x]/(x^n+1)$ 中计算；
+  \item 签名用的 FFT 运行在 \texttt{CDF}（Sage 的复双精度域）上，
+        它\emph{就是} Falcon 所规定的 IEEE~754 binary64
+        算术——而不是某种会悄然改变采样器输出分布的
+        更高精度替代品。
+\end{itemize}
+
+同一文件中的函数 \texttt{verify\_fft\_against\_exact\_ring()}
+在上述第一种与第三种之间形成闭环，检查 FFT 域中的逐点乘法能够重现 Sage 在
+$\mathbb{Z}[x]/(x^n+1)$ 中精确计算的乘积。
+
+\paragraph{没有 NIST 向量时的验证。}
+由于 FIPS~206 没有测试向量，FN-DSA 以 Falcon
+提交文档自身的已知答案测试~\cite{falcon2020}进行验证，采用四种相互独立的方式：
+
+\begin{enumerate}
+  \item \textsc{SamplerZ} 逐字节重现 Falcon
+        规范采样器表中的全部十六个测试向量——包括
+        拒绝采样迭代两次或 \textsc{BerExp} 消耗
+        第二个随机字节的情形；
+  \item 对每个 Falcon KAT 密钥，解码私钥，精确
+        验证 $fG-gF=q$，并确认重新计算的 $h=g f^{-1}$ 重新编码后与
+        KAT 公钥逐字节一致；
+  \item 每个 Falcon KAT 签名都能通过验证，而同一签名在
+        被篡改的消息上则被拒绝；
+  \item 本实现在 Falcon KAT \emph{私钥}下生成的签名，
+        能在相应的 KAT 公钥下通过验证。
+\end{enumerate}
+
+签名本身无法与 KAT 字节串逐一对应，其原因颇具启发性：Falcon 签名是随机化的，而参考 KAT 是用参考实现自己的 PRNG 链生成的，因此要求签名完全相同，检验的将是 PRNG 的复现而非方案本身。验证是确定性的，并且经过逐字节精确检查。这一缺口恰恰就是下一节所讨论的高斯采样器——它是最难规范、最难实现、也最难测试的部分。
+
+\section{参数集}
+\label{sec:falcon-params}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+方案 & $n$ & NIST 级别 & 公钥 & 签名 \\
+\midrule
+FN-DSA-512  & 512  & 1 & 897 B & 666 B \\
+FN-DSA-1024 & 1024 & 5 & 1793 B & 1280 B \\
+\bottomrule
+\end{tabular}
+\caption{两个 FN-DSA（Falcon）参数集，均取 $q=12289$。签名和密钥明显小于 ML-DSA 或 SLH-DSA——这正是 Falcon 存在的理由。第~\ref{sec:falcon-sizes}~节推导了这些字节数。}
+\end{table}
+
+\paragraph{为什么没有级别 3。}
+该表中的空缺是结构性的，而非疏漏。快速傅里叶采样器在每一步都把环的次数减半进行递归，直到标量叶节点，因此 $n$
+必须是 2 的幂：可容许的次数为 $\dots, 256, 512, 1024,
+\dots$，中间别无他值。具体估计表明，$n=512$ 大约提供 $128$
+位经典安全性，$n=1024$ 则远高于 $250$ 位，而没有哪个 2 的幂次环恰好落在中间。ML-DSA 的安全性通过固定环上的模维数 $(k,\ell)$ 来调节，因而没有这一约束——这就是为什么它提供三个级别，而 Falcon 只提供两个。希望从格签名获得安全类别 3
+余量的部署，要么选用 Falcon-1024 并接受随之而来的大小，要么改用 ML-DSA。
+
+\section{常见陷阱}
+
+\paragraph{陷阱 1：确定性地采样短向量。}
+如果签名者总是返回\emph{唯一的}最近格点（例如通过 Babai 舍入），那么每个签名都会勾勒出秘密基的形状，几个签名就足以将其暴露。输出的高斯\emph{随机化}是必不可少的，而不仅仅是一种便利。
+
+\paragraph{陷阱 2：把浮点采样器当作普通代码对待。}
+采样器的耗时、分支和舍入都不能依赖于秘密数据。朴素的浮点代码会泄露信息；Falcon 的实现为了做到常数时间而煞费苦心（仿真的固定精度、细致的查表）。
+
+\paragraph{陷阱 3：重用盐值。}
+每次签名的盐值 $r$ 必须是新鲜的。在不同消息间重用盐值会使它们的目标 $c$ 相关，并削弱高斯分布的隐藏性质。
+
+\section{小结}
+
+FN-DSA（Falcon）是以正确方式实现的格上哈希后签名：
+
+\begin{itemize}
+  \item 公钥 $h$ 与秘密短基 $(f,g,F,G)$ 描述同一个 NTRU 格，只在质量上不同——这就是陷门；
+  \item 签名把消息哈希为目标，并利用基于好基的高斯采样器找到一个短的、隐藏秘密的解；
+  \item 验证恢复 $s_1=c-s_2 h$ 并检查其是否足够短，对任何没有陷门的人而言，这都是一个最近向量问题；
+  \item 回报是非常紧凑的签名；代价是精细的浮点与常数时间工程。
+\end{itemize}
+
+至此，\emph{基于格的}签名就讲完了。ML-DSA 和 FN-DSA 都建立在格上，却以相反的路线得到签名——带中止的 Fiat--Shamir 与高斯哈希后签名——并相应地在大小与实现精细度之间取舍。下一部分将完全离开格，转向建立在另一种困难问题之上的签名：仅依赖哈希函数，并最终引出第三个签名标准 SLH-DSA（FIPS 205）。
+
+\printbibliography[heading=chapterrefs]

@@ -1540,8 +1540,12 @@ estimates for cryptographically relevant quantum computing~\cite{quantumhorizon2
 A 2025 Google analysis of RSA-2048 illustrates a downward resource-estimation trend,
 but is RSA-specific and not a direct estimate for Bitcoin or Ethereum curves~\cite{gidney2025}.
 Expert elicitation~\cite{mosca2025} and national guidance~\cite{nistir8547,ncscpqc2025,cnsa2}
-place the migration deadline for conventional systems in the early-to-mid 2030s,
-but those targets were set for enterprise IT, where an administrator can deploy a
+place the migration deadline for conventional systems in the early-to-mid 2030s.
+NIST deprecates every quantum-vulnerable public-key algorithm after 2030 and
+disallows it after 2035, whatever the key size~\cite{nistir8547}, and the most
+sensitive US federal systems must adopt post-quantum key establishment by the end
+of 2030 and post-quantum signatures by the end of 2031~\cite{eo14412,ombm2615}.
+But those targets were set for enterprise IT, where an administrator can deploy a
 change; they were not calibrated for a system whose users must each act
 individually.
 

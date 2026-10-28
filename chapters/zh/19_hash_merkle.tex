@@ -1,0 +1,127 @@
+% source: 83bc4a79aa8f8cbe6bed74713b77fe89d556a50b
+\chapter{Merkle 树与无状态签名}
+\label{ch:hashmerkle}
+
+\section{本章为何重要}
+上一章给我们留下了一个问题：我们构建的每一种密钥——Lamport、WOTS\textsuperscript{+}，甚至 FORS——都只能使用一次或少数几次。而一个真实的签名者必须在\emph{同一个}公钥下产生许多签名。本章提供使这成为可能的两个思想。\emph{Merkle 树}把一大批一次性密钥绑定在单个公开根之下，而通过对消息求哈希来寻址的\emph{超树}（hypertree）则使整个构造成为\emph{无状态}的，这样签名者就无需记住哪些密钥已被使用。这些是通往第~\ref{ch:slhdsa}~章 FIPS 205 标准之前的最后几块拼图。
+
+\section{学习目标}
+读完本章后，你应当能够：
+
+\begin{itemize}
+  \item 在许多一次性公钥之上构建 Merkle 树，并验证一条认证路径；
+  \item 解释是什么使可多次使用的基于哈希的方案（XMSS）成为\emph{有状态}的，以及为何这很危险；
+  \item 描述超树及其如何扩大可用密钥的数量；
+  \item 解释通过对消息求哈希来选择叶子如何彻底消除状态。
+\end{itemize}
+
+\section{Merkle 树}
+单个一次性密钥本身几乎毫无用处。Merkle 树~\cite{merkle1987} 解决了这一问题：生成许多一次性（WOTS\textsuperscript{+}）密钥对，把每个公钥哈希成一个\emph{叶子}，然后构建一棵二叉树，其中每个内部节点都是其两个子节点的哈希。位于顶端的单个值——\emph{根}——就是\emph{所有}叶子共同的公钥。
+
+为了使用叶子 $i$，签名者公布该叶子的一次性签名，\emph{外加}\emph{认证路径}：从该叶子到根的每一层上的兄弟节点哈希值。验证者重新计算该叶子，沿路径逐层向上折叠，只有当最终值等于已知的根时才接受。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[level distance=9mm, every node/.style={font=\scriptsize},
+  level 1/.style={sibling distance=34mm},
+  level 2/.style={sibling distance=17mm},
+  level 3/.style={sibling distance=9mm}]
+  \node[keynode] (root) {root $=pk$}
+    child {node[flownode] {$n_0$}
+      child {node[flownode,fill=pqclight] (a) {}
+        child {node[latticeptbold,label=below:{\scriptsize leaf}] (L) {}}
+        child {node[flownode,draw=pqcorange] (s0) {}}
+      }
+      child {node[flownode,draw=pqcorange] (s1) {}
+        child {node[flownode] {}}
+        child {node[flownode] {}}
+      }
+    }
+    child {node[flownode,draw=pqcorange] (n1) {$n_1$}
+      child {node[flownode] {}
+        child {node[flownode] {}}
+        child {node[flownode] {}}
+      }
+      child {node[flownode] {}
+        child {node[flownode] {}}
+        child {node[flownode] {}}
+      }
+    };
+\end{tikzpicture}
+\caption{一棵高度为 $3$ 的 Merkle 树。每个叶子是一个 WOTS\textsuperscript{+} 公钥的哈希；内部节点对其两个子节点求哈希；单个根就是公钥。为了认证被标记的叶子，签名携带三个橙色的兄弟节点（即认证路径）。验证者重新计算该叶子并沿路径向上求哈希，只有当结果落在已知的根上时才接受。}
+\label{fig:merkle}
+\end{figure}
+
+\begin{algorithm}[H]
+\caption{验证 Merkle 认证路径}
+\label{alg:merkle-path}
+\begin{algorithmic}[1]
+\Require 叶子值 $\ell$，叶子索引 $i$，认证路径 $(a_0,\dots,a_{h-1})$，根 $r$
+\Ensure \emph{接受}或\emph{拒绝}
+\State $node \gets \ell$
+\For{$j = 0,\dots,h-1$}
+  \If{$i$ 的第 $j$ 位为 $0$}
+    \State $node \gets H(node \,\|\, a_j)$ \Comment{当前节点为左子节点}
+  \Else
+    \State $node \gets H(a_j \,\|\, node)$ \Comment{当前节点为右子节点}
+  \EndIf
+\EndFor
+\State \Return 若 $node = r$ 则\emph{接受}，否则\emph{拒绝}
+\end{algorithmic}
+\end{algorithm}
+
+一棵高度为 $h$ 的树把 $2^h$ 个一次性密钥变成单个由一个哈希值构成的公钥，其代价是每个签名中都要包含一条含 $h$ 个节点的认证路径。
+
+\section{XMSS 与状态的负担}
+由 WOTS\textsuperscript{+} 密钥构成的 Merkle 树本质上就是 \textbf{XMSS} 方案。它在一个根下签署 $2^h$ 条消息——但前提是每个叶子\emph{至多使用一次}。这是一个\emph{有状态}的要求：签名者必须记住哪些叶子已被用掉，并且绝不重复使用任何一个。
+
+\begin{remark}[为何状态是危险的]
+状态使可多次使用的哈希签名在实践中十分脆弱。如果一个密钥被备份后又恢复，或者在两台机器上运行，或者某台虚拟机被回滚，同一个叶子索引就可能被使用两次——而重用一次性密钥会将其彻底破解。有状态的基于哈希的方案（XMSS、LMS）已被标准化并且有用，但它们的安全性依赖于完美无缺的状态管理，而这恰恰是实际部署中会出问题的地方。
+\end{remark}
+
+\section{超树}
+还剩下两个问题：一棵高到永不重复叶子的单棵树，其构建代价将是天文数字；而且我们仍然希望消除状态。超树解决了第一个问题。它把 $d$ 层 Merkle 树堆叠起来，使每棵树的根由上一层树中的一个一次性密钥签名；只有最顶端的根被公布。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+  \node[keynode] (top) at (0,3) {top tree \; root $=PK.\mathrm{root}$};
+  \node[flownode] (mid) at (0,1.7) {middle tree (signs the root below with WOTS\ensuremath{^{+}})};
+  \node[flownode] (bot) at (0,0.4) {bottom tree (signs the FORS public key)};
+  \node[flownode, draw=pqcorange] (fors) at (0,-0.9) {FORS \;(signs the message digest)};
+  \draw[flowarrow] (fors) -- (bot);
+  \draw[flowarrow] (bot) -- (mid);
+  \draw[flowarrow] (mid) -- (top);
+  \node[right=2mm of top, pqcgray] {published};
+  \node[right=2mm of fors, pqcgray] {message};
+\end{tikzpicture}
+\caption{一棵 $d=3$ 层的超树。FORS 对消息摘要签名；底层 Merkle 树对 FORS 公钥签名；每个更高的层对其下一层树的根签名；只有顶端的根是公钥。单个“签名”就是从消息一直到已公布的根的这一整条由一次性签名和认证路径构成的链。把 $d$ 棵高度为 $h$ 的树串联起来，可得到 $2^{dh}$ 个有效叶子，而始终只需构建高度为 $h$ 的树。}
+\label{fig:hypertree}
+\end{figure}
+
+把 $d$ 棵高度为 $h$ 的树串联起来，指数便相乘：超树的行为如同一棵高度为 $dh$ 的树，提供 $2^{dh}$ 个可用的底层密钥，却从不需要构建高于 $h$ 的树。当 $dh$ 约为六十时，密钥数量如此之大，以至于碰撞变得可以忽略——正是这一点最终使我们得以去掉状态。
+
+\section{从有状态到无状态}
+最后一个思想是如何选择叶子。签名者不使用必须被记住的计数器，而是\emph{对消息求哈希}（连同一个新鲜的随机值 $R$），以伪随机方式选择使用哪棵底层树和哪个叶子，以及揭示哪些 FORS 叶子：
+\[
+(R,\ \text{tree index},\ \text{leaf index},\ \text{FORS indices}) \;\longleftarrow\; H(R \,\|\, PK \,\|\, M).
+\]
+两条不同的消息几乎从不会落在相同的地址上，因为超树极其庞大，而且消息随机化值被包含在用于选择的哈希之中。这是一个概率性的陈述，而不是允许重用密钥：实现绝不能有意重用 WOTS 或 FORS 地址。FORS 的安全性随签名次数以及任何意外碰撞而退化，而 WOTS 叶子的重用仍然是严重的问题。任何索引都不会被记录下来，因此也就不存在可被破坏的状态。
+
+\begin{remark}[公开种子的作用]
+有一个微妙之处会延续到标准之中。树中的每次哈希都由一个公开种子和一个标识节点位置的\emph{地址}进行调整（tweak），使得不同树中结构上相同的节点产生不同的哈希值。如果没有这一点，攻击者就可以同时攻击许多位置（多目标攻击）。该种子是公开的，但不可或缺，我们将在下一章再回到这一点。
+\end{remark}
+
+\section{小结}
+本章完成了从一次性密钥到实用的多次签名的阶梯：
+
+\begin{itemize}
+  \item 一棵 \textbf{Merkle 树}把 $2^h$ 个一次性密钥绑定在单个根之下，并由一条含 $h$ 个节点的路径进行认证；
+  \item 每个叶子只使用一次，便得到一个\emph{有状态}的方案（XMSS），其安全性在部署中十分脆弱；
+  \item 一棵 $d$ 层的\textbf{超树}把密钥供给量扩大到 $2^{dh}$，而无需构建高大的树；
+  \item \textbf{对消息求哈希}以及消息随机化在没有签名者状态的情况下选择路径，而巨大的地址空间使意外碰撞可以忽略；有意的地址重用是被禁止的。
+\end{itemize}
+
+现在一切都已就绪。下一章将完全按照 FIPS 205 标准的规定组装这些组件，并从少数几个种子和地址中确定性地派生出所有秘密值。
+
+\printbibliography[heading=chapterrefs]

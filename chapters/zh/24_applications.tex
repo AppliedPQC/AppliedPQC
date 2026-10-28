@@ -1,0 +1,433 @@
+% source: a032b706412a0932da4b9d3d02b09490231bfb63
+\chapter{部署后量子密码}
+\label{ch:applications}
+
+\section{本章为何重要}
+前面几部分构建并分析了各种算法。本章讨论的是这一问题中更难的那一半：如何正确且及时地将它们引入 Web 协议、数字证书和基础设施之中。推动这一切的是\emph{先存储、后解密}（第~\ref{ch:quantum}~章）：攻击者今天就可以记录加密流量，待量子计算机出现后再将其解密，因此任何长期有效的秘密都已处于暴露之中。所以，迁移必须在威胁到来之前开始，而不是之后；而迁移至少在同等程度上是一项工程项目，而不仅仅是一个数学问题。
+
+\section{学习目标}
+读完本章后，你应当能够：
+
+\begin{itemize}
+  \item 解释为什么实际部署采用经典加后量子的\emph{混合}密码，密码敏捷性（crypto-agility）意味着什么，以及何时混合是错误的选择；
+  \item 描述 TLS 1.3 如何承载混合密钥交换和后量子证书，以及其尺寸代价是多少；
+  \item 评估这些尺寸如何与丢包、QUIC 放大限制、部署工具链以及 PKI 结构相互作用；
+  \item 说明哪些已经发布上线，以及为什么密钥交换的迁移比签名早了数年；
+  \item 权衡在实践中决定方案选择的尺寸与性能折中。
+\end{itemize}
+
+\section{混合密码与密码敏捷性}
+部署一个年轻算法最安全的方式，是不单独信任它。\emph{混合}方案通过一个经过分析的协议构造，将一个已被充分理解的经典算法与一个后量子算法结合起来。
+
+\begin{definition}[混合密钥交换]
+混合密钥交换通过一个经过分析的协议构造，将一个经典密钥协商贡献（例如
+X25519 ECDHE）与一个后量子 KEM 贡献（例如 ML-KEM-768）结合起来。X25519 是
+Diffie--Hellman 密钥协商，而不是 KEM。一个稳健的构造会在 KDF 的提取/扩展步骤中绑定算法标识符、对端身份以及握手记录（transcript）。其设计目标是：在满足组合器和协议所要求的条件下，只要至少有一个组件仍然安全，就能保持会话密钥的安全性；任意的哈希拼接并不是一条普遍成立的定理。
+\end{definition}
+
+混合部署同时对冲两种相反的风险：未来的量子计算机攻破经典部分，以及尚且年轻的后量子部分中存在某种至今未被发现的经典弱点。它之所以成为主流迁移策略，恰恰是因为它免去了把一切押在单一新假设上的必要。
+
+\subsection{组合器的具体形式}
+\label{sec:kem-combiner}
+
+上面的定义提到“一个经过分析的协议构造”，并警告任意的哈希并不是这样的构造。值得看一看一个\emph{确实}经过分析的构造是什么样子，因为它每一项输入存在的理由，正是那条警告的全部内容。
+
+\paragraph{首先，X25519 不是 KEM。}
+Diffie--Hellman 是密钥\emph{协商}，因此必须先对它加以包装，才能与 KEM 组合。标准的包装方式是让临时公钥扮演密文的角色：
+
+\begin{algorithm}[H]
+\caption{由 Diffie--Hellman 构造的 KEM（此处为 X25519~\cite{rfc7748}）}
+\begin{algorithmic}[1]
+\Statex \textbf{KeyGen:}
+\State $sk \gets$ 随机标量；\quad $pk \gets sk\cdot G$
+\Statex \textbf{Encaps}$(pk)$:
+\State $r \gets$ 随机标量
+\State $ct \gets r\cdot G$ \Comment{临时公钥\emph{就是}密文}
+\State $ss \gets r\cdot pk$ \Comment{$= rsk\cdot G$}
+\State \Return $(ct, ss)$
+\Statex \textbf{Decaps}$(sk, ct)$:
+\State \Return $ss \gets sk\cdot ct$ \Comment{$= skr\cdot G$}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{然后是组合器。}
+当两个组件都处于 KEM 形式时，混合构造是逐分量进行的，所有值得关注的事情都发生在其中一行。
+
+\begin{algorithm}[H]
+\caption{由经典 $\mathsf{KEM}_1$ 与后量子 $\mathsf{KEM}_2$ 构成的通用混合 KEM}
+\label{alg:hybrid-kem}
+\begin{algorithmic}[1]
+\Statex \textbf{KeyGen:}
+\State $(pk_1, sk_1) \gets \mathsf{KEM}_1.\mathsf{KeyGen}()$
+\State $(pk_2, sk_2) \gets \mathsf{KEM}_2.\mathsf{KeyGen}()$
+\State \Return $pk = pk_1 \| pk_2$, \quad $sk = sk_1 \| sk_2$
+\Statex \textbf{Encaps}$(pk)$:
+\State 解析 $pk_1 \| pk_2 \gets pk$
+\State $(ct_1, ss_1) \gets \mathsf{KEM}_1.\mathsf{Encaps}(pk_1)$
+\State $(ct_2, ss_2) \gets \mathsf{KEM}_2.\mathsf{Encaps}(pk_2)$
+\State $ss \gets \mathrm{KDF}\big(ss_1 \,\|\, ss_2 \,\|\, ct_1 \,\|\, ct_2 \,\|\, \textit{label}\big)$
+\State \Return $ct = ct_1 \| ct_2$, \quad $ss$
+\Statex \textbf{Decaps}$(sk, ct)$:
+\State 解析 $sk_1 \| sk_2 \gets sk$；\quad $ct_1 \| ct_2 \gets ct$
+\State $ss_1 \gets \mathsf{KEM}_1.\mathsf{Decaps}(sk_1, ct_1)$
+\State $ss_2 \gets \mathsf{KEM}_2.\mathsf{Decaps}(sk_2, ct_2)$
+\State \Return $ss \gets \mathrm{KDF}\big(ss_1 \,\|\, ss_2 \,\|\, ct_1 \,\|\, ct_2 \,\|\, \textit{label}\big)$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{为什么要把密文放进哈希。}
+正是这一步使该构造成为一条定理，这也是单独的 $\mathrm{KDF}(ss_1 \| ss_2)$ 不能成为定理的原因。假设省略了密文。一个 IND-CCA 攻击者持有挑战 $(ct_1^{*}, ct_2^{*})$，并希望得到其背后的密钥。如果它能找到任意一个 $ct_1' \neq ct_1^{*}$，其解封装结果是\emph{同一个} $ss_1^{*}$，那么 $(ct_1', ct_2^{*})$ 就是一个\textbf{不同的}密文，却具有\textbf{完全相同的}共享秘密。它不是挑战密文，因此解封装预言机会回答它——而答案就是挑战密钥。在两个组件都未被攻破的情况下，这个游戏就输掉了。
+
+绑定 $ct_1 \| ct_2$ 堵住了这一漏洞：改动密文的任何一个字节，派生出的密钥都会随之改变。Giacon、Heuer 和 Poettering~\cite{ghp2018} 证明了朴素的拼接组合器在一般意义下并不保持 CCA 安全性，并给出了保持 CCA 安全性的组合器；Bindel、Brendel、Fischlin、Goncalves 和 Stebila~\cite{bbfgs2019} 将这一分析推进到混合 KEM 和认证密钥交换的场景。NIST 的 KEM 建议 SP~800-227~\cite{nistsp800227} 如今就混合构造和经批准的密钥组合器给出了相应的标准层面指导；NIST IR 8547 进一步指出，只要其中一个输入来自经批准的方案，即使另一个是不被允许的，混合方案也可以通过 FIPS~140 验证，且两个共享秘密可以按任意顺序拼接~\cite{nistir8547}。\emph{label} 用于域分离，使得此处派生的密钥不会与另一个协议由相同原语派生出的密钥发生碰撞。
+
+\begin{remark}[绑定可以存在的两个位置]
+算法~\ref{alg:hybrid-kem} 在组合器内部绑定密文，因为它必须能够独立使用。一个已经对完整握手记录进行哈希的协议，可以转而从协议中获得同样的性质——这正是 TLS 的做法（第~\ref{sec:tls-hybrid}~节），也是其组合器看起来比这里更简单的原因。两者并无孰对孰错；重要的是绑定在某处存在，而一个从原本提供绑定的协议中剥离出来的组合器，会悄无声息地失去这一性质。
+\end{remark}
+
+\paragraph{X-Wing：一个真实的实例化，以及一则警示。}
+X-Wing~\cite{xwing2024} 是一个由 ML-KEM-768 与 X25519 构成的独立混合 KEM，专为没有协议提供握手记录的场景而设计。其组合器为
+\[
+  ss \;=\; \mathrm{SHA3\text{-}256}\big(ss_{\mathrm{M}} \,\|\, ss_{\mathrm{X}} \,\|\, ct_{\mathrm{X}} \,\|\, pk_{\mathrm{X}} \,\|\, \textit{XWingLabel}\big),
+\]
+其中标签为六个字节，封装密钥为 $1216$ 字节，密文为 $1120$ 字节。注意其中\emph{缺少}了什么：ML-KEM 密文 $ct_{\mathrm{M}}$ 并没有被哈希进去。这既不是疏忽，也不是一种普遍许可——规范明确指出，这一点\emph{针对 ML-KEM-768 这一具体选择}成立，其依据是该方案自身已被证明的性质。可迁移的教训正是上面的定义以抽象方式陈述的那一条：组合器只能在对特定方案给出证明的前提下才可以简化，绝不能凭观察来简化。
+
+混合部署还以密码敏捷性为前提。算法协商之外的生命周期要求将在第~\ref{sec:crypto-agility}~节中展开。
+
+\subsection{混合不适用的场合}
+\label{sec:hybrid-limits}
+
+对于上述协议，混合是恰当的默认选择。其理由是这些协议的性质，而不是关于密码学的事实；而有一类重要的系统，这些性质一项也不具备。
+
+在 TLS 中，混合过渡几乎是免费的。额外的经典密钥交换在一个几秒钟后就被丢弃的连接上只需几百个字节的开销，两个端点无需征得任何人的许可即可协商算法，而且没有任何用户察觉到这一变化。代价由软件厂商一次性承担，且不可见。
+
+在区块链上，上述每一项性质都不成立。额外的签名不是临时的：它被永久写入区块，转发给每一个节点，并由每一个归档节点存储，因此一笔混合交易要\emph{永远}、并由\emph{所有人}承担其线上传输尺寸。这里不存在协商，因为共识规则对所有参与者都相同。而且这一变化绝非不可见——用户必须采取行动，先迁移到混合方案，之后再迁移离开它，这意味着整个生态系统要为一次迁移付出\textbf{两次}协调代价。第~\ref{ch:blockchains}~章展示了这种协调代价的实际面貌；它是起主导作用的那一项。
+
+可以推广的规则是：在冗余工作\emph{短暂、可协商且不可见}的地方，混合是廉价的；在冗余工作\emph{持久、由共识固定且用户可见}的地方，混合是昂贵的。在出于条件反射而采用混合之前，先检查系统符合这两种描述中的哪一种。
+
+\subsection{作为生命周期工程的密码敏捷性}
+\label{sec:crypto-agility}
+
+密码敏捷性不仅仅是协商一个标识符。标准会演进，新的密码分析会改变人们的信心，实现需要打补丁，而长寿命的设备或根证书可能比某一算法选择存在得更久。因此，业界指南将敏捷性描述为：在不破坏业务系统的前提下，发现密码资产并以受控方式替换或升级算法的能力~\cite{keyfactoragility}。
+
+有四项能力使这一定义得以落地：
+
+\begin{enumerate}
+  \item \textbf{清点}：定位算法、密钥、证书、HSM 策略、库、协议端点，以及其保密期限与此相关的数据；
+  \item \textbf{抽象}：在应当由策略作出选择的地方，防止应用依赖于某一种具体的密钥或对象格式；
+  \item \textbf{策略}：对允许的算法、参数集、混合规则、过期和例外进行足够集中的控制，以便对其进行审计；
+  \item \textbf{自动化}：在基础设施的规模上进行轮换、测试、部署、观测和回滚。
+\end{enumerate}
+
+敏捷性受到线上传输协议和共识协议的约束。API 无法协商对端不理解的标识符，无法缩小固定的证书字段，也无法改变区块链的交易格式。因此，迁移的单位是算法、实现、协议和基础设施的整体。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=5mm and 8mm]
+  \node[flownode] (inventory) {asset\\inventory};
+  \node[flownode, right=of inventory] (policy) {algorithm and\\parameter policy};
+  \node[flownode, right=of policy] (deploy) {automated\\deployment};
+  \node[flownode, right=of deploy] (observe) {telemetry and\\cryptanalysis};
+  \draw[flowarrow] (inventory) -- (policy);
+  \draw[flowarrow] (policy) -- (deploy);
+  \draw[flowarrow] (deploy) -- (observe);
+  \draw[flowarrow] (observe.south) |- ++(0,-0.7) -| (inventory.south);
+\end{tikzpicture}
+\caption{密码敏捷性是一个反馈回路，而不是编译进某个版本中的一份算法清单。}
+\end{figure}
+
+\section{后量子 TLS 1.3}
+TLS 1.3 保护着大部分 Web 流量，也是后量子密码最先进入生产环境的地方。握手中有两个相互独立的部分必须升级：\emph{密钥交换}（保密性）和\emph{认证}（证书上的签名）。
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.20\textwidth}p{0.18\textwidth}p{0.52\textwidth}}
+\toprule
+文档 & 状态 & 工程作用 \\
+\midrule
+RFC 10024 & 标准跟踪 & 用于 TLS~1.3 的具体 ECDHE--ML-KEM 组~\cite{rfc10024} \\
+RFC 9954 & 信息类 & TLS~1.3 中混合密钥交换的框架与分析~\cite{rfc9954} \\
+RFC 9881 & 标准跟踪 & X.509 中 ML-DSA 的标识符与编码~\cite{rfc9881} \\
+RFC 9909 & 标准跟踪 & X.509 中 SLH-DSA 的标识符与编码~\cite{rfc9909} \\
+RFC 9935 & 标准跟踪 & X.509 中 ML-KEM 的标识符与编码~\cite{rfc9935} \\
+RFC 9936 & 标准跟踪 & CMS 中 ML-KEM 的使用约定~\cite{rfc9936} \\
+RFC 9964 & 标准跟踪 & JOSE 和 COSE 中的 ML-DSA 算法标识符~\cite{rfc9964} \\
+RFC 9958 & 信息类 & 面向工程师的后量子迁移指南~\cite{rfc9958} \\
+RFC 9794 & 信息类 & PQ/T 混合方案的通用术语~\cite{rfc9794} \\
+\bottomrule
+\end{tabular}
+\caption{截至 2026 年 8 月的部分后量子协议文档。信息类 RFC 可以是权威性的指导，而不定义标准跟踪意义上的互操作性要求。}
+\label{tab:pqc-protocol-status-2026}
+\end{table}
+
+\subsection{混合密钥交换}
+\label{sec:tls-hybrid}
+框架已经确定：RFC~9954~\cite{rfc9954} 规定了 TLS 1.3 如何承载混合密钥交换，RFC~10024~\cite{rfc10024} 则用三个 ECDHE--ML-KEM 组及其永久代码点将其实例化：\texttt{X25519MLKEM768}（$4588$，\texttt{0x11EC}）、\texttt{SecP256r1MLKEM768}（$4587$）和 \texttt{SecP384r1MLKEM1024}（$4589$）。RFC~10024 是一份标准跟踪文档，而不是仍处于活跃状态的互联网草案（Internet-Draft）。在这三个组中，\texttt{X25519MLKEM768} 在 IANA 注册表中被标记为 Recommended；两个 \texttt{SecP} 组则服务于更专门的监管和高安全性需求。
+
+TLS 采用了第~\ref{sec:kem-combiner}~节中提到的较简单的路线：两个共享秘密被\emph{拼接}起来，并替代普通的 (EC)DHE 输入送入现有的 TLS~1.3 密钥调度。RFC~9954 要求每个组件的共享秘密都具有\emph{固定长度}，这使得拼接不会产生歧义；在这一条件下，其分析将该构造认定为一个双 PRF 组合器~\cite{rfc9954}。HKDF-Extract~\cite{rfc5869} 由拼接后的输入形成握手秘密。后续的 \texttt{Derive-Secret} 操作会绑定握手记录，包括协商的密钥份额；HKDF-Extract 本身并不对该握手记录进行哈希。
+
+\begin{remark}[为什么共享秘密的拼接顺序不同]
+在 \texttt{X25519MLKEM768} 中，拼接为 $ss_{\text{ML-KEM}} \|
+ss_{\text{X25519}}$，ML-KEM 在前——其原因是监管上的，而不是密码学上的。NIST SP~800-56C 批准使用带两个共享秘密的 HKDF，条件是\emph{第一个}共享秘密来自 FIPS 批准的密钥建立方案。X25519 不是这样的方案，所以 ML-KEM 必须在前。在两个 \texttt{SecP} 组中，ECDHE 份额\emph{是}经过批准的，因此那里的顺序反过来，ECDHE 在前。这一顺序满足的是上述密钥派生合规约束；它并不是对各组件安全性的排序。
+\end{remark}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\scriptsize]
+  \node[seqparty] at (1.4,3.4) {Client};
+  \node[seqparty] at (8.6,3.4) {Server};
+  \draw[seqlife] (1.4,3.1) -- (1.4,-0.8);
+  \draw[seqlife] (8.6,3.1) -- (8.6,-0.8);
+  \draw[seqmsg] (1.4,2.55) -- node[above]{ML-KEM key (encapsulation key) $+$ X25519 share} (8.6,2.55);
+  \node[seqnote, left] at (8.45,2.0) {Encaps $\to (ss_{\text{ML-KEM}}, ct)$};
+  \draw[seqmsg] (8.6,1.35) -- node[above]{ServerHello: ML-KEM ciphertext $+$ X25519 share} (1.4,1.35);
+  \draw[seqmsg] (8.6,0.55) -- node[above]{encrypted Certificate and CertificateVerify} (1.4,0.55);
+  \node[seqresult] at (5,-0.4) {shared secret $=\mathrm{KDF}\big(ss_{\text{ML-KEM}} \,\|\, ss_{\text{X25519}}\big)$};
+\end{tikzpicture}
+\caption{TLS 1.3 中的混合密钥交换。RFC~9954 提供框架，RFC~10024 规定具体的 ECDHE--ML-KEM 组~\cite{rfc9954,rfc10024}。椭圆曲线份额和 ML-KEM 贡献都在握手中传输。图中所示的线上传输顺序是为 \texttt{X25519MLKEM768} 规定的；与共享秘密的顺序不同，RFC~10024 将这种反转的份额顺序归因于历史原因。证书认证在 \texttt{ServerHello} 之后进行，并且仍是一条独立的迁移路线。}
+\label{fig:tls-hybrid}
+\end{figure}
+
+\subsection{后量子认证及其尺寸代价}
+后量子证书认证仍然是一条独立的标准化与部署路线。基础编码层已有进展：RFC~9881 规定了 X.509 证书和 CRL 中的 ML-DSA，RFC~9909 则对 SLH-DSA 作了同样的规定~\cite{rfc9881,rfc9909}。这些 RFC 本身并不能完成公共 WebPKI 的迁移。在 TLS 中使用 ML-DSA、复合证书配置文件、浏览器和信任库支持，以及证书透明度（Certificate Transparency）集成，仍然是各自独立的工作项；在本快照时点，TLS ML-DSA 和 Merkle 树证书规范仍是活跃的互联网草案~\cite{tlsmldsa2026,plantsmtc2026}。
+
+此处以 ML-DSA-65 作为 Level~3 的示例；部署时的选择取决于目标安全类别和对端支持情况。SLH-DSA 以更大的尺寸为代价提供了更保守的假设。实际的障碍在于尺寸：后量子公钥和签名远大于它们所取代的椭圆曲线公钥和签名，而一次 TLS 握手可能携带多张证书。额外的数千字节会增加数据包数量，并且当它们跨越传输、缓冲或分片阈值时，可能会增加往返次数。
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+签名方案 & 公钥（字节） & 签名（字节） \\
+\midrule
+Ed25519（经典）   & 32   & 64 \\
+ML-DSA-65 (FIPS 204)  & 1952 & 3309 \\
+FN-DSA / Falcon-512（FIPS 206 制定中） & 897 & $\approx 666$ \\
+SLH-DSA-128s (FIPS 205) & 32 & $\approx 7856$ \\
+\bottomrule
+\end{tabular}
+\caption{一种经典签名、已发布的 PQC 标准以及依赖草案的 FN-DSA 候选方案的近似尺寸。在本标准快照时点，Falcon/FN-DSA 尚不是最终版 FIPS。}
+\label{tab:sig-sizes}
+\end{table}
+
+\subsection{哪些已经实际上线}
+\label{sec:pq-adoption}
+
+人们很容易把本章这样的章节理解为在描述未来。就密钥交换而言，事实并非如此。混合后量子密钥协商已在主流浏览器和 OpenSSH~\cite{opensshpq} 中默认启用，而 Cloudflare 在 2026 年 4 月报告称，到达其网络的人类流量中有超过 $65\%$ 使用了后量子加密~\cite{cloudflareroadmap2026}。主要的云和边缘服务提供商如今提供的是具体产品，而不是没有时间表的实验。
+
+表~\ref{tab:vendor-pqc-2026} 记录的是产品层面，因为一个覆盖整个提供商的“PQC ready”标签会掩盖默认推出、可选启用功能、私有 PKI 能力与未来目标之间的实质性差异。
+
+下面提出的服务级模型使这些差异可以审计：它记录的是某个\emph{特定服务及协议层面}所达到的最高迁移阶段，而不是整个提供商的阶段。这些阶段构成一个运营上的递进过程，但并不是安全性排序：一个经过充分测试的可选启用部署，可能优于一个无法观测或回滚的默认部署。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  phase/.style={rounded corners=3pt,draw=pqcblue!45,fill=pqcblue!6,
+    text width=1.58cm,minimum height=1.05cm,align=center,font=\tiny,inner sep=3pt},
+  phasearrow/.style={-{Latex[length=1.7mm]},draw=pqcblue!55,line width=0.7pt}
+]
+  \node[phase] (p0) at (0,0) {\textbf{0}\\experiment};
+  \node[phase] (p1) at (2.45,0) {\textbf{1}\\library or API};
+  \node[phase,draw=pqcorange!60,fill=pqcorange!7] (p2) at (4.90,0) {\textbf{2}\\service opt-in};
+  \node[phase,draw=pqcorange!60,fill=pqcorange!7] (p3) at (7.35,0) {\textbf{3}\\default-on\\with escape hatch};
+  \node[phase,draw=pqcteal!65,fill=pqcteal!8] (p4) at (9.80,0) {\textbf{4}\\enforced for\\capable peers};
+  \node[phase,draw=pqcteal!65,fill=pqcteal!8] (p5) at (12.25,0) {\textbf{5}\\classical-only\\path retired};
+  \foreach \a/\b in {p0/p1,p1/p2,p2/p3,p3/p4,p4/p5}
+    \draw[phasearrow] (\a.east) -- (\b.west);
+\end{tikzpicture}
+\caption{一个拟议的服务级部署成熟度模型。阶段 1--4 逐步提供越来越强的证据，表明某个实现正在进入生产环境；阶段~5 单独列出，因为对具备能力的对端强制使用，并不意味着仅支持经典算法的对端已被淘汰。}
+\label{fig:pqc-deployment-maturity}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  year/.style={font=\scriptsize\bfseries,text=pqcgray},
+  lane/.style={rounded corners=5pt,minimum width=15.1cm,minimum height=1.72cm,
+    anchor=west,draw=none},
+  lanelabel/.style={align=left,text width=1.65cm,font=\tiny\bfseries,
+    text=pqcblue,anchor=west},
+  milestone/.style={rounded corners=3pt,align=left,text width=1.70cm,
+    minimum height=0.88cm,inner sep=4pt,font=\tiny,anchor=west},
+  done/.style={milestone,draw=pqcteal!70,fill=white,text=black},
+  target/.style={milestone,draw=pqcorange!70,dashed,fill=white,text=black},
+  flow/.style={-{Latex[length=2mm]},line width=0.8pt,draw=pqcblue!55}
+]
+  % Soft lane backgrounds and year grid.
+  \node[lane,fill=pqcblue!7] at (0,5.15) {};
+  \node[lane,fill=pqcorange!7] at (0,3.18) {};
+  \node[lane,fill=pqcteal!8] at (0,1.21) {};
+  \foreach \x/\yr in {3.05/2025,5.35/2026,7.65/2027,9.95/2028,13.05/2029}
+    \node[year] at (\x,7.18) {\yr};
+  \foreach \x in {4.20,6.50,8.80,11.10}
+    \draw[pqcgray!20] (\x,1.18) -- (\x,6.93);
+
+  % Lane labels.
+  \node[lanelabel] at (0.35,6.05) {Confidentiality\\\normalfont\tiny harvest-now\\protection};
+  \node[lanelabel,text=pqcorange!90!black] at (0.35,4.08) {Authentication\\\normalfont\tiny identity and signing};
+  \node[lanelabel,text=pqcteal!90!black] at (0.35,2.11) {Foundations\\\normalfont\tiny keys and platforms};
+
+  % Confidentiality milestones.
+  \node[done] (c25) at (2.20,5.58) {\textcolor{pqcteal}{\textbf{COMPLETE}}\\Quantum-confidential ALTS};
+  \node[done] (c26) at (4.50,5.58) {\textcolor{pqcteal}{\textbf{AVAILABLE}}\\Public APIs and load-balancer support};
+  \node[target,text width=2.20cm] (c27) at (6.80,5.58) {\textcolor{pqcorange}{\textbf{2026--27}}\\VPN, service mesh and data flows};
+
+  % Authentication milestones.
+  \node[target] (a26) at (4.50,3.61) {\textcolor{pqcorange}{\textbf{2026}}\\Software attestations};
+  \node[target,text width=2.20cm] (a27) at (6.80,3.61) {\textcolor{pqcorange}{\textbf{2027--28}}\\Private CA and certificate rollout};
+  \node[target] (a28) at (9.40,3.61) {\textcolor{pqcorange}{\textbf{2028}}\\IAM and Merkle Tree certificates};
+
+  % Foundation milestones.
+  \node[done] (f25) at (2.20,1.64) {\textcolor{pqcteal}{\textbf{COMPLETE}}\\PQC algorithms in Cloud KMS};
+  \node[target] (f26) at (4.50,1.64) {\textcolor{pqcorange}{\textbf{2026}}\\Quantum-safe key import};
+  \node[target,text width=2.20cm] (f28) at (9.10,1.64) {\textcolor{pqcorange}{\textbf{2028}}\\Cloud HSM and confidential computing};
+
+  % Convergence rather than three misleading independent finish lines.
+  \node[rounded corners=6pt,draw=pqcblue,fill=pqcblue,text=white,
+    align=center,text width=2.05cm,minimum height=5.22cm,font=\scriptsize\bfseries]
+    (ready) at (13.15,4.08) {FULL PQC\\READINESS\\[3pt]\normalfont\tiny roadmap target};
+  \draw[flow] (c27.east) -- ++(0.20,0) |- (ready.west);
+  \draw[flow,draw=pqcorange!75] (a28.east) -- (ready.west);
+  \draw[flow,draw=pqcteal!75] (f28.east) -- ++(0.20,0) |- (ready.west);
+
+  % Legend uses both shape and line style, not colour alone.
+  \node[done,text width=0.15cm,minimum height=0.15cm,inner sep=1.4pt] at (0.30,0.55) {};
+  \node[anchor=west,font=\tiny] at (0.52,0.55) {available / complete};
+  \node[target,text width=0.15cm,minimum height=0.15cm,inner sep=1.4pt] at (3.25,0.55) {};
+  \node[anchor=west,font=\tiny] at (3.47,0.55) {announced target};
+\end{tikzpicture}
+\caption{Google Cloud 公布的迁移顺序，根据其 2026 年 8 月的状态报告~\cite{googlecloudpqc2026} 重绘为一份工程路线图。实线框里程碑是 Google 报告为已可用或已完成的；其余日期为目标，可能会变化。该图有意将保密性、认证和使能基础设施分开，而不是把“PQC ready”当作一个单一开关。}
+\label{fig:google-cloud-pqc-roadmap}
+\end{figure}
+
+\begingroup
+\newcommand{\statusapi}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcteal!14,text=pqcteal!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){API};}
+\newcommand{\statusavailable}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcteal!14,text=pqcteal!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){AVAILABLE};}
+\newcommand{\statusdefault}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcteal!14,text=pqcteal!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){DEFAULT};}
+\newcommand{\statusopt}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  fill=pqcorange!14,text=pqcorange!90!black,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){OPT-IN};}
+\newcommand{\statusroad}{\tikz[baseline=(s.base)]\node[rounded corners=2pt,
+  draw=pqcblue!55,dashed,text=pqcblue,inner xsep=3pt,inner ysep=1pt,
+  font=\tiny\bfseries](s){ROADMAP};}
+\begin{table}[H]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.22}
+\begin{tabular}{p{0.105\textwidth}p{0.255\textwidth}p{0.255\textwidth}p{0.285\textwidth}}
+\toprule
+提供商 & 密钥交换 & 签名与 PKI & 范围边界 \\
+\midrule
+Google Cloud & \statusapi\ 公共 API\newline \statusopt\ 应用负载均衡器和代理负载均衡器
+  & \statusapi\ KMS ML-DSA 和 SLH-DSA\newline \statusroad\ 证书和 IAM
+& 对于具备能力的客户端，负载均衡器的密钥交换将在 2026 年 10 月之后由可选启用改为默认启用，并在 2027 年 10 月之后改为始终启用；这并不是淘汰仅支持经典算法的兼容性~\cite{googlecloudloadbalancingpqc2026}。 \\
+AWS & \statusopt\ KMS、ACM 和 Secrets Manager 的混合 TLS
+  & \statusavailable\ KMS ML-DSA 密钥和 Private CA 证书
+& 证据覆盖的是指定的非 FIPS 端点，而不是所有 AWS HTTPS 服务~\cite{awspqtls2025,awskmsmldsa2025,awsprivatecamldsa2025}。 \\
+Microsoft & \statusapi\ 受支持的 Windows 和 .NET 中的 ML-KEM
+  & \statusapi\ ML-DSA\newline \statusavailable\ 第~1 阶段 AD~CS
+& API 和私有 PKI 支持并不能证明 Schannel 或 Azure TLS 已普遍部署~\cite{microsoftpqc2025,microsoftadcs2026}。 \\
+Cloudflare & \statusdefault\ 边缘混合密钥交换\newline \statusavailable\ 混合 IKEv2/IPsec
+  & \statusavailable\ 部分源站认证
+& 源站认证并不是面向访问者的公共 WebPKI 认证~\cite{cloudflareroadmap2026,cloudflareoriginauth2026,cloudflareipsec2026}。 \\
+Alibaba Cloud & \statusdefault\ 面向受支持 TLS~1.3 和 QUIC 客户端的 ESA
+& ---
+& 证据证明的是 ESA 边缘部署，而不是覆盖整个提供商的 PKI 或 HSM 支持~\cite{alibabaesapqc2026}。 \\
+\bottomrule
+\end{tabular}
+\caption{截至 2026 年 8 月的部分厂商部署证据。产品、协议、默认或可选启用状态以及部署范围均明确列出；短横线表示所引用的来源并未证明存在相应的部署。}
+\label{tab:vendor-pqc-2026}
+\end{table}
+\endgroup
+
+云迁移必须覆盖四个不同的流量层面：客户入口、内部服务间路径、管理员与开发者访问，以及数据传输管道。一个层面上的证据并不能证明其他层面也已覆盖。基础层同样是架构性的：Cloud KMS 为 KEM 密钥分配了独立的 \texttt{KEY\_ENCAPSULATION} 用途和解封装操作，而不是把 ML-KEM 当作另一种加密模式~\cite{googlecloudkmsalgorithms2026}。
+
+AWS 报告了一个相关的系统层面教训：在连接复用的情况下，启用混合 ML-KEM 使测得的 \texttt{GenerateDataKey} 吞吐量从每秒 $216.1$ 笔事务变为 $216.0$ 笔，约 $0.05\%$；同一报告发现，在不复用连接时影响更大~\cite{awspqtls2025}。因此，额外的握手字节和原语计算量并不会直接转化为应用层上相同百分比的损失。
+
+认证方面的进展则不那么成熟，而这种对比正是有用之处。证书编码如今已有标准跟踪 RFC，私有 PKI 产品也已开始上线，但公共 WebPKI 的迁移和依赖方的广泛支持仍不完整。代码签名、固件和安全启动背后的信任链，其更替周期也是以年计的。这种不对称有一个简单的原因。
+
+\begin{itemize}
+  \item 密钥交换是\textbf{短暂的、双方的}。两个端点在每次连接时都重新协商，因此升级的传播速度与软件更新一样快，而且无需重新签发任何东西。
+  \item 签名是\textbf{长期的、多方的}。一张根证书、一个已签名的固件镜像或一个链上公钥，会对某个可能尚未升级——甚至可能尚不存在——的验证者作出承诺。
+\end{itemize}
+
+这一区别将在本书余下部分反复出现。正因为如此，“先存储、后解密”对保密性而言是紧迫的框架，对签名而言却是错误的框架；也正因为如此，下一章中最困难的情形是一个签名情形。签名并非免于紧迫性，只是不适用那一框架：NIST 称签名迁移是紧迫的，因为它耗时更长，并且需要更多参与方协调~\cite{nistir8547}。
+
+实现和部署状态变化很快。在作出生产决策之前，请查阅当前的 RFC 或互联网草案，以及所选浏览器、TLS 库或服务的发行说明，了解其支持的组、默认设置和认证行为。
+
+\section{网络与基础设施效应}
+
+\subsection{TLS 性能与网络放大}
+
+端到端的 TLS 测量表明，“PQC 更慢”这种说法过于粗略。在干净的高带宽路径上，若干 KEM 的计算开销都具有竞争力。当较大的对象跨越记录、数据包、初始拥塞窗口或丢包恢复边界时，性能可能会下降~\cite{pqtlsperformance2023,pqtlspqcrypto2020}。
+
+如果一次交换占用 $N$ 个独立丢失的数据包，每个包的丢失概率为 $p$，那么至少有一个包丢失的概率为
+
+\[
+  1-(1-p)^N.
+\]
+
+对于早期 PQTLS 评估中所用的示例情形 $N=16$, $p=0.05$，结果约为 $56\%$。这并不是 PQTLS 的一个常数；它说明了额外的字节如何能够把一个连接推入性质上截然不同的丢包区间。
+
+证书认证带来了第二个放大因子，因为签名既出现在证书链中，也出现在 \texttt{CertificateVerify} 中。KEMTLS 通过使用 KEM 进行认证，去掉了服务器在线的握手签名，同时保留了 CA 离线的证书签名~\cite{kemtls2020}。它表明，协议重构可以胜过对单个签名对象的反复优化；它是一种替代设计，而不是 TLS~1.3 已部署的默认方式。
+
+一个可复现的 PQTLS 实验应当固定库和草案版本、编译器和构建标志、CPU 或加速器配置，以及证书链内容。它应当控制 RTT、带宽、丢包率和 MTU；保留数据包捕获和 TLS 消息尺寸；并为每次运行记录协商的组和签名算法。否则，基准测试可能会在不知不觉中测量到经典回退路径，或一条不具代表性的干净路径。
+
+\subsection{QUIC：当字节改变传输状态机时}
+
+QUIC 将 TLS~1.3 与分包、加密级别、丢包恢复和地址验证集成在一起。在验证客户端地址之前，服务器发送的字节数被限制为大约其已接收字节数的三倍。更大的客户端 Initial 数据包可以增加服务器的预算，但更大的证书和签名可能会很快将其耗尽。由此产生的行为取决于 QUIC 数据包的数量和时序，而不仅仅取决于 TLS 字节的总和~\cite{rfc9000}。
+
+跨多个 QUIC 实现的测量表明，后量子对象会改变数据包数量和握手行为，并可能暴露缓冲和恢复路径中的种种假设~\cite{quantumquic2024}。云网络实验进一步证明，大尺寸的后量子签名会增加握手数据包的数量~\cite{pqquiccloud2023}。这必须与 IP 分片区分开来：更大的握手会产生更多的 QUIC 数据包，但不一定会使某个 IP 数据包分片。
+
+一次有用的 QUIC 评估应记录：每个加密级别上的 ClientHello 和服务器发送批次（server flight）字节数；Initial、Handshake 和 1-RTT 数据包数量；反放大阻塞；重传和 PTO；完成时间和 CPU 开销；以及在多种 RTT、带宽、MTU 和丢包条件下的结果。
+
+\subsection{产业交付链与 PKI}
+
+只有当库、协议协商、构建配置、一致性测试、产品以及两个端点全部到位之后，一项标准才变得可部署。库支持 ML-KEM 或 ML-DSA，并不能证明某个生产连接协商使用了它。OpenSSL、BoringSSL/Chrome、Cloudflare 和 wolfSSL 分别展示了这条链中的不同环节~\cite{opensslpq2026,chromekyber2024,cloudflarepqmigration2026,wolfsslpq}。
+
+第~\ref{sec:pq-adoption}~节解释了为什么密钥建立率先迁移。余下的签名迁移必须协调密钥、证书、CA、HSM、依赖方软件、吊销和审计策略；对某一个原语的库支持并不能弥合交付链上的这一缺口。
+
+迁移也是消除历史遗留冗余的机会。RPKI 继承了 X.509 对象模型的很大一部分；不经重新设计就加入更大的后量子签名，可能会使证书和编码开销叠加放大。iRPKI 提出去除不必要的终端实体证书结构，保留实际需要的授权和 CA 签名，并采用更紧凑的编码~\cite{irpki2026}。更普遍的规则是：先消除架构上的冗余，再花代价用更大的对象去保护它。
+
+\section{跨平台的实现优化}
+
+仅凭原语的计时并不能决定一个实现是否可部署。在受限设备上，代码尺寸、栈和堆的峰值使用量、无线传输字节数以及每次操作的能耗需要综合考虑；在慢速链路上，传输一张更大的证书所消耗的能量可能比密码运算本身还要多~\cite{pqciotsurvey2024}。嵌入式 TLS 的测量同样表明，后量子密钥建立可以是实用的，而证书认证仍是更困难的一步~\cite{pqtlsembedded2020}。因此，部署时应当分别测试 KEM、证书和在线签名能力，而不是贴上一个不加区分的“PQC-ready”标签。
+
+典型的受限设备技术包括原地多项式变换、在不同阶段之间复用缓冲区，以及从种子重新生成公共矩阵。硬件加速器则要在查找表、存储器端口、DSP 模块、功耗和流水线深度之间进行权衡；服务器和 GPU 设计还会增加批处理、排队、数据传输和尾延迟方面的约束。只有当一项优化的收益在序列化、传输以及该原语实际所处的工作负载中仍然保留时，这项优化才有意义。第~\ref{sec:fndsa-acceleration}~节给出了一个具体的 FN-DSA 例子。
+
+处理秘密钥、临时秘密或依赖秘密的采样的操作——尤其是密钥生成、签名和解封装——需要依据适用的威胁模型进行侧信道审查（第~\ref{ch:sidechannel}~章）。基于公开输入的验证具有不同的保密性要求，尽管它仍然需要进行健壮性和拒绝服务方面的审查。
+
+\section{常见陷阱}
+
+\paragraph{陷阱 1：过早地只部署后量子算法。}
+丢弃经典算法、单独信任后量子算法，会放弃混合所提供的对冲。在后量子方案经受更多年的审视之前，混合是保守的默认选择——在混合廉价的那些协议中。第~\ref{sec:hybrid-limits}~节给出了判断混合何时不廉价的检验标准；而与之镜像对称的错误，即在混合会使永久性代价翻倍并迫使用户迁移两次的地方采用混合，同样真实存在。
+
+\paragraph{陷阱 2：忽视握手和消息尺寸。}
+后量子密钥和签名以千字节计，而不是几十字节。对椭圆曲线而言没有问题的缓冲区、数据包尺寸假设和证书链限制，可能会在不知不觉中失效；尺寸必须在设计时就加以考虑，而不是在生产环境中才被发现。
+
+\paragraph{陷阱 3：假定参考实现可以直接部署。}
+参考代码以清晰为优化目标，而不是以常数时间行为为目标。不加修改地发布它，可能会恰好重新引入第~\ref{ch:sidechannel}~章中的那些侧信道。
+
+\paragraph{陷阱 4：硬编码单一算法。}
+标准会不断变化。一个无法协商或替换算法的系统，将不得不在最糟糕的时刻进行重新设计。
+
+\section{小结}
+前面几部分的数学能够抵御 Shor 算法，但抽象方案到此为止，工程由此开始：
+
+\begin{itemize}
+  \item 带有\textbf{密码敏捷性}的经典加后量子\textbf{混合}部署是主流的迁移策略——适用于冗余工作短暂、可协商且不可见的场合，而不适用于冗余工作永久、由共识固定且用户可见的场合；
+  \item \textbf{TLS 1.3} 混合 ECDHE--ML-KEM 密钥交换已在 RFC~10024 中标准化并已大规模部署，但在使用时仍必须核实协议和实现的支持情况；
+  \item 后量子\textbf{认证}已有标准化的算法编码和早期的私有 PKI 部署，但公共 WebPKI 的迁移仍不够成熟——因为密钥交换是短暂的、双方的，而签名是长期的、多方的；
+  \item 端到端性能取决于分包、丢包恢复、传输状态、证书结构以及完整的交付链，而不仅仅取决于原语的计时；
+  \item 方案选择是尺寸、速度和假设强度之间的折中，侧信道控制的范围则应依据每项操作所涉及的秘密和威胁模型来确定。
+\end{itemize}
+
+后量子密码已不再是纸上谈兵：标准已经存在，迁移正在进行。只有当这些方案被正确地、敏捷地、并以抵御侧信道的方式部署到世界早已依赖的各种协议和系统中时，真正的安全才会到来。下一章将转向所有情形中最困难的情形之一——区块链，在那里，资金本身正是由如今面临风险的那些签名所保护的。
+
+\printbibliography[heading=chapterrefs]

@@ -1,0 +1,379 @@
+% source: 5136eb02659a004c8efa225d83fbd4afa3962f75
+\chapter{面向后量子密码的 SageMath 基础}
+\label{ch:sagemath}
+
+\section{本章为何重要}
+本章并不打算孤立地讲授 SageMath。它的目的是为后量子密码搭建一个小型实验室。后面关于 LWE、RLWE、Kyber、Dilithium、McEliece 以及格攻击的各章，都依赖于本章所介绍的对象。
+
+\section{学习目标}
+学完本章后，你应当能够：
+
+\begin{itemize}
+  \item 在 SageMath 中创建整数、有理数、实数、复数、有限域、向量、矩阵和多项式；
+  \item 区分 Sage 对象与普通的 Python 值；
+  \item 在 Sage 中表达诸如 $\mathbb{F}_q$、$R_q = \mathbb{Z}_q[x]/(f(x))$ 和 $Ax=b$ 这样的代数结构；
+  \item 运行一些小实验，为后面的密码构造做铺垫。
+\end{itemize}
+
+本书后面用到的每一个代数对象，都是少数几种数系的特化。在开始用 Sage 逐一构建之前，图~\ref{fig:number-systems}先给出这幅全景图。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm and 9mm]
+  \node[flownode] (zz) {$\mathbb{Z}$\\[-2pt]\scriptsize \texttt{ZZ}};
+  \node[flownode, right=of zz] (qq) {$\mathbb{Q}$\\[-2pt]\scriptsize \texttt{QQ}};
+  \node[flownode, right=of qq] (rc) {$\mathbb{R}/\mathbb{C}$\\[-2pt]\scriptsize \texttt{RR/CC}};
+  \node[flownode, below=of zz] (gf) {$\mathrm{GF}(q)$\\[-2pt]\scriptsize finite field};
+  \node[flownode, below left=15mm and 6mm of gf] (vecs) {Vectors/Matrices\\[-2pt]\scriptsize over $\mathrm{GF}(q)$};
+  \node[flownode, below right=15mm and 6mm of gf] (rq) {$R_q=\mathrm{GF}(q)[x]/(f(x))$};
+  \draw[flowarrow] (zz) -- (qq);
+  \draw[flowarrow] (zz) -- (rc);
+  \draw[flowarrow] (zz) -- (gf);
+  \draw[flowarrow] (gf) -- (vecs);
+  \draw[flowarrow] (gf) -- (rq);
+\end{tikzpicture}
+\caption{本书所依托的代数对象全景图。普通整数 $\mathbb{Z}$ 可扩展为分数 $\mathbb{Q}$，以及用于数值推理和傅里叶式推理的 $\mathbb{R}/\mathbb{C}$；但密码学真正用来计算的对象是有限域 $\mathrm{GF}(q)$，它由 $\mathbb{Z}$ 模素数 $q$ 约简得到。后面各章中的一切——用于 LWE 的向量和矩阵，以及用于 RLWE 和 Kyber 的商环 $R_q$——都建立在 $\mathrm{GF}(q)$ 之上。}
+\label{fig:number-systems}
+\end{figure}
+
+\section{安装 SageMath}
+
+\subsection{方式 0：什么都不装}
+本书中的每段代码清单都可以在浏览器中通过
+\href{\playgroundurl}{appliedpqc.io/playground.html} 运行，后台使用免费的 SageMath Cell
+服务。无需安装任何东西，而且每段清单在载入时，其所在章节中更早的清单都已运行完毕，因此任何代码片段都可以单独尝试。浏览器唯一做不到的是最慢的那些工作——Falcon 密钥生成，以及在 SLH-DSA \texttt{s} 参数集下签名——这些需要本地安装的 Sage。
+
+\subsection{方式 1：conda-forge}
+这是在任何平台上最快捷的本地安装方式，也能获得最新的发行版：
+
+\begin{lstlisting}[language=bash]
+conda create -n sage -c conda-forge sage
+conda activate sage
+\end{lstlisting}
+
+该软件包名为 \texttt{sage}。注意 conda-forge 上并没有 \texttt{sagemath-standard} 这个软件包，尽管一些较旧的说明中出现过这个名字。
+
+\subsection{方式 2：Docker}
+为保持宿主系统干净，可以从容器启动 SageMath：
+
+\begin{lstlisting}[language=bash]
+docker run -it sagemath/sagemath sage
+\end{lstlisting}
+
+shell 启动后，即可直接输入 Sage 命令。若要运行脚本而非交互式工作，需覆盖镜像的入口点，并挂载一个\emph{可写}目录——Sage 会在每个源文件旁边写入一个预解析后的 \texttt{.sage.py} 文件：
+
+\begin{lstlisting}[language=bash]
+docker run --rm --entrypoint bash -v "$PWD:/home/sage/work" \
+    -w /home/sage/work sagemath/sagemath:10.9 -lc 'sage myscript.sage'
+\end{lstlisting}
+
+\subsection{方式 3：系统软件包}
+在 Debian 和 Ubuntu 上：
+
+\begin{lstlisting}[language=bash]
+sudo apt install sagemath
+\end{lstlisting}
+
+在 macOS 上，SageMath 以 cask 而非 formula 的形式分发：
+
+\begin{lstlisting}[language=bash]
+brew install --cask sage
+\end{lstlisting}
+
+在 Windows 上，先安装 WSL2，然后在 Linux 环境中使用 conda-forge 或 \texttt{apt}。Debian 和 Ubuntu 目前提供的是 Sage 9.5，与 conda-forge 相比落后不少；本书中的一切内容在 9.5 或更新版本上均可运行。
+
+\subsection{笔记本工作流}
+对于实验和探索性工作，笔记本界面往往最为方便：
+
+\begin{lstlisting}[language=bash]
+sage -n jupyter
+\end{lstlisting}
+
+然后在浏览器中打开所显示的本地 URL。
+
+\section{SageMath 与 Python}
+SageMath 构建在 Python 之上，但增加了更丰富的数学类型和对象。普通的 Python 整数与 Sage 整数并不是同一种东西。
+
+\begin{lstlisting}[language=Python]
+a = 3
+b = 4
+a + b
+\end{lstlisting}
+
+在 Python 中，结果是一个普通整数。而在 Sage 中，对应的对象可能带有代数含义。
+
+\begin{lstlisting}[language=Python]
+a = Integer(3)
+b = Integer(4)
+a + b
+\end{lstlisting}
+
+要查看类型，可以使用：
+
+\begin{lstlisting}[language=Python]
+type(a)
+\end{lstlisting}
+
+这在密码学中很重要，因为符号 $3$ 在一种语境下可能表示普通整数，在另一种语境下却可能表示域元素。例如，$3 \in \mathrm{GF}(7)$ 与 $\mathbb{Z}$ 中的整数 $3$ 并不是同一个对象。
+
+\section{基本数系}
+SageMath 提供了若干标准的数域，它们在后面的密码学工作中很有用。
+
+\subsection{整数 $\mathbb{Z}$}
+整数环以 \texttt{ZZ} 的形式提供。
+
+\begin{lstlisting}[language=Python]
+ZZ
+\end{lstlisting}
+
+你可以显式地创建整数：
+
+\begin{lstlisting}[language=Python]
+a = ZZ(10)
+a
+\end{lstlisting}
+
+基本算术运算的行为符合预期：
+
+\begin{lstlisting}[language=Python]
+a = ZZ(10)
+b = ZZ(3)
+a + b
+\end{lstlisting}
+
+除法的处理比 Python 中更加审慎，因为 Sage 会尽可能保持符号运算和精确运算：
+
+\begin{lstlisting}[language=Python]
+10/3
+\end{lstlisting}
+
+结果是有理数 $\frac{10}{3}$。整数除法可以通过下式进行：
+
+\begin{lstlisting}[language=Python]
+10//3
+\end{lstlisting}
+
+模运算则通过下式进行：
+
+\begin{lstlisting}[language=Python]
+10 % 3
+\end{lstlisting}
+
+\subsection{有理数 $\mathbb{Q}$}
+有理数域是 \texttt{QQ}。
+
+\begin{lstlisting}[language=Python]
+a = QQ(1)/3
+a
+\end{lstlisting}
+
+这很有用，因为许多格算法（例如 LLL 和 Gram--Schmidt 式的计算）天然就在有理数上进行。
+
+\subsection{实数 $\mathbb{R}$ 与复数 $\mathbb{C}$}
+SageMath 同样支持实数域和复数域。
+
+\begin{lstlisting}[language=Python]
+RR
+CC
+\end{lstlisting}
+
+例如：
+
+\begin{lstlisting}[language=Python]
+sqrt(2)
+RR(sqrt(2))
+CC(1 + 2*I)
+\end{lstlisting}
+
+在后面讨论数值方法、傅里叶式变换以及相关的实现思路时，这些数域将变得重要起来。
+
+\section{有限域}
+有限域是现代密码学中最重要的结构之一。有限域通常记作 $\mathrm{GF}(q)$ 或 $\mathbb{F}_q$。在用它们进行计算之前，我们先给出精确的定义；它们是本书中每一种构造的基础。
+
+\begin{definition}[域]
+\emph{域}是一个带有加法和乘法的集合 $\mathbb{F}$，使得 $(\mathbb{F},+)$ 与 $(\mathbb{F}\setminus\{0\},\cdot)$ 都是阿贝尔群（单位元分别为 $0$ 和 $1$），并且乘法对加法满足分配律。具体地说：可以做加法、减法、乘法，并且可以除以任何非零元素。
+\end{definition}
+
+\emph{有限}域就是只有有限个元素的域。有限域的存在性已被完全分类。
+
+\begin{theorem}[有限域的分类]
+阶为 $q$ 的有限域存在，当且仅当 $q=p^m$ 是某个素数 $p$ 的幂；此时它在同构意义下唯一，记作 $\mathbb{F}_q$ 或 $\mathrm{GF}(q)$。当 $m=1$ 时，它就是模 $p$ 的整数，
+\[
+\mathbb{F}_p = \mathbb{Z}/p\mathbb{Z} = \{0,1,\dots,p-1\},
+\]
+其算术运算均模 $p$ 约简。
+\end{theorem}
+
+本书中几乎所有的模数都是素数，因此可以采用最简洁的图景：$\mathbb{F}_q$ 就是模 $q$ 的“时钟算术”，并且在其中还可以做除法。这种域结构使得高斯消元等工具在需要时可以使用。然而，这并不是 ML-KEM 或 ML-DSA 密钥生成能够成立的原因：这些算法是对秘密值和公开值进行采样，而非求解一个随机线性方程组。它们的素数模数是出于若干相互关联的原因而选定的，包括代数结构、NTT 兼容性、噪声分布、正确性、安全性以及实现效率。
+
+\subsection{创建有限域}
+例如，含有七个元素的域为：
+
+\begin{lstlisting}[language=Python]
+F = GF(7)
+F
+\end{lstlisting}
+
+通过将值强制转换到域中来创建元素：
+
+\begin{lstlisting}[language=Python]
+a = F(3)
+a
+\end{lstlisting}
+
+算术运算是模该素数进行的：
+
+\begin{lstlisting}[language=Python]
+a = F(6)
+a + F(3)
+\end{lstlisting}
+
+结果是 $2$，因为 $6 + 3 = 9 \equiv 2 \pmod{7}$。
+
+\subsection{逆元}
+在密码学中，逆元无处不在。对于域元素 $a$，其逆元 $a^{-1}$ 满足 $a a^{-1} = 1$。
+
+\begin{lstlisting}[language=Python]
+a = F(3)
+a.inverse()
+\end{lstlisting}
+
+由于 $3 \cdot 5 = 15 \equiv 1 \pmod{7}$，逆元为 $5$。
+
+在底层，\texttt{a.inverse()} 并不会遍历所有域元素进行搜索；它运行的是扩展欧几里得算法，该算法在计算 $\gcd(a,q)$ 的同时追踪 Bézout 恒等式 $as+tq=\gcd(a,q)$ 中的系数，因此当 $\gcd(a,q)=1$ 时，系数 $s$ 恰好就是 $a^{-1} \bmod q$。
+
+\begin{algorithm}[H]
+\caption{求模逆元的扩展欧几里得算法}
+\label{alg:ext-euclid}
+\begin{algorithmic}[1]
+\Require 整数 $a$，满足 $1 \le a < q$；模数 $q$，满足 $\gcd(a,q)=1$
+\Ensure $a^{-1} \bmod q$，即满足 $ax \equiv 1 \pmod{q}$ 的唯一 $x \in \{0,\dots,q-1\}$
+\State $(r_0, r_1) \gets (q, a)$
+\State $(s_0, s_1) \gets (0, 1)$ \Comment{不变式：每一步都有 $a\, s_i \equiv r_i \pmod q$}
+\While{$r_1 \neq 0$}
+    \State $t \gets \lfloor r_0 / r_1 \rfloor$
+    \State $(r_0, r_1) \gets (r_1,\ r_0 - t\, r_1)$
+    \State $(s_0, s_1) \gets (s_1,\ s_0 - t\, s_1)$
+\EndWhile
+\State \Return $s_0 \bmod q$ \Comment{$r_0=\gcd(a,q)=1$，因此 $a\,s_0 \equiv 1 \pmod q$}
+\end{algorithmic}
+\end{algorithm}
+
+\section{有限域上的线性代数}
+有限域上的线性代数是许多基于格的构造的出发点。
+
+\begin{lstlisting}[language=Python]
+F = GF(7)
+A = Matrix(F, [[1, 2], [3, 4]])
+A
+\end{lstlisting}
+
+逆矩阵可以这样计算：
+
+\begin{lstlisting}[language=Python]
+A.inverse()
+\end{lstlisting}
+
+并且可以验证得到单位矩阵：
+
+\begin{lstlisting}[language=Python]
+A * A.inverse()
+\end{lstlisting}
+
+这正是诸如 $A s + e = b$ 这类方程背后的代数背景，它们将在后面学习 LWE 时出现。
+
+\section{向量与矩阵}
+向量便于表示秘密值和噪声项。
+
+\begin{lstlisting}[language=Python]
+v = vector(F, [1, 2])
+v
+\end{lstlisting}
+
+于是矩阵与向量的乘法就很直接了：
+
+\begin{lstlisting}[language=Python]
+A * v
+\end{lstlisting}
+
+输出为 \texttt{(5, 4)}。该向量的长度为 $2$，与 $A$ 的两列相匹配；矩阵与向量相乘时维数必须一致。
+
+\section{多项式环}
+多项式环对于格问题的环版本至关重要，尤其是 RLWE 及相关构造。
+
+\subsection{构建多项式环}
+
+\begin{lstlisting}[language=Python]
+F = GF(7)
+R.<x> = PolynomialRing(F)
+\end{lstlisting}
+
+现在 $x$ 是该环中的一个形式变量。
+
+\begin{lstlisting}[language=Python]
+f = x^3 + 2*x + 1
+f
+\end{lstlisting}
+
+加法和乘法按通常的代数方式进行：
+
+\begin{lstlisting}[language=Python]
+f + f
+f * f
+\end{lstlisting}
+
+\subsection{商环}
+商环是通过施加一个多项式关系来构造的。例如：
+
+\begin{lstlisting}[language=Python]
+S.<x> = QuotientRing(R, R.ideal(x^3 + 1))
+\end{lstlisting}
+
+在这个商环中，关系 $x^3 = -1$ 成立。这一思想与 Kyber 中使用的环结构密切相关，在那里人们常常在如下形式的环中进行运算：
+
+\[
+R_q = \mathbb{Z}_q[x]/(x^{256}+1).
+\]
+
+\section{第一个密码学实验}
+作为第一个实验，我们可以验证模逆元的行为。
+
+\begin{lstlisting}[language=Python]
+F = GF(17)
+for i in range(1, 17):
+    a = F(i)
+    print(i, a.inverse() * a)
+\end{lstlisting}
+
+在该域中，每个值的计算结果都应为 $1$。
+
+\section{第一个 LWE 风格的示例}
+为了给后面的章节做铺垫，我们可以在有限域上构造一个简单的线性方程组：
+
+\begin{lstlisting}[language=Python]
+q = 17
+F = GF(q)
+A = random_matrix(F, 3, 3)
+s = random_vector(F, 3)
+b = A * s
+A
+s
+b
+\end{lstlisting}
+
+这就是引入噪声之前 LWE 背后的基本代数形态。
+
+\section{习题}
+请尝试独立完成以下习题。
+
+\begin{enumerate}
+  \item 创建 $\mathrm{GF}(13)$，并计算每个非零元素的逆元。
+  \item 创建 $R = \mathrm{GF}(17)[x]$，并计算 $(x^2 + 3x + 1)^2$。
+  \item 创建 $\mathrm{GF}(17)[x]/(x^4 + 1)$，并验证 $x^4 = -1$。
+  \item 反复采样 $A \in \mathrm{GF}(17)^{4 \times 4}$，直到 \texttt{A.is\_invertible()} 为真，然后验证 $A^{-1}A = I$。若采样得到的是奇异矩阵，会发生什么？
+\end{enumerate}
+
+\section{与后续章节的联系}
+下一章\emph{线性代数基础}将深化格问题所需的线性代数视角。之后，多项式视角将在\emph{多项式环}一章中得到更充分的展开。这两章为 LWE、RLWE，并最终为 Kyber 和 Dilithium 奠定基础。
+
+\printbibliography[heading=chapterrefs]

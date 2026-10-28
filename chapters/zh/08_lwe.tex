@@ -1,0 +1,276 @@
+% source: 976737e2d66e3059cfcbc948fc11ed1237f55607
+\chapter{带误差学习（LWE）}
+\label{ch:lwe}
+
+\section{从精确线性代数到带噪声的问题}
+
+求解域上的线性方程组是数学中最古老的已解决问题之一。给定 $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$ 和 $\mathbf{b}\in\mathbb{Z}_q^{m}$，当 $\mathbf{A}$ 列满秩且方程组相容时，高斯消元法可以从 $\mathbf{A}\mathbf{s}=\mathbf{b}$ 中恢复出 $\mathbf{s}$。其通常的代价是 $O(mn^2)$ 次域运算（对于 $n\times n$ 的方阵方程组则为 $O(n^3)$）。正因为这个问题如此容易，一个\emph{精确的}满秩线性方程组不具有任何密码学困难性：敌手可以直接恢复出秘密。
+
+由 Regev~\cite{regev2009}提出的带误差学习（Learning With Errors, LWE）问题对这一图景做了唯一一处刻意的改动：它在每个方程上加入一个小的加性误差。观测到的方程组为
+\[
+\mathbf{b} = \mathbf{A}\mathbf{s} + \mathbf{e} \pmod q,
+\]
+其中 $\mathbf{e}$ 是从某个指定分布中抽取的短噪声向量。普通的精确消元法不再能求解这个带噪声的模方程组：它能检测出不相容性，却无法识别出被植入的秘密。LWE 困难性是一个带参数的密码学假设，关乎从大量有限模数、小误差的样本中恢复该秘密；它并不声称每个带噪声的回归问题都是困难的。本章将 LWE 作为一个形式化对象来展开：它的分布、它的两个判定问题、解释其困难性的几何结构，以及使其成为可信基础的最坏情形归约。它是 ML-KEM（第~\ref{ch:fips203}~章）和 ML-DSA（第~\ref{ch:mldsa}~章）最终所依赖的假设。
+
+\section{LWE 分布}
+
+在全文中，固定维数 $n$（安全参数）、模数 $q=q(n)$，以及 $\mathbb{Z}_q$ 上集中于绝对值较小取值的\emph{误差分布} $\chi$。向量均为列向量，$\langle\cdot,\cdot\rangle$ 表示模 $q$ 的内积。
+
+\begin{definition}[LWE 分布]
+对于固定的秘密 $\mathbf{s}\in\mathbb{Z}_q^{n}$，$\mathbb{Z}_q^{n}\times\mathbb{Z}_q$ 上的 \emph{LWE 分布} $A_{\mathbf{s},\chi}$ 按如下方式采样：均匀抽取 $\mathbf{a}\leftarrow\mathbb{Z}_q^{n}$，抽取 $e\leftarrow\chi$，并输出
+\[
+(\mathbf{a},\,b), \qquad b=\langle \mathbf{a},\mathbf{s}\rangle + e \pmod q.
+\]
+\end{definition}
+
+收集 $m$ 个独立样本，并把向量 $\mathbf{a}_i$ 作为矩阵 $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$ 的各行堆叠起来，就得到紧凑的矩阵形式
+\[
+(\mathbf{A},\,\mathbf{b}), \qquad \mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}\pmod q,\quad \mathbf{e}\leftarrow\chi^{m}.
+\]
+这个名称的含义此时一目了然：敌手被要求从关于隐藏的 $\mathbf{s}$ 的大量带噪声线性测量中\emph{学习}出它。唯一的障碍是误差 $\mathbf{e}$；没有它，这些样本就是一个可以精确求解的方程组。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 16mm]
+  \node[flownode] (A) {$\mathbf{A}$};
+  \node[flownode, below=8mm of A] (s) {$\mathbf{s}$};
+  \node[flownode, right=16mm of A, yshift=-4mm] (mul) {$\times$};
+  \node[flownode, right=16mm of mul] (As) {$\mathbf{A}\mathbf{s}$};
+  \node[flownode, below=8mm of As] (e) {$\mathbf{e}$};
+  \node[flownode, right=16mm of As, yshift=-4mm] (add) {$+$};
+  \node[keynode, right=16mm of add] (b) {$\mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}$};
+  \draw[flowarrow] (A) -- (mul);
+  \draw[flowarrow] (s) -- (mul);
+  \draw[flowarrow] (mul) -- (As);
+  \draw[flowarrow] (As) -- (add);
+  \draw[flowarrow] (e) -- (add);
+  \draw[flowarrow] (add) -- (b);
+\end{tikzpicture}
+\caption{以计算图表示的 LWE 样本方程：公开矩阵 $\mathbf{A}$ 与秘密 $\mathbf{s}$ 输入一个乘法节点，噪声 $\mathbf{e}$ 加到乘积 $\mathbf{A}\mathbf{s}$ 上，得到公开值 $\mathbf{b}$。所有运算均模 $q$ 进行。仅从 $(\mathbf{A},\mathbf{b})$ 恢复 $\mathbf{s}$ 就是 LWE 问题；全部困难性都来自这个在其他方面可以忽略的项 $\mathbf{e}$。}
+\label{fig:lwe-equation-boxes}
+\end{figure}
+
+\begin{remark}[关于秘密的分布]
+上述定义从 $\mathbb{Z}_q^{n}$ 中均匀抽取 $\mathbf{s}$，但一种标准变换可以把 LWE 化为\emph{正规形式}（normal form），在其中秘密从误差分布 $\chi$ 中抽取，因而本身就是短的，且不损失困难性。实际部署的方案利用了这一点：在 ML-KEM 中，秘密是从中心二项分布（第~\ref{ch:cbd}~章）中采样的小向量，这在保持安全性的同时缩短了密钥并加快了运算。
+\end{remark}
+
+\section{两个 LWE 问题}
+
+LWE 引出一个搜索问题和一个判定问题，二者的区别至关重要：加密方案的安全性是针对\emph{判定}版本证明的，而\emph{搜索}版本则是“恢复密钥”这一说法更直观的表述。
+
+\begin{definition}[搜索 LWE（Search-LWE）]
+给定从 $A_{\mathbf{s},\chi}$ 中抽取的 $m$ 个独立样本 $(\mathbf{A},\mathbf{b})$，其中 $\mathbf{s}\in\mathbb{Z}_q^{n}$ 固定但未知，恢复 $\mathbf{s}$。
+\end{definition}
+
+\begin{definition}[判定 LWE（Decision-LWE）]
+以不可忽略的优势区分 $\mathbb{Z}_q^{m\times n}\times\mathbb{Z}_q^{m}$ 上的以下两个分布：
+\begin{itemize}
+  \item LWE 分布：$(\mathbf{A},\mathbf{A}\mathbf{s}+\mathbf{e})$，其中 $\mathbf{s}\leftarrow\mathbb{Z}_q^{n}$，$\mathbf{e}\leftarrow\chi^{m}$；
+  \item 均匀分布：$(\mathbf{A},\mathbf{u})$，其中 $\mathbf{u}\leftarrow\mathbb{Z}_q^{m}$ 均匀且独立于 $\mathbf{A}$。
+\end{itemize}
+\end{definition}
+
+正是判定形式使 LWE 成为密码学的主力工具：如果 LWE 样本在计算上与均匀随机性不可区分，那么通过把消息加到 LWE 样本上来掩蔽消息的密文就与随机串不可区分，而这恰好就是语义安全性。值得注意的是，这两个问题是等价的。
+
+\begin{proposition}[搜索与判定的等价性]
+\label{prop:search-decision}
+对于素数模数 $q=\mathrm{poly}(n)$，Search-LWE 与 Decision-LWE 在运行时间和样本复杂度上相差至多一个多项式因子意义下是等价的：任一问题的高效算法都能给出另一问题的高效算法。
+\end{proposition}
+
+正方向（搜索可解决判定）是显然的。反方向——把一个单纯的区分器提升为完整的秘密恢复算法——才是实质性的部分：依次猜测每个坐标 $s_j\in\mathbb{Z}_q$，用区分器检验猜测，并加以放大。Regev 对素数 $q=\mathrm{poly}(n)$ 证明了这一等价性~\cite{regev2009}；后续工作将其推广到合数模数和更大的模数。其实际意义在于：设计者可以围绕简洁的搜索问题进行推理，而安全性证明则使用判定问题。
+
+\section{误差分布与模数噪声比}
+\label{sec:lwe-noise}
+
+误差分布 $\chi$ 是 LWE 跳动的心脏。在 Regev 的表述中，它是宽度为 $\sigma$ 的\emph{离散高斯分布} $D_{\mathbb{Z},\sigma}$：整数 $x$ 的概率正比于 $\exp(-\pi x^2/\sigma^2)$，并取整到 $\mathbb{Z}$。用一个因子 $\alpha\in(0,1)$ 相对于模数来参数化宽度会比较方便，
+\[
+\sigma \;=\; \alpha q,
+\]
+这样 $\alpha$ 就以模数的比例来度量噪声。两个相互竞争的约束确定了合适的参数区间。
+
+\begin{itemize}
+  \item \textbf{正确性需要小噪声。}合法的解密者通过取整来消除误差，而这只有在 $|e|$ 大致保持在 $q/4$ 以下时才能成功。噪声过多，诚实的解密就会失败。
+  \item \textbf{安全性需要足够的噪声。}如果 $\alpha q$ 太小，误差就可以忽略，方程组本质上是精确的，因而是容易的。下面的最坏情形困难性定理要求 $\alpha q \gtrsim \sqrt{n}$。
+\end{itemize}
+
+同时支配二者的单一量是\emph{模数噪声比}（modulus-to-noise ratio）$q/\sigma = 1/\alpha$。比值越大，解密越稳健，但底层问题越容易（它对应于更大的格近似因子）；比值越小则相反。实际方案的参数选择，归根结底就是选择这个比值的艺术。在实践中，精确的离散高斯分布被中心二项分布（第~\ref{ch:cbd}~章）所取代，后者形状基本相同，却远更容易以常数时间采样；不过，基础性的分析对高斯分布而言最为简洁~\cite{micciancioregev2007}。
+
+\section{几何视角：有界距离译码}
+\label{sec:lwe-bdd}
+
+LWE 有一个精确的格解释，这既是其困难性的来源，也是它在格问题中广为人知的原因。给定 $\mathbf{A}\in\mathbb{Z}_q^{m\times n}$，定义\emph{$q$ 元格}
+\[
+\Lambda_q(\mathbf{A}) \;=\; \{\, \mathbf{A}\mathbf{s} \bmod q : \mathbf{s}\in\mathbb{Z}_q^{n} \,\} + q\mathbb{Z}^{m} \;\subseteq\; \mathbb{Z}^{m}.
+\]
+无噪声的乘积 $\mathbf{A}\mathbf{s}$ 恰好是该格中的一个点，而观测向量 $\mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}$ 是该格点被短偏移量 $\mathbf{e}$ 移位后的结果。因此，恢复 $\mathbf{s}$ 就是找出离 $\mathbf{b}$ 最近的格点的问题。
+
+这就是第~\ref{ch:svp}~章中的最近向量问题（CVP），但附带一个关键的承诺：由于 $\|\mathbf{e}\|$ 受误差分布约束，目标 $\mathbf{b}$ 保证位于离格\emph{一个已知的小距离之内}。带有这一承诺的 CVP 实例称为\emph{有界距离译码}（Bounded-Distance Decoding, BDD）。
+
+\begin{proposition}[LWE 即有界距离译码]
+误差范数以 $r$ 为界的 Search-LWE 是格 $\Lambda_q(\mathbf{A})$ 上译码半径为 $r$ 的 $\mathrm{BDD}$ 实例；秘密 $\mathbf{s}$ 可由最近格点 $\mathbf{A}\mathbf{s}$ 恢复。
+\end{proposition}
+
+BDD 承诺正是攻击者试图利用、而参数调整所要阻止的东西。当译码半径只是格最小距离的一小部分时，最近格点是唯一的，但在高维中仍难以找到；这正是每个已部署方案的工作点。
+
+\section{困难性：最坏情形到平均情形的归约}
+
+LWE 之所以受到信任，并不只是因为尚无已知的高效攻击，而是因为 Regev 证明了一个\emph{最坏情形到平均情形的归约}：在随机实例上攻破 LWE，至少与在\emph{每一个}实例上求解标准格问题一样困难。
+
+\begin{theorem}[LWE 的最坏情形困难性，非正式表述~\cite{regev2009}]
+\label{thm:regev}
+设 $n$ 为安全参数，$q=q(n)\le\mathrm{poly}(n)$ 为模数，$\alpha=\alpha(n)\in(0,1)$ 满足 $\alpha q>2\sqrt{n}$。如果存在一个在平均意义下求解 Decision-LWE$_{n,q,\alpha}$ 的高效（可能是随机化的）算法，那么就存在一个高效的\emph{量子}算法，能在最坏情形下、对每一个 $n$ 维格，将判定最短向量问题 $(\mathrm{GapSVP})$ 和最短独立向量问题 $(\mathrm{SIVP})$ 近似到 $\widetilde{O}(n/\alpha)$ 因子以内。
+\end{theorem}
+
+有三点赋予了这一定理分量。
+
+\begin{itemize}
+  \item \textbf{最坏情形到平均情形。}方案的密钥是随机的（平均情形）LWE 实例。该归约保证攻破一个随机密钥与攻破可设想的最坏格一样困难，因此不存在可能误碰到的“弱密钥”。因数分解没有类似的保证。相比之下，固定群中的离散对数问题确实具有一个最坏情形到平均情形的\emph{自}归约（将目标随机化、求解、再减去随机化因子），而且是紧的；这里的独特之处不在于自归约本身，而在于从一个\emph{不同的}问题——一个最坏情形的格问题——过渡到平均情形。
+  \item \textbf{量子性的作用。}该归约仅把量子算法用作证明工具。基于 LWE 的方案完全运行在经典硬件上；量子步骤存在于安全性论证中，而不在密码体制中。Peikert 后来对指数级模数给出了一个\emph{经典}归约~\cite{peikert2009}，而 Brakerski、Langlois、Peikert、Regev 和 Stehl\'{e} 则对多项式模数建立了经典困难性~\cite{blprs2013}，消除了量子方面的限定。
+  \item \textbf{近似因子。}该归约给出 $\widetilde{O}(n/\alpha)$-近似格问题的困难性，人们相信对于实践中所用的参数，这些问题需要 $2^{\Theta(n)}$ 的时间。因子 $n/\alpha$ 精确刻画了上一节中的张力：噪声越少（$\alpha$ 越小），保证越弱。
+\end{itemize}
+
+\begin{remark}[该归约在部署规模下能保证什么]
+该定理是渐近的。在具体参数下将其展开，要付出多项式因子和近似因子膨胀的代价；追踪这些常数的分析发现，在标准化方案实际使用的维数上，已知的归约给不出任何有意义的安全界——它们只有在远超 $n=1024$ 的维数上才开始起约束作用~\cite{gartner2023}。因此，该归约是关于 LWE 问题\emph{族}的证据，而不是对任何已部署参数集的安全性证明；这正是第~\ref{sec:lwe-cryptanalysis}~节依据基于 BKZ 的攻击估计、而非依据定理~\ref{thm:regev} 来设定具体参数的原因。
+\end{remark}
+
+\section{对偶问题：短整数解（SIS）}
+\label{sec:sis}
+
+LWE 有一个近亲，在我们讲到签名时会变得重要。LWE 把秘密\emph{隐藏}在噪声中并要求你恢复它，而\textbf{短整数解}（Short Integer Solution, SIS）问题~\cite{ajtai1996}则要求你\emph{找到}公开向量的一个短组合。给定一个随机矩阵
+\[
+\mathbf{A} \in \mathbb{Z}_q^{n \times m}, \qquad m > n,
+\]
+任务是找到一个短的非零整数向量 $\mathbf{z}$，满足
+\[
+\mathbf{A}\mathbf{z} = \mathbf{0} \pmod q, \qquad 0 < \|\mathbf{z}\| \le \beta.
+\]
+由于列数多于行数，这样的向量必定存在；困难在于找到一个\emph{短的}。随机的解会有很大的分量，而把它缩短恰恰就是那种在高维格中很困难的短向量搜索。从几何上看，SIS 位于如下的\emph{正交} $q$ 元格之中：
+\[
+\Lambda_q^{\perp}(\mathbf{A}) \;=\; \{\, \mathbf{z}\in\mathbb{Z}^{m} : \mathbf{A}\mathbf{z}=\mathbf{0}\bmod q \,\},
+\]
+而一个解就是 $\Lambda_q^{\perp}(\mathbf{A})$ 中的一个短向量——它是定义 LWE 的 BDD 实例 $\Lambda_q(\mathbf{A})$ 在 SVP 一侧的对应物。
+
+“\emph{对偶}”这一称谓是精确的，而非松散的类比，它在三个相互关联的意义上成立。记 $\mathbf{A}\in\mathbb{Z}_q^{n\times m}$ 为 SIS 矩阵；它的转置具有 LWE 样本矩阵的形状（第~\ref{sec:lwe-bdd}~节），因此相应的 LWE 样本为 $\mathbf{b}=\mathbf{A}^{\mathsf T}\mathbf{s}+\mathbf{e}$，而
+\[
+\Lambda_q(\mathbf{A}) \;=\; \{\mathbf{A}^{\mathsf T}\mathbf{s}\bmod q : \mathbf{s}\in\mathbb{Z}_q^{n}\}+q\mathbb{Z}^{m}
+\]
+恰好就是那里所见的 LWE 像格。
+
+\begin{itemize}
+  \item \textbf{对偶格。}在相差尺度因子 $q$ 的意义下，SIS 格与 LWE 格互为对偶：
+  \[
+  \Lambda_q^{\perp}(\mathbf{A}) \;=\; q\cdot\Lambda_q(\mathbf{A})^{*},
+  \qquad
+  L^{*}=\{\mathbf{x}\in\operatorname{span}(L):\langle\mathbf{x},\mathbf{y}\rangle\in\mathbb{Z}\ \ \forall\,\mathbf{y}\in L\}.
+  \]
+  SIS 所在的格正是 LWE 所在格的对偶——这就是该名称的字面来源。
+  \item \textbf{对偶的问题类型。}在这一对格上，二者是格问题的两个原型，它们本身也构成一个对偶对：LWE 是有界距离译码（找出 $\mathbf{b}$ 附近的格点），而 SIS 是最短向量搜索（找出一个短的 $\mathbf{z}\in\Lambda_q^{\perp}(\mathbf{A})$）。对偶格中的短向量恰恰是使人能够在原格中译码的东西。
+  \item \textbf{一种可能的对偶攻击。}一个足够短的 SIS 向量可以支撑一个 LWE 区分器。对于满足 $\mathbf{A}\mathbf{z}=\mathbf{0}$ 的短向量 $\mathbf{z}$，
+  \[
+  \langle \mathbf{z},\mathbf{b}\rangle
+  = \mathbf{z}^{\mathsf T}\!\left(\mathbf{A}^{\mathsf T}\mathbf{s}+\mathbf{e}\right)
+  = (\mathbf{A}\mathbf{z})^{\mathsf T}\mathbf{s} + \langle \mathbf{z},\mathbf{e}\rangle
+  = \langle \mathbf{z},\mathbf{e}\rangle \pmod q,
+  \]
+  当 $\mathbf{z}$ 与 $\mathbf{e}$ 足够短时，该值可能是集中的；而对于均匀的 $\mathbf{u}$，$\langle\mathbf{z},\mathbf{u}\rangle$ 则散布在整个 $\mathbb{Z}_q$ 上。这一观察是对偶攻击的动机，但它并不是一般的搜索问题等价性：集中程度取决于参数，而 LWE 与 SIS 之间的归约所需要的远不止上面这个恒等式。
+\end{itemize}
+
+两个问题都各有其最坏情形格归约——SIS 归约到 SIVP 的最坏情形~\cite{ajtai1996}，LWE 则通过定理~\ref{thm:regev}。它们是密切相关的几何假设，但不应被视为可以互换的问题。我们还会直接再遇到 SIS：在 ML-DSA / Dilithium（第~\ref{ch:mldsa}~章）中，伪造签名相当于构造一个满足某个公开方程的短向量，而这恰好是一个 SIS 实例。
+
+\section{具体安全性与密码分析}
+\label{sec:lwe-cryptanalysis}
+
+定理~\ref{thm:regev} 是渐近的；部署 LWE 需要\emph{具体的}参数 $(n,q,\alpha,m)$，使得已知最佳攻击的代价超过 $2^{128}$（或 $2^{192}$、$2^{256}$）次运算。由于该归约不是紧的，具体安全性是针对格基约化攻击、而非针对归约本身来估计的。
+
+\begin{itemize}
+  \item \textbf{原始攻击（primal attack）。}把第~\ref{sec:lwe-bdd}~节中的 BDD 实例嵌入到一个维数 $\approx m+n+1$ 的格中，成为唯一最短向量实例（Kannan 嵌入），然后运行格基约化找出短的误差向量，从而揭示 $\mathbf{s}$。
+  \item \textbf{对偶攻击（dual attack）。}在正交格 $\Lambda_q^{\perp}(\mathbf{A})$ 中找出短向量，并用它们把 LWE 样本与均匀分布区分开来，从而直接求解 Decision-LWE。
+\end{itemize}
+
+二者都由分块大小为 $\beta$ 的 \textbf{Block-Korkine-Zolotarev}（BKZ）算法驱动，其代价按 $2^{\Theta(\beta)}$ 增长；攻击者的任务归结为找到能达到求解该实例所需的根 Hermite 因子的最小 $\beta$。学界将这些估计汇总于“LWE 估计器”（LWE estimator）~\cite{aps2015}，它建立在 Lindner 与 Peikert 的具体攻击分析~\cite{lindnerpeikert2011}之上；ML-KEM 的参数集正是为了在该估计器下达到目标安全级别而选定的。
+
+\begin{remark}[样本数量是假设的一部分]
+攻击代价不仅取决于 $(n,q,\alpha)$，还取决于敌手能看到多少个样本 $m$：更多的方程可能使底层格更容易约化。因此，设计良好的方案会\emph{限制}敌手能从公开数据中获得的 LWE 样本数量。这正是 KEM 公布固定大小的密钥、而非无界样本流的原因之一。
+\end{remark}
+
+\section{选择模数 $q$}
+
+模数将前面的各条线索串联在一起。它必须足够大，使误差很少在模 $q$ 下发生回绕而破坏正确性；又必须足够小，以保持密钥紧凑、运算快速；并且，如第~\ref{sec:lwe-noise}~节所示，比值 $q/\sigma$ 直接决定了安全性与正确性之间的权衡。实际方案还加上了另一项约束：$q$ 的选取要能支持高效的数论变换（第~\ref{ch:ntt}~章），这就是 ML-KEM 固定采用特定素数 $q=3329$ 的原因。因此，模数选择是抽象假设与硬核工程首次相遇的地方。
+
+\section{Sage 实验}
+
+获得直觉的最快途径，是亲手构造一个小实例，观察误差如何把一个容易的方程组变成一个困难的方程组。先固定模数和维数。
+
+\begin{lstlisting}[language=Python]
+from sage.all import *
+
+q = 17
+F = GF(q)
+dimension = 3
+\end{lstlisting}
+
+选择一个秘密向量和一批随机行。
+
+\begin{lstlisting}[language=Python]
+s = random_vector(F, dimension)
+A = random_matrix(F, 8, dimension)
+print("secret =", s)
+\end{lstlisting}
+
+没有噪声时，$\mathbf{b}=\mathbf{A}\mathbf{s}$ 是一个精确的方程组，直接求解即可恢复 $\mathbf{s}$。
+
+\begin{lstlisting}[language=Python]
+b = A * s
+print(A.solve_right(b) == s)   # True: exact recovery
+\end{lstlisting}
+
+现在加入一个短误差。在 $\mathbb{F}_{17}$ 中，值 $16$ 表示 $-1$，因此这个向量的分量取自 $\{-1,0,1\}$。
+
+\begin{lstlisting}[language=Python]
+noise   = vector(F, [1, 0, 16, 1, 0, 0, 16, 1])
+b_noisy = A * s + noise
+\end{lstlisting}
+
+此时方程组 $\mathbf{A}\mathbf{s}'=\mathbf{b}_{\text{noisy}}$ 没有精确解，朴素求解会返回错误的秘密。扫描误差的大小可以揭示第~\ref{sec:lwe-noise}~节所述的相变：在某个噪声阈值以下，秘密仍可通过更精细的译码恢复；超过该阈值，恢复就变得不可行。算法~\ref{alg:lwe-sample} 形式化地陈述了这一采样过程，所用变量名与代码相同。
+
+\begin{algorithm}[H]
+\caption{生成一个 LWE 样本}
+\label{alg:lwe-sample}
+\begin{algorithmic}[1]
+\Require 模数 $q$；维数 $n$；行数 $m$；$\mathbb{Z}_q$ 上的误差分布 $\chi$
+\Ensure 公开样本 $(\mathbf{A},\mathbf{b})$ 及秘密 $\mathbf{s}$
+\State $\mathbf{s} \gets$ $\mathbb{Z}_q^{n}$ 中的均匀随机向量 \Comment{\texttt{s = random\_vector(F, n)}}
+\State $\mathbf{A} \gets$ $\mathbb{Z}_q^{m \times n}$ 中的均匀随机矩阵 \Comment{\texttt{A = random\_matrix(F, m, n)}}
+\State $\mathbf{e} \gets (e_1,\dots,e_m)$，其中每个 $e_i \gets \chi$ \Comment{\texttt{noise = vector(F, [...])}}
+\State $\mathbf{b} \gets \mathbf{A}\mathbf{s} + \mathbf{e} \pmod q$ \Comment{\texttt{b\_noisy = A * s + noise}}
+\State \Return 公开样本 $(\mathbf{A},\mathbf{b})$，秘密 $\mathbf{s}$
+\end{algorithmic}
+\end{algorithm}
+
+\section{小结}
+
+LWE 通过加入经过校准的噪声，把线性代数中最容易的问题变成了密码学中最稳健的困难性假设之一：
+\[
+\mathbf{b}=\mathbf{A}\mathbf{s}+\mathbf{e}\pmod q.
+\]
+它的结构建立在几个精确的思想之上：搜索形式与判定形式等价（命题~\ref{prop:search-decision}）；该问题是 $q$ 元格 $\Lambda_q(\mathbf{A})$ 上的有界距离译码；其平均情形困难性源自最坏情形格问题（定理~\ref{thm:regev}）；其对偶问题 SIS 位于正交格 $\Lambda_q^{\perp}(\mathbf{A})$ 中；而具体参数是依据基于 BKZ 的估计器、而非渐近归约来设定的。过去若干章所建立的概念链条至此完整。
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 5mm, every node/.style={font=\scriptsize}]
+  \node[flownode] (a) {finite field};
+  \node[flownode, right=of a] (b) {linear\\[-2pt]algebra};
+  \node[flownode, right=of b] (c) {lattice};
+  \node[flownode, right=of c] (d) {SVP / CVP};
+  \node[flownode, right=of d] (e) {noise};
+  \node[keynode, right=of e] (f) {LWE};
+  \draw[flowarrow] (a) -- (b);
+  \draw[flowarrow] (b) -- (c);
+  \draw[flowarrow] (c) -- (d);
+  \draw[flowarrow] (d) -- (e);
+  \draw[flowarrow] (e) -- (f);
+\end{tikzpicture}
+\end{center}
+
+下一章将把这一假设带入环中，用多项式取代整数向量，从而得到效率高得多的环 LWE（Ring-LWE）。
+
+\printbibliography[heading=chapterrefs]

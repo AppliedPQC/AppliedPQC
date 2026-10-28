@@ -1,0 +1,238 @@
+% source: 5209d12b582a47728ea101dd3ecd4667f1066bd5
+\chapter{二元 Goppa 码}
+\chaptermark{二元 Goppa 码}
+\label{app:goppa}
+
+Classic McEliece（第~\ref{ch:mceliece}~章）将其陷门隐藏在一个\textbf{二元 Goppa 码}之中：这是一族代数码，它们带有一个快速的 $t$ 错误译码器，然而经过四十年的审视，仍然无法被任何\emph{高效}的检验与随机线性码区分开来——这一限定语自 2023 年以来一直在收窄，第~\ref{sec:goppa-distinguishers}~节将对此作完整讨论。正文只用到了关于它们的两个事实——它们能纠正 $t$ 个错误，并且有一个高效的译码器。本附录给出这些事实背后的构造：Goppa 码是如何定义的，为什么二元情形能纠正完整的 $t$ 个错误而不是 $t/2$ 个，以及 Patterson 算法如何对其译码~\cite{goppa1970,patterson1975}。全文我们沿用第~\ref{ch:polyring}~章的有限域。
+
+\section{准备：域、支撑集与 Goppa 多项式}
+
+固定二元域的一个扩域 $\mathbb{F}_{2^m}$。二元 Goppa 码由两个要素构建而成。
+
+\begin{itemize}
+  \item 一个\textbf{支撑集} $L = (\alpha_1,\dots,\alpha_n)$，由 $\mathbb{F}_{2^m}$ 中 $n$ 个\emph{互不相同}的元素组成。由于该域有 $2^m$ 个元素，故 $n \le 2^m$。
+  \item 一个次数为 $t$ 的 \textbf{Goppa 多项式} $g(x) \in \mathbb{F}_{2^m}[x]$，满足对每个 $j$ 都有 $g(\alpha_j) \neq 0$——从而每个 $x-\alpha_j$ 在模 $g$ 下都可逆。对于下文的 Patterson 译码器，还要额外假设 $g$ 是首一且不可约的，正如 Classic McEliece 中那样。
+\end{itemize}
+
+码字将是长度为 $n$ 的二元向量；域 $\mathbb{F}_{2^m}$ 则是定义约束所在的脚手架。数 $t$ 是设计参数：它将是该码所能纠正的错误个数。
+
+\section{定义}
+
+\begin{definition}[二元 Goppa 码]
+\emph{二元 Goppa 码} $\Gamma(L,g)$ 是这样一些二元向量的集合：其各坐标以极点 $x-\alpha_j$ 加权后，在模 $g$ 下求和为零：
+\[
+\Gamma(L,g) \;=\; \Big\{\, c=(c_1,\dots,c_n)\in\mathbb{F}_2^{\,n} \;:\; \sum_{j=1}^{n} \frac{c_j}{x-\alpha_j} \equiv 0 \pmod{g(x)} \,\Big\},
+\]
+其中每个 $\dfrac{1}{x-\alpha_j}$ 表示 $x-\alpha_j$ 在环 $\mathbb{F}_{2^m}[x]/(g)$ 中的逆元，由于 $g(\alpha_j)\neq 0$，该逆元存在。
+\end{definition}
+
+校验子映射在 $\mathbb{F}_{2^m}$ 上是线性的；将其核限制到 $\mathbb{F}_2^n$ 上，便得到一个 $\mathbb{F}_2$ 线性码。正如第~\ref{sec:goppa-distance}~节将要说明的，恰恰是这种二元限制使二元情形与众不同。
+
+\section{校验矩阵}
+
+为了把同余式转化为矩阵，将每个极点展开。由于 $g(\alpha_j)\neq 0$，有恒等式
+\[
+\frac{1}{x-\alpha_j} \;\equiv\; -\,g(\alpha_j)^{-1}\,\frac{g(x)-g(\alpha_j)}{x-\alpha_j} \pmod{g(x)},
+\]
+其中 $\big(g(x)-g(\alpha_j)\big)/(x-\alpha_j)$ 是一个名副其实的 $t-1$ 次多项式。在定义和式中收集 $1,x,\dots,x^{t-1}$ 的系数，并令每个系数为零，便得到 $\mathbb{F}_{2^m}$ 上一个“Vandermonde 矩阵乘以对角矩阵”形式的校验矩阵
+\[
+H \;=\;
+\underbrace{\begin{pmatrix}
+1 & 1 & \cdots & 1\\
+\alpha_1 & \alpha_2 & \cdots & \alpha_n\\
+\vdots & & & \vdots\\
+\alpha_1^{\,t-1} & \alpha_2^{\,t-1} & \cdots & \alpha_n^{\,t-1}
+\end{pmatrix}}_{\text{Vandermonde}}
+\underbrace{\begin{pmatrix}
+g(\alpha_1)^{-1} & & \\
+ & \ddots & \\
+ & & g(\alpha_n)^{-1}
+\end{pmatrix}}_{\text{diagonal}}
+\;\in\; \mathbb{F}_{2^m}^{\,t\times n}.
+\]
+向量 $c$ 属于 $\Gamma(L,g)$ 当且仅当 $H c^{\top}=0$。这是一个\emph{交错码}（alternant code）的校验关系，而 Goppa 码是其重要的特例。
+
+为了得到\emph{二元}校验矩阵，将 $H$ 的每个元素替换为由 $m$ 个比特构成的列，即该元素在 $\mathbb{F}_{2^m}$ 的一组固定 $\mathbb{F}_2$ 基下的坐标。这将 $\mathbb{F}_{2^m}$ 上的 $t\times n$ 矩阵扩展为 $\mathbb{F}_2$ 上的 $(mt)\times n$ 矩阵。它的行可能线性相关，因此维数满足
+\[
+k \;=\; \dim \Gamma(L,g) \;\ge\; n - m t .
+\]
+在 Classic McEliece 的参数范围内——$m$ 约为 $12$--$13$，$n$ 为几千，$t$ 约为 $60$--$130$——这一界几乎以等号成立。
+
+\section{最小距离：为什么二元码能纠正 \texorpdfstring{$t$}{t} 个错误}
+\label{sec:goppa-distance}
+
+使用 $t$ 次多项式的一般交错码只能保证 $d \ge t+1$，从而只能纠正 $\lfloor t/2\rfloor$ 个错误。只要 $g$ 无平方因子，二元 Goppa 码就能做到两倍之好。
+
+\begin{proposition}[二元 Goppa 码的距离加倍]
+\label{prop:goppa-double}
+若 $g$ \emph{无平方因子}（等价地说，是\emph{可分}的：它在代数闭包中没有重根），则
+\[
+\Gamma(L,g) \;=\; \Gamma(L,g^2),
+\]
+从而其最小距离满足 $d \ge 2t+1$。因此该码可以纠正至多 $t$ 个错误。
+\end{proposition}
+
+\begin{proof}[证明概要]
+对于二元向量 $c$，令 $\sigma_c(x)=\prod_{j:\,c_j=1}(x-\alpha_j)$ 为其支撑的定位多项式。简短的计算给出
+\[
+\sum_{j:\,c_j=1}\frac{1}{x-\alpha_j} \;=\; \frac{\sigma_c'(x)}{\sigma_c(x)},
+\]
+其中 $\sigma_c'$ 是形式导数。由于 $\gcd(\sigma_c,g)=1$（没有任何 $\alpha_j$ 是 $g$ 的根），定义条件 $c\in\Gamma(L,g)$ 等价于 $g \mid \sigma_c'$。在特征 $2$ 下，求导会消去每一个偶数次项，因此 $\sigma_c'(x)$ 只包含 $x$ 的偶数次幂；由于平方运算是 $\mathbb{F}_{2^m}$ 上的 Frobenius 映射，这样的多项式是一个\emph{完全平方}，即对某个 $B\in\mathbb{F}_{2^m}[x]$ 有 $\sigma_c'=B^2$。由于 $g$ 无平方因子，
+\[
+g \mid B^2 \iff g \mid B \iff g^2 \mid B^2=\sigma_c',
+\]
+所以 $g\mid\sigma_c' \Leftrightarrow g^2\mid\sigma_c'$，即 $\Gamma(L,g)=\Gamma(L,g^2)$。右侧的码是多项式次数为 $2t$ 的交错码，从而 $d\ge 2t+1$。
+\end{proof}
+
+使用二元码字的全部意义就在于这种免费的加倍：一个 $t$ 次的 Goppa 多项式换来了设计距离为 $2t+1$ 的纠错能力。
+
+\section{Patterson 译码算法}
+
+译码就是陷门。给定接收字 $y=c+e$，其中 $c\in\Gamma(L,g)$ 且 $\mathrm{wt}(e)\le t$，Patterson 算法~\cite{patterson1975}以 $g$ 和 $L$ 作为秘密来恢复 $e$。它利用的正是命题~\ref{prop:goppa-double} 中所用的同一个特征 $2$ 平方结构。
+
+记 $E=\{\,j: e_j=1\,\}$ 为（未知的）错误位置集合，并令\textbf{错误定位多项式}为 $\sigma(x)=\prod_{j\in E}(x-\alpha_j)$；它在 $L$ 中的根恰好就是错误位置。该算法从校验子中重构出 $\sigma$。
+
+\begin{algorithm}[H]
+\caption{对二元 Goppa 码 $\Gamma(L,g)$ 的 Patterson 译码，其中 $g$ 首一不可约，$\deg g=t$}
+\label{alg:patterson}
+\begin{algorithmic}[1]
+\Require 至多含 $t$ 个错误的接收字 $y\in\mathbb{F}_2^{\,n}$；秘密 $L$、首一不可约的 $g$
+\Ensure 错误向量 $e$（等价地，码字 $c=y-e$）
+\State $S(x) \gets \sum_{j=1}^{n} \dfrac{y_j}{x-\alpha_j} \bmod g(x)$ \Comment{校验子；码字部分消失，因此 $S\equiv\sum_{j\in E}\frac{1}{x-\alpha_j}$}
+\If{$S \equiv 0$} \State \Return $e=0$ \Comment{$y$ 已经是码字} \EndIf
+\State $T(x) \gets S(x)^{-1} \bmod g(x)$
+\State $R(x) \gets \sqrt{\,T(x)+x\,} \bmod g(x)$ \Comment{域 $\mathbb{F}_{2^m}[x]/(g)$ 中唯一的平方根}
+\State 求 $a(x),b(x)$，使得 $a \equiv R\,b \pmod{g}$，\ $\deg a\le\lfloor t/2\rfloor$，\ $\deg b\le\lfloor (t-1)/2\rfloor$
+\Statex \hfill\Comment{对 $g$ 和 $R$ 运行一次截断的扩展 Euclid 算法}
+\State $\sigma(x) \gets a(x)^2 + x\,b(x)^2$ \Comment{错误定位多项式}
+\State $E \gets \{\, j : \sigma(\alpha_j)=0 \,\}$ \Comment{$\sigma$ 在 $L$ 中的根}
+\State \Return 满足 $e_j=1$ 当且仅当 $j\in E$ 的 $e$
+\end{algorithmic}
+\end{algorithm}
+
+其中两行不那么显然：分解与关键方程，二者都源于特征 $2$。
+
+\begin{itemize}
+  \item \textbf{分解 $\sigma=a^2+x\,b^2$。}$\mathbb{F}_{2^m}$ 上的任何多项式都可以分为偶数次部分和奇数次部分；偶数次部分是完全平方 $a^2$，而奇数次部分是 $x$ 乘以一个完全平方，即 $x\,b^2$。求导得 $(a^2)'=0$ 且 $(x b^2)'=b^2$，因此 $\sigma'=b^2$。
+  \item \textbf{关键方程。}由于 $S=\sigma'/\sigma \bmod g$，我们有 $\sigma'\equiv \sigma S$，即 $b^2\equiv(a^2+xb^2)S \pmod g$。两边乘以 $T=S^{-1}$ 并整理，得到 $a^2\equiv b^2\,(T+x)\pmod g$。取平方根 $R=\sqrt{T+x}$，便将其化为形似线性的同余式 $a\equiv R\,b\pmod g$，扩展 Euclid 算法可以求出满足所需小次数要求的一对解。
+\end{itemize}
+
+一旦知道了 $\sigma$，在每个 $\alpha_j$ 处对其求值（即 \emph{Chien 搜索}）便能定位错误，而在 $\mathbb{F}_2$ 上纠正错误只是一次比特翻转。其代价主要由扩展 Euclid 步骤和求根搜索决定，在使用快速算术时二者都是关于 $n$ 的拟线性复杂度；这就是正文所援引的“高效译码器 $\mathcal{D}_g$”。
+
+\section{用 SageMath 构造}
+
+整个对象只需寥寥几行即可构建。取 $m=4$，即 $\mathbb{F}_{16}$，以及一个 $t=2$ 次、无平方因子的 Goppa 多项式。
+
+\begin{lstlisting}[language=Python]
+F.<a> = GF(2^4)
+PR.<x> = F[]
+g = x^2 + x + a
+while not g.is_irreducible():
+    g = x^2 + F.random_element()*x + F.random_element()
+assert g.is_irreducible()
+L = [b for b in F if g(b) != 0]     # support: exclude any roots of g
+n = len(L)
+
+from sage.coding.goppa_code import GoppaCode
+C = GoppaCode(g, L)
+print(C)                            # a binary [n, k] Goppa code
+print(C.dimension(), n - g.degree() * F.degree())   # k  vs  n - m t
+\end{lstlisting}
+
+这里 $mt = 4\cdot 2 = 8$，因此维数满足 $k\ge n-8$，并且由命题~\ref{prop:goppa-double}，最小距离至少为 $2t+1=5$，所以该码能纠正 $t=2$ 个错误。这只演示了代数核心。工程级的 Classic McEliece 还额外规定了参数集、支撑集排序、系统形矩阵约化、编码、KEM 行为、失败处理以及常数时间要求。
+
+\section{为什么是 Goppa 码，而不是其他码}
+
+以下三个性质结合在一起，使二元 Goppa 码成为 McEliece 经久不衰的选择。
+
+\begin{itemize}
+  \item \textbf{高效的译码器。}Patterson 算法能以近线性时间纠正完整的 $t$ 个错误——这是合法密钥持有者所使用的陷门。
+  \item \textbf{庞大的码族。}支撑集 $L$ 和多项式 $g$ 的选择多得惊人，因此密钥无法被枚举，而一个随机的秘密码与任何特定目标重合的可能性微乎其微。
+  \item \textbf{不可区分性。}没有任何\emph{高效}的算法能将一个经过置乱的二元 Goppa 码与参数相同的随机线性码区分开来。这是对安全性至关重要的性质，也正是不那么保守的码族失败之处：最初 Niederreiter 方案中的广义 Reed--Solomon 码被 Sidelnikov--Shestakov 结构攻击所攻破~\cite{ss1992}，若干 Reed--Muller 码和代数几何码的变体也以同样的方式倒下。
+\end{itemize}
+
+请仔细阅读第三条：它说的是\emph{高效}，而自 2023 年以来，这个词承担的分量逐年加重。第~\ref{sec:goppa-distinguishers}~节讨论的就是它所发生的变化。
+
+这就是第~\ref{ch:mceliece}~章中“伪装起来的可译码码”背后的具体内容：伪装是经过置乱的生成矩阵，而被伪装的码就是 $\Gamma(L,g)$。
+
+\section{区分器及其代价}
+\label{sec:goppa-distinguishers}
+
+区分器并不等于攻破。它不读取消息，也不恢复密钥；它只回答一个比特——\emph{这个公钥是 Goppa 码还是随机矩阵？}即使泄露了这个比特，McEliece 仍可存活，因为恢复明文仍然意味着译码，而对一个看似随机的码进行译码，正是那个从未倒下的假设。
+
+但这个比特很重要，原因有二。它是\textbf{保守}安全声明（公钥是伪随机的，因而 LPN 适用）与\textbf{最低限度}安全声明（恢复消息是困难的）之间的分界。而且从历史上看，区分器往往是第一步：Sidelnikov--Shestakov 攻击起初只是关于广义 Reed--Solomon 码的一个结构性观察，最终却成为多项式时间的密钥恢复。
+
+\subsection{平方码壁垒}
+
+经典的工具是 \emph{Schur 积}：对于 $a,b \in \mathbb{F}_q^n$，记 $a \star b := (a_1b_1,\dots,a_nb_n)$，并令 $\mathcal{C}^{\star 2} := \operatorname{span}\{a\star b\}$ 为平方码。对于维数为 $k$ 的随机码，其平方的维数为 $\min\{n,\binom{k+1}{2}\}$——基本上占满一切。而对于一个位于维数为 $K$ 的 GRS 码之内的码，次数 $<K$ 的多项式的求值之积，其次数 $<2K-1$，因此
+\[
+\dim \mathcal{C}^{\star 2} \;\le\; \min\{n,\; 2K-1\}.
+\]
+结构以\emph{维数亏损}的形式显现出来——而且只有当 $2K-1 < n$ 时才会显现，大体上就是外围码率低于 $1/2$ 的时候。这就是 Faug\`{e}re、Gauthier-Uma\~{n}a、Otmani、Perret 和 Tillich 的区分器~\cite{fgopt2013}，它是多项式时间的，这也是 Classic McEliece 的参数被选得远在其能力范围之外的原因。取对偶是标准的逃脱之法——GRS 码的对偶仍是 GRS 码，维数为 $n-K$——但它在这里行不通，因为所发布的码只是外围 GRS 码的一个\emph{子码}，而子码的对偶是对偶码的一个\emph{超码}，没有理由具有小的平方。
+
+\subsection{借助重数越过壁垒}
+
+Ghoshal、Ishai、Jain 和 Sun~\cite{gijs2026}以一个比这一场景更具一般性的思想越过了这道壁垒。将\emph{求值}替换为 \emph{Hasse 射}（Hasse jet）——即多项式的值连同其所有阶数小于 $s$ 的 Hasse 导数。于是每个坐标提供 $s$ 个 Hermite 插值约束而不是一个，迫使结构显现的条件也随之减弱，即从
+\[
+n > dD
+\qquad\text{to}\qquad
+s(n-1) > dD ,
+\]
+其中 $D$ 是外围 GRS 码的次数，$d$ 是检验次数。所需的坐标数从大约 $dD$ 降到大约 $dD/s$，这恰恰使得该检验在平方码已经饱和的参数范围内仍能奏效。
+
+所得的算法简短到可以完整陈述。固定 $s$ 和 $d = s+1$，取公开矩阵 $Y = [\,y_1|\cdots|y_n\,] \in \mathbb{F}_2^{k\times n}$，然后：
+
+\begin{enumerate}
+  \item 留出一列，例如 $y_n$；
+  \item 计算 $\mathbb{F}_2$ 上在其余每一列周围半径为 $s-1$ 的 Hamming 球上都取零值的多重线性齐次 $d$ 次多项式所构成的空间（对于 $\mathbb{F}_2$ 上的多重线性 $F$，在该球上取零值\emph{就是}阶数 $<s$ 的 Hasse 射为零）；
+  \item 从该空间中任取一个非零的 $h$，并在 $y_n$ 处对其求值。
+\end{enumerate}
+
+若 $h(y_n) \ne 0$，回答\emph{随机}；否则回答 \emph{Goppa}。
+
+对于 Goppa 密钥，回答总是 \emph{Goppa}，不附带任何概率。将 $h$ 限制为齐次多项式，使得零值条件对未知的 GRS 乘子视而不见；将 $h$ 与隐藏的低次曲线复合，得到一个次数至多为 $dD$ 的一元多项式 $\varphi$，它在 $n-1$ 个不同的点上各有一个 $s$ 重零点，而由 Hermite 插值，$s(n-1) > dD$ 迫使 $\varphi \equiv 0$。对于随机矩阵，只要 $\binom{k}{d}$ 超过约束个数，就存在非零的 $h$，而留出的那一列仍然是均匀分布的，因此二元 Reed--Muller 码的最小距离界使错误接受的概率有界地远离~1。
+
+\subsection{加倍的距离在何处重现}
+
+命题~\ref{prop:goppa-double} 在这里再度出现，而且对读者不利。由于对无平方因子的 $g$ 有 $\Gamma(L,g) = \Gamma(L,g^2)$，该码位于一个维数为 $n-2t$ 而非 $n-t$ 的外围 GRS 码之内——因此 $D = n-2t-1$，重构条件 $s(n-1) > dD$ 也就\emph{更容易}满足。换来最小距离免费加倍的那个恒等式，正是使区分器更加锋利的同一个恒等式。放弃它也无济于事：在 $D = n-t-1$ 时，攻击仍以拟多项式时间运行，而人们却为了一个更差的常数放弃了纠错能力。
+
+\subsection{它的代价，以及它未触及之处}
+
+在 Classic McEliece 实际所采用的渐近参数范围内——扩张次数 $m = \Theta(\log n)$，Goppa 次数 $t = \Theta(n/\log n)$，维数 $k = \Theta(n)$——取 $s,d = \Theta(\log n)$ 即可满足两个条件，而多项式空间的维数为 $\binom{k}{d} \le k^d = n^{O(\log n)}$。这是\emph{拟多项式}的：超多项式，但远低于通用译码的 $2^{\Theta(t)}$。
+
+这个 $\Theta(\log n)$ 是被迫如此，而非人为选择。代入 $D = n-2t-1$ 和 $d = s+1$，重构条件就变为 $2(s+1)t > n-1$——重数与 Goppa 次数之\emph{积}必须约为 $n/2$。由于方案固定了 $t = \Theta(n/\log n)$，$s = \Theta(\log n)$ 便是可行的最小值，而运行时间也随之确定。
+
+具体而言，在缩短（在检验之前同时降低码长和维数）之后，估计值如下：
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+参数集 & 区分器 & 此前最佳 & 通用译码 \\
+\midrule
+\texttt{mceliece348864}  & $2^{114}$ & $2^{298}$ & $2^{151}$ \\
+\texttt{mceliece460896}  & $2^{120}$ & $2^{595}$ & $2^{191}$ \\
+\texttt{mceliece6688128} & $2^{124}$ & $2^{691}$ & $2^{257}$ \\
+\texttt{mceliece8192128} & $2^{124}$ & $2^{551}$ & $2^{287}$ \\
+\bottomrule
+\end{tabular}
+\caption{将 Classic McEliece 公钥与随机矩阵区分开来所需的二元运算次数~\cite{gijs2026}，并与此前已发表的最佳结构区分器~\cite{hw2025}以及信息集译码（它恢复的是\emph{消息}，且是参数集选择时所针对的数字）相比较。新攻击所需的存储为 $2^{66}$ 到 $2^{72}$ 比特，这正是此处“不实用”的含义——大约八艾字节，而不是任何人能等得到的运行时间。}
+\label{tab:goppa-distinguishers}
+\end{table}
+
+这张表要分两遍来读。现在在每个参数集上，区分器都\emph{比通用译码更廉价}，并且在最小参数集上低于其所声称的安全级别——因此保守假设在整个标准化参数范围内都已不再成立。但最低限度假设未受触动：不存在密钥恢复，而同一篇论文所描述的解密攻击是启发式的，并且据其作者自己的评估，远远超出实际可行的范围。
+
+这一结果有两个性质使其有别于此前的亚指数区分器~\cite{ran2025,hw2025}。它的可靠性分析是\emph{无条件}的——仅依赖线性代数和 Reed--Muller 距离界，不涉及任何关于某种代数不变量在随机码上如何表现的启发式假设。并且它来自一个意想不到的方向：一次未能成功的尝试，即试图从代数局部可译码码构造双重高效的私有信息检索（PIR）。McEliece 公钥恰好具有经过置换的 PIR 查询矩阵的形状；Reed--Muller 构造重现了平方码攻击，而重数码构造则给出了这一攻击。
+
+\subsection{对参数的影响}
+
+最后一个观察最有可能比这次攻击本身更为长久。通用译码的代价为 $2^{\tilde{O}(t)}$，而这一区分器的代价为 $2^{\tilde{O}(n/t)}$，因此同时抵御两者受制于
+\[
+\min\{t,\; n/t\} \;\le\; \sqrt{n},
+\]
+而要求对两者都具备 $\kappa$ 比特安全性，就迫使 $n = \tilde{\Omega}(\kappa^2)$。Classic McEliece 的独特卖点是以 $\tilde{O}(\kappa)$ 长度的密文实现 $\kappa$ 比特安全性——在最小参数集上为 96 字节，是所有 NIST 候选方案中最小的。在这一攻击之下，它落到了与它本想超越的那些基于 LPN 的方案相同的二次曲线上。巨大的公钥一直是公认的代价；微小的密文则是补偿，而正是这一补偿受到了这一结果的质疑。
+
+\section*{延伸阅读}
+Goppa 于 1970 年提出了这类码~\cite{goppa1970}；Patterson 于 1975 年给出了二元译码器~\cite{patterson1975}；McEliece 于 1978 年将其转化为一个密码体制~\cite{mceliece1978}；而当前的参数和常数时间工程实现则由 Classic McEliece 提交文档加以规定~\cite{classicmceliece}。
+
+\printbibliography[heading=chapterrefs]
