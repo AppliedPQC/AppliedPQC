@@ -237,7 +237,7 @@ Extra structure & none (unstructured)  & quasi-cyclic          & module / ring \
   \item \textbf{Security is quasi-cyclic syndrome decoding.} Recovering $(x,y)$ from $(h,\,s=x+hy)$ is decoding a random quasi-cyclic code -- believed hard classically and quantumly.
   \item \textbf{The algebra mirrors ML-KEM.} KeyGen publishes a syndrome $s$; encapsulation builds $u = r_1 + h r_2$ and $v = mG + s r_2 + e$; decapsulation cancels the shared $h y r_2$ term so that $v - u y = mG + e'$ with $e'$ low weight, and the public decoder of $C$ removes $e'$.
   \item \textbf{Quasi-cyclic structure buys small keys.} A single ring element stands in for an entire circulant block, replacing McEliece's huge matrix with a few kilobytes -- at the cost of a more structured assumption, the coding-theory analogue of the LWE-to-Ring-LWE step.
-  \item \textbf{HQC is NIST's code-based backup.} Selected in March 2025 as an additional KEM, it complements the lattice-based ML-KEM with a scheme resting on an independent hard problem, so that a single advance against lattices would not break everything at once.
+  \item \textbf{HQC is NIST's code-based backup.} Selected in March 2025 as an additional KEM, it complements the lattice-based ML-KEM with a scheme resting on an independent hard problem, so that a single advance against lattices would not break everything at once. It becomes an approved key-establishment scheme once its FIPS is published, and NIST has no current plans to select further KEMs~\cite{nistir8547}.
 \end{itemize}
 
 \printbibliography[heading=chapterrefs]

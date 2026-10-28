@@ -102,7 +102,10 @@ combiners that are; Bindel, Brendel, Fischlin, Goncalves, and
 Stebila~\cite{bbfgs2019} carried the analysis into the hybrid KEM and
 authenticated-key-exchange setting. NIST's KEM recommendations
 SP~800-227~\cite{nistsp800227} now give the corresponding standards-side guidance
-on hybrid constructions and approved key combiners. The \emph{label} is domain
+on hybrid constructions and approved key combiners, and NIST IR 8547 adds that a
+hybrid can be FIPS~140 validated as long as one input comes from an approved
+scheme, even if the other is disallowed, with the two shared secrets concatenated
+in either order~\cite{nistir8547}. The \emph{label} is domain
 separation, so that a key derived here cannot collide with one derived by another
 protocol from the same primitives.
 
@@ -520,7 +523,9 @@ boot also turn over on a timescale of years. The asymmetry has a simple cause.
 That distinction recurs for the rest of this book. It is why ``harvest now,
 decrypt later'' is the urgent framing for confidentiality but the wrong framing
 for signatures, and it is why the hardest case in the next chapter is a
-signature case.
+signature case. Signatures are not exempt from urgency, only from that framing:
+NIST calls their migration urgent because it takes longer and needs more parties
+to coordinate~\cite{nistir8547}.
 
 Implementation and deployment status changes rapidly. Before making a production
 decision, consult the current RFC or Internet-Draft and the release notes of the
