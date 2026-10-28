@@ -36,6 +36,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))          # repository root
 CHAPTERS = os.path.join(ROOT, "chapters")
 OUT = os.path.join(HERE, "book_listings.json")
+# The Chinese edition's titles and prose for the same listings, read from
+# chapters/zh/; the code itself is identical and stays in book_listings.json.
+OUT_ZH = os.path.join(HERE, "book_listings.zh.json")
 
 LISTING = re.compile(r"\\begin\{lstlisting\}(\[[^\]]*\])?\n(.*?)\\end\{lstlisting\}", re.S)
 CHAPTER_TITLE = re.compile(r"\\chapter\{", re.S)
@@ -46,6 +49,10 @@ HEADING = re.compile(r"\\(?:section|subsection|subsubsection|paragraph)\{")
 NOT_RUNNABLE = {
     "16_ml_dsa#2": "the body of Sign_internal, quoted from the companion file "
                    "-- it refers to self and returns, so it only runs as a method",
+}
+NOT_RUNNABLE_ZH = {
+    "16_ml_dsa#2": "这是从配套文件中引用的 Sign_internal 方法体——它引用了 self 并带有 "
+                   "return，因此只能作为方法运行",
 }
 
 # Listings that need a companion module loaded first.
@@ -139,7 +146,7 @@ DROP_ENVS = ("figure", "table", "tabular", "tikzpicture", "center",
 UNWRAP_ENVS = ("itemize", "enumerate", "definition", "quote")
 
 
-def tex_to_prose(region, chapter_titles):
+def tex_to_prose(region, chapter_titles, zh=False):
     """The prose between a heading (or listing) and the next listing,
     reduced to plain-text paragraphs."""
     s = re.sub(r"(?m)^%.*\n?", "", region)
@@ -156,6 +163,13 @@ def tex_to_prose(region, chapter_titles):
     s = re.sub(r"\\sagefile\{([^{}]*)\}", lambda m: "sage/" + m.group(1).replace("\\_", "_"), s)
     # "Chapter~\ref{ch:lll}" names a chapter this JSON knows the title of;
     # other \ref targets (figures, algorithms) only exist in the book.
+    if zh:
+        s = re.sub(r"第~\\ref\{ch:([a-zA-Z0-9_-]+)\}~章",
+                   lambda m: "\u201c%s\u201d一章" % chapter_titles[m.group(1)]
+                   if m.group(1) in chapter_titles else "相应的一章", s)
+        s = re.sub(r"第~\\ref\{[^{}]*\}~节", "书中相应的一节", s)
+        s = re.sub(r"(图|表|算法|定义|定理|引理|命题|例|式)~\\(?:eq)?ref\{[^{}]*\}",
+                   r"书中的\1", s)
     s = re.sub(r"Chapters?~\\ref\{ch:([a-zA-Z0-9_-]+)\}",
                lambda m: "the \u201c%s\u201d chapter" % chapter_titles[m.group(1)]
                if m.group(1) in chapter_titles else "the corresponding chapter", s)
@@ -171,7 +185,7 @@ def tex_to_prose(region, chapter_titles):
         # twice, for one level of nesting (\emph{\texttt{x}})
         for _ in range(2):
             s = re.sub(r"\\%s\{([^{}]*)\}" % cmd, r"\1", s)
-    s = re.sub(r"\\paragraph\{([^{}]*)\}", r"\n\n\1.", s)
+    s = re.sub(r"\\paragraph\{([^{}]*)\}", r"\n\n\1" if zh else r"\n\n\1.", s)
     s = s.replace("---", "\u2014").replace("--", "\u2013")
     s = s.replace("``", "\u201c").replace("''", "\u201d")
     s = re.sub(r"\\[a-zA-Z]+\s*", "", s)
@@ -182,13 +196,13 @@ def tex_to_prose(region, chapter_titles):
     return [p for p in paras if p]
 
 
-def main():
+def extract(directory, zh=False):
     sources = []
     chapter_titles = {}          # ch:* label -> plain-text title, for \ref
-    for name in sorted(os.listdir(CHAPTERS)):
-        if not name.endswith(".tex"):
+    for name in sorted(os.listdir(directory)):
+        if not re.match(r"\d\d_.*\.tex$", name) or name == "00_style.tex":
             continue
-        src = open(os.path.join(CHAPTERS, name)).read()
+        src = open(os.path.join(directory, name)).read()
         title = _chapter_title(src)
         title = tex_to_text(title) if title else name[:-4]
         sources.append((name[:-4], src, title))
@@ -218,7 +232,15 @@ def main():
                 heading, intro_start = _balanced(src, h.end())
             prev_end = max([e for s_, e in spans if e <= m.start()], default=0)
             intro = tex_to_prose(src[max(intro_start, prev_end):m.start()],
-                                 chapter_titles)
+                                 chapter_titles, zh)
+            if zh:
+                listings.append({
+                    "n": n,
+                    "note": NOT_RUNNABLE_ZH.get(key, ""),
+                    "title": tex_to_text(heading),
+                    "intro": intro,
+                })
+                continue
             listings.append({
                 "n": n,
                 "code": m.group(2).rstrip("\n"),
@@ -234,24 +256,34 @@ def main():
                 "title": title,
                 "listings": listings,
             })
+    return chapters
 
-    data = {"_generated_by": "sage/playground/extract_listings.py",
-            "chapters": chapters}
-    text = json.dumps(data, indent=1, sort_keys=True) + "\n"
 
+def main():
+    outputs = [(OUT, extract(CHAPTERS))]
+    zh_dir = os.path.join(CHAPTERS, "zh")
+    if os.path.isdir(zh_dir):
+        outputs.append((OUT_ZH, extract(zh_dir, zh=True)))
+    stale = []
+    for out, chapters in outputs:
+        data = {"_generated_by": "sage/playground/extract_listings.py",
+                "chapters": chapters}
+        text = json.dumps(data, indent=1, sort_keys=True,
+                          ensure_ascii=out == OUT) + "\n"
+        if "--check" in sys.argv:
+            current = open(out).read() if os.path.exists(out) else ""
+            if current != text:
+                stale.append(os.path.relpath(out, ROOT))
+            continue
+        open(out, "w").write(text)
+        total = sum(len(c["listings"]) for c in chapters)
+        print("%d listings across %d chapters -> %s"
+              % (total, len(chapters), os.path.relpath(out, ROOT)))
     if "--check" in sys.argv:
-        current = open(OUT).read() if os.path.exists(OUT) else ""
-        if current != text:
-            print("book_listings.json is stale; run: make playground", file=sys.stderr)
+        if stale:
+            print("%s stale; run: make playground" % ", ".join(stale), file=sys.stderr)
             return 1
-        print("book_listings.json is up to date")
-        return 0
-
-    open(OUT, "w").write(text)
-    total = sum(len(c["listings"]) for c in chapters)
-    runnable = sum(1 for c in chapters for l in c["listings"] if l["runnable"])
-    print("%d listings across %d chapters (%d runnable) -> %s"
-          % (total, len(chapters), runnable, os.path.relpath(OUT, ROOT)))
+        print("book listings are up to date")
     return 0
 
 
