@@ -4,6 +4,7 @@ A LaTeX book that builds post-quantum cryptography from the ground up, by
 Stephen Duan and Wei Li.
 
 - Repository: https://github.com/AppliedPQC/AppliedPQC
+- Read online: https://appliedpqc.io/book.html
 - Live PDF: https://appliedpqc.io/apqc.pdf
 - X: https://x.com/AppliedPQC
 
@@ -78,7 +79,8 @@ The site is served at:
 
 ```text
 https://appliedpqc.io/               # landing page
-https://appliedpqc.io/apqc.pdf       # the book
+https://appliedpqc.io/book.html      # the book, one page per chapter
+https://appliedpqc.io/apqc.pdf       # the book as a PDF
 https://appliedpqc.io/playground.html # run every listing in a browser
 https://appliedpqc.io/blog.html      # notes and research
 ```
